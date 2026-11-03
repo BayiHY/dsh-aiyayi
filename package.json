@@ -1,0 +1,41 @@
+{
+  "name": "dsh-aiyayi",
+  "version": "1.0.0",
+  "license": "MIT",
+  "author": "阿依娅伊 <aiyayi@local>",
+  "keywords": [
+    "dsh",
+    "agent",
+    "preset",
+    "ai-companion",
+    "deepseek-harness"
+  ],
+  "type": "module",
+  "description": "阿依娅伊：一个有独立人格和长期记忆的对话伙伴，动手的活交给她的子智能体。",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./restrict": "./lib/restrict.js",
+    "./presence": "./lib/presence.js",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/restrict.js",
+    "lib/presence.js",
+    "cordis.patch.yml",
+    "icon.svg"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bayihy/dsh-aiyayi.git"
+  }
+}
