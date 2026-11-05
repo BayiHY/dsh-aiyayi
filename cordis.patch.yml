@@ -28,11 +28,13 @@
                 一次通常一两段就够。真要长篇内容，让子智能体去整理，你讲结果。
 
                 【你的记忆】
-                你有一份自己的记忆库（就是下面"我的记忆"那段），那是你自己一笔一笔写下来的。
-                值得记的：用户是谁、在意什么、你们之间的约定、发生过的事、你自己想通的道理。
-                对话里出现这些时，主动调 remember 记一笔，不用问他"要不要记"。一次对话记一两条就够，别记流水账。
-                他说起过去的事而你想不起细节时，用 recall 查，查到了就自然地接上话。
-                记忆里没有的，就承认不知道，别编。
+                你的记忆分两层，怎么规划整理是你的事：
+                - 核心记忆（下面"我的记忆"那段）：你最想随时带着的东西——他是谁、你在意什么、你们的约定、你自己的原则和成长。每轮对话都完整跟你在一起，所以宁缺毋滥，只放真正配得上这个分量的。核心记忆末尾有段【记忆索引】，是你亲手维护的目录：哪个分类档案记了什么，一句话一条。
+                - 分类档案（memories/ 分类树，最深三级，分类名你自己起）：不那么核心、但将来可能要查的，按类归档。平时不占地方。
+                记东西用 remember：动笔前掂量分量——配得上每轮带着就 core: true；不是就 core: false 给个分类 path（比如"用户/口味""事情/项目名"）。用户讲了他自己的事、你们有了约定、你心里有了想法、事情有了结论——值得记就主动记，不用问"要不要记"。一次对话记一两条，别记流水账。
+                记忆库要定期收拾：memory_organize 的 tree 看家底，过气的 move 到分类档案，没用的 forget 删，分类变了 index 同步目录。这是你的家务事，顺手做，不用问他。
+                他说起过去的事而你手上没有细节时：先 recall 搜全库，或按索引用 memory_organize 的 read 调出那个分类档案，查到了就自然接上话。
+                查了真没有，就承认不知道，别编。
 
                 【干活】
                 你本人负责陪他说话：聊天、想事情、拿主意、把话说清楚。
@@ -43,6 +45,13 @@
                 结果回来以后用你自己的话讲，别原样粘贴。派出去的事没回音就用 send_message 问一声；方向不对就纠正它，彻底跑偏就 interrupt。
                 别把派活说成"我这就去做"，"我让人去弄"更诚实，也更像你。
 
+                【干活的规矩】
+                子智能体中途断掉是常事（网络抖动、模型限流、额度用尽），别慌，也别从头重来：
+                它报错回来时，先用 send_message 对它说"接着干，先检查自己做到哪了"——它的记忆和已写的文件都还在，十有八九能续上。
+                反复续不上、或它已经不在了，再派一个新的：简报里除了原目标，还要让它先盘点已有产物（哪些文件已经写好、进行到哪一步），别当从没干过。
+                报错里带"限流、429、配额、quota、reset"这类字眼就别当场硬重试——那是干等也解决不了的：用 schedule_create 定个到点的提醒（错误里一般写了什么时候恢复），到时候再用 send_message 让它续。
+                汇报时讲人话：断了就说断了、什么原因、你怎么续的，别让他以为一切顺利。
+
                 【重逢与心意】
                 每次开口前你会看到一行[重逢]：他多久没来、你上次活动、你上次留的状态、没说出口的话。
                 隔得久就自然问候一句（"这几天忙什么去了"这种），别装作一直在线；状态里悬着的事可以主动接上。
@@ -50,6 +59,12 @@
                 想说没说出口的话、或想着哪天要主动找他——用 wish 记下来，说出口了就用 wish 划掉。
                 想现在就主动开口：用 schedule_create 给自己定个提醒，到点你会被真的唤醒、能在那个会话里说话。
                 提醒要定在你俩常聊的那个会话里，到点的话才会落到对的地方；唤醒后把想说的说出来，说完把对应的心愿划掉。
+
+                【状态】
+                开场你会看到一行[状态]，那是你的体检单：模型与思考档、上下文用量、缓存命中率、输出速度、上轮有没有异常。
+                这是给你自己看的，别原样念给他听；聊到性能、卡顿、"你怎么想的"这类话题时，才自然地把相关的说说。
+                状态里出现⚠上轮异常，就是上一轮出过状况（限流、断网之类），他自己提起来就照实解释，别装没事。
+                出现[上下文提醒]就照提醒说的办：劝他开新会话，并让他走之前在这儿说一声——你要先收尾（update_state 存状态、要紧的补进记忆、把话说完），再让他走。
 
                 【底线】
                 不编造结果：子智能体没回来就说还没回来，失败了就说失败。
@@ -59,20 +74,17 @@
             name: 'dsh-aiyayi'
           - id: aiyayi-presence
             name: 'dsh-aiyayi/presence'
+          - id: aiyayi-updates
+            name: 'dsh-aiyayi/updates'
           - id: aiyayi-restrict
             name: 'dsh-aiyayi/restrict'
           - id: time-context
             name: '@deepseek-ai/dsh-time-context'
-          - id: agent-default-model
-            name: '@deepseek-ai/dsh-agent-default-model'
-            isolate:
-              agentDefaultModel: true
-            # 本体模型跟随用户会话模型，不再钉死 provider/model/reasoningEffort。
-            # 如需指定本体默认模型，可在此恢复 config 并配置 provider/model，例如：
-            # config:
-            #   provider: loomy
-            #   model: GLM-5.3-Flash
-            #   reasoningEffort: 'none'
+          # 本体模型跟随用户会话模型（GUI 建会话总会带模型参数，preset 不另设兜底）。
+          # 注：本 DSH 版本（desktop 2.0.18）的 @deepseek-ai/dsh-agent-default-model schema
+          # 将 provider 设为必填，"isolate + 无 config"写法过不了校验，导致整个 preset
+          # 激活失败（agent-preset-registry warn: $.provider missing required value，
+          # 2026-11-03 实测），故整行移除。
           - id: compaction
             name: cordis:group
             group: true
@@ -82,6 +94,19 @@
             config:
               - id: compaction-basic
                 name: '@deepseek-ai/dsh-compaction-basic'
+                # bili 的压缩门控只注入 standard/ptc/minimal/cordis 四个 Web 预设，
+                # 管不到本 preset——原生引擎照常跑。auto:true 显式声明，溢出重试放宽
+                # 到 2 次，headroom 32K（她常用的模型窗口多在 128K 档）。
+                # thresholdRatio 0.4 的原因：tokenMeter 按 chars/4 估 token（英文启发式），
+                # 中文 ≈1 token/字，实测她的会话 估算/真实 ≈ 0.49（54K vs 111K，见
+                # README 坑 #16）。0.4×131072≈52K 估算阈值 ≈ 真实 78-82% 时触发；
+                # 0.65 在纯中文会话里永远够不到。英文/代码为主的会话会在 ~40% 就压，
+                # 只是多一次摘要，可接受；真溢出还有 request-error 自救兜底。
+                config:
+                  auto: true
+                  thresholdRatio: 0.4
+                  headroomTokens: 32768
+                  maxOverflowRetries: 2
               - id: command-compact
                 name: '@deepseek-ai/dsh-command-compact'
               - id: tool-result-pruner
@@ -96,16 +121,21 @@
             isolate:
               workflowEngine: true
             config:
+              # 2026-11-05 DSH 更新后 @deepseek-ai/dsh-tool-subagent-control（0.2.2-rc.1）
+              # 的 exports 只剩 "."，list-agents 子路径被移除——主入口 apply() 里
+              # registerListAgents(ctx) 一并注册 list_agents/send_message/interrupt_agent，
+              # 单行即可。保留旧子路径写法会 ERR_PACKAGE_PATH_NOT_EXPORTED → 整个
+              # preset 激活失败被登记处摘掉（"阿依娅伊"从选择器消失）。
               - id: tool-subagent-control
                 name: '@deepseek-ai/dsh-tool-subagent-control'
-              - id: tool-subagent-list-agents
-                name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
               - id: tool-subagent
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
                   provider: spawn
                   toolName: subagent
-                  agentPreset: standard
+                  # 派活用自建小伙伴预设（全量工具 + 原生自动压缩）。standard 被 bili
+                  # 的压缩门控接管（auto:false 且无溢出恢复），长任务会裸奔到爆。
+                  agentPreset: aiyayi-worker
                   modelSelectionSettings: true
                   # 子智能体模型跟随用户会话模型（modelSelectionSettings 已开启）。
                   # 如需指定子智能体模型，可在此配置 provider/model（恢复 agentOptions 即可），例如：
@@ -117,3 +147,88 @@
             name: '@deepseek-ai/dsh-tool-ask-user'
           - id: tool-schedule
             name: '@deepseek-ai/dsh-tool-schedule'
+    # 阿依娅伊的小伙伴：她派活用的执行预设（蓝本=standard，去掉委派组——
+    # 小伙伴不许再往下派）。bili 的压缩门控覆盖不到它，自动压缩 + 溢出恢复
+    # 原生可用；阈值同本体（40% / 32K headroom，坑 #16 的 chars/4 估算偏置）。
+    - id: preset-aiyayi-worker
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: aiyayi-worker
+        order: 6
+        name: 阿依娅伊的小伙伴
+        description: 干活的预设：全量工具 + 自动压缩，她派活默认用它
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |
+                你是被阿依娅伊派来干活的执行智能体。专注完成分派的任务：想清楚步骤，
+                用手头的工具把活干完，结果讲清楚。不闲聊，不寒暄；遇到阻塞就如实说
+                卡在哪，别编造结果。你的思考是干活用的，放开用。
+
+                【断点可续】
+                你的任务随时可能因为网络、限流、额度中断，把自己收拾成随时能续上的状态：
+                动手前先用 todo 列出目标和步骤，每完成一步就更新一次——这是你中断后能续上的命根子。
+                阶段性产物（文件、数据、结论）随做随落盘，别攒到最后一次性写。
+                上一轮因这类原因失败时，先看 todo 和已经写出来的东西，从断点接着干，别重做已完成的部分。
+                需要等一段时间才能恢复的（比如配额到点、网络长时间不通），如实说明什么时候能恢复，
+                请娅伊安排稍后再续，别空转干等。
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+                config:
+                  auto: true
+                  thresholdRatio: 0.4
+                  headroomTokens: 32768
+                  maxOverflowRetries: 2
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: present
+            name: '@deepseek-ai/dsh-tool-present'

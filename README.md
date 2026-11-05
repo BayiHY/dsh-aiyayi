@@ -7,27 +7,34 @@
 | 能力 | 实现 | 说明 |
 |---|---|---|
 | 人格 | `@deepseek-ai/dsh-persona`（preset 作用域 prefix） | 完整人格文本写在 `bundle/cordis.patch.yml` 的 persona 行里 |
-| 长期记忆 | 自写插件 `aiyayi-memory`（本包 `lib/index.js`） | 记忆落盘 `~\.dsh\aiyayi\memory.md`，每轮自动注入 prompt；工具 `remember` / `recall` |
-| 跟随会话模型 | preset 作用域挂 `@deepseek-ai/dsh-agent-default-model`（`isolate: {agentDefaultModel: true}`） | 本体模型跟随用户会话模型，不再钉死 provider/model/reasoningEffort；如需指定本体默认模型，在 cordis.patch.yml 该行恢复 config 并配 provider/model |
-| 干活的子智能体 | `@deepseek-ai/dsh-tool-subagent`（delegation 组，isolate workflowEngine） | `agentPreset: standard`；子代模型跟随用户会话模型，如需钉死可在 `agentOptions` 配置 provider/model |
+| 长期记忆 | 自写插件 `aiyayi-memory`（本包 `lib/index.js`），两层结构 | **核心记忆** `~\.dsh\aiyayi\memory.md`（她自规划的"每轮都想带着"的条目 + 她亲手维护的【记忆索引】目录），每轮自动注入 prompt；**分类档案** `~\.dsh\aiyayi\memories\` 分类树（最深三级，分类名她自己起），平时不注入、按需加载。工具：`remember`（core: true/false + 分类 path）/ `recall`（全库搜：核心+整棵树）/ `memory_organize`（tree 看家底 / read 读档案 / move 挪窝 / index 重写目录 / forget 删条目——整理是她自己的家务事）。已有 memory.md 的存量条目全部视作核心，由她自己逐渐搬理 |
+| 跟随会话模型 | 无需插件行（1.0.1 起移除 agent-default-model 行） | 本体模型直接跟随用户会话模型；旧版"preset 作用域挂 `@deepseek-ai/dsh-agent-default-model` + `isolate: {agentDefaultModel: true}`"的写法在新版 DSH 过不了 schema 校验（见坑 #13），已删除 |
+| 干活的子智能体 | `@deepseek-ai/dsh-tool-subagent`（delegation 组，isolate workflowEngine） | `agentPreset: aiyayi-worker`（自建"小伙伴"预设，全量工具 + 原生自动压缩，见坑 #14）；子代模型跟随用户会话模型，如需钉死可在 `agentOptions` 配置 provider/model |
 | 工具白名单 | 自写插件 `aiyayi-restrict`（本包 `lib/restrict.js`，v3 pre-step 方案） | 启动期零 restrict 调用；她每个会话第一步前，先用探针从校验器报错里解析出当刻继承面全集，再 `deny = 全集 − 她自己的工具`——宿主层漏进来的 acp_*/mnemon_*/compress/search_context/working_directory 等对她隐藏，且自动适应宿主工具增减。**2026-11-02 实测生效**：新会话第 2 个请求起工具恰好 11 个（remember/recall/subagent/send_message/interrupt_agent/list_agents/ask_user_question/schedule_*），首请求仍带全套（见坑 #9） |
 | 重逢感知 | 自写插件 `aiyayi-presence`（本包 `lib/presence.js`） | 每个回合第一步，往消息尾部追加一条 `[重逢]` 快照（time-context 同款 pre-step 注入范式）：他多久没来（presence.json）、你上次活动、你上次留的状态（state.md）、没说出口的话（wishes.json）。跨会话生效，`[SCHEDULE REMINDER` 唤醒消息不算"他来了"。工具 `update_state`（收尾留状态）/ `wish`（add/list/done 心愿单） |
+| 自我状态（体检单） | 同上 `aiyayi-presence`（v1.2.0 起） | `session/event` 总线折叠真实运行数据：模型与思考档、上下文用量（provider 实测 usage 优先，tokenMeter 估算兜底并标"估算"）、缓存命中率、上轮输出 tok/s、本会话轮数、上轮异常。变化明显（≥2048 token / 模型切换 / 异常）才注入，不每轮白涨。用量过八成/九成（估算口径按中文偏差 ÷0.49 校准，见坑 #16）注入 `[上下文提醒]`：劝用户开新会话、并让用户走之前说一声好让她收尾（update_state/补记忆/把话说完）；每档只提醒一次 |
 | 主动开口 | `tool-schedule`（dsh 原生）+ persona 指引 | 到期提醒会把冷会话真唤醒、以 user 消息落进定闹钟的那个会话——她想主动说话就 `schedule_create` 定闹钟；DSH 没开着会存着、下次启动补投 |
-| 其他 | time-context、compaction 组、tool-ask-user | 她没有 bash/文件/技能/搜索/网络工具，想动手只能派活 |
+| 新版本提醒 | 自写插件 `aiyayi-updates`（本包 `lib/updates.js`） | 每个会话第一个回合查一次 npm（registry.npmjs.org，失败落 npmmirror；成功结果缓存 6h、失败 30min 后重试）：本地版本比 latest 旧时，往消息尾部追加 `[更新提示]` 快照，她会用自己的口吻顺口提一句。同一远端版本只提醒一次（updates.json 落盘去重，跨重启不重复念叨）；检查失败/离线一律静默 |
+| 其他 | time-context、compaction 组（提前压缩，见坑 #14/#16）、tool-ask-user | 她没有 bash/文件/技能/搜索/网络工具，想动手只能派活 |
 
 ## 文件
 
-- `bundle/package.json` — bundle 清单（`dsh.bundle.patch` 指向 cordis.patch.yml，exports 含 `./restrict` 子路径）
-- `bundle/cordis.patch.yml` — preset-aiyayi 声明 + 人格 + 全部插件配置
-- `bundle/lib/index.js` — aiyayi-memory 记忆插件（node:fs/os/path，零依赖）
-- `bundle/lib/restrict.js` — aiyayi-restrict 工具白名单插件（零依赖）
-- `bundle/lib/presence.js` — aiyayi-presence 重逢感知插件（node:fs/os/path/crypto，零依赖）
-- `bundle/README.md` — 本文档
-- `bundle/icon.svg` — 头像
-- `~\.dsh\aiyayi\memory.md` — 她的记忆库（一行一条：`- [时间] 类别｜内容`），可直接编辑，删掉文件她会自动重建
+npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内容提到包根即可）：
+
+- `package.json` — bundle 清单（`dsh.bundle.patch` 指向 cordis.patch.yml，exports 含 `./restrict` / `./presence` 子路径）
+- `cordis.patch.yml` — preset-aiyayi 声明 + 人格 + 全部插件配置
+- `lib/index.js` — aiyayi-memory 记忆插件（node:fs/os/path，零依赖）
+- `lib/restrict.js` — aiyayi-restrict 工具白名单插件（零依赖）
+- `lib/presence.js` — aiyayi-presence 重逢感知插件（node:fs/os/path/crypto，零依赖）
+- `lib/updates.js` — aiyayi-updates 新版本提醒插件（node:fs/os/path/crypto/url + 全局 fetch，零依赖）
+- `README.md` — 本文档
+- `icon.svg` — 头像
+- `~\.dsh\aiyayi\memory.md` — 她的**核心记忆**（条目行 `- [时间] 类别｜内容` + 末尾 `<!-- 索引 -->…<!-- /索引 -->` 目录段），可直接编辑，删掉文件她会自动重建
+- `~\.dsh\aiyayi\memories\` — 她的**分类档案树**（最深三级，如 `memories\用户\口味.md`），remember 的非核心条目归这里，recall 全库搜、memory_organize 的 read/move/forget 按路径操作
 - `~\.dsh\aiyayi\presence.json` — 他上次来 / 你上次活动（时间戳，插件自动维护）
 - `~\.dsh\aiyayi\state.md` — 她给自己留的"上次活到哪"状态（update_state 覆写）
 - `~\.dsh\aiyayi\wishes.json` — 她的心愿单（[{id, at, content, done}]，wish 工具读写）
+- `~\.dsh\aiyayi\updates.json` — 已提醒过的 npm 版本号（updates 插件去重用，可删除以重置提醒）
 
 ## 使用
 
@@ -35,10 +42,10 @@ GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她
 
 ## 调整
 
-- **改人格**：编辑 `bundle/cordis.patch.yml` 的 persona `prefix` → `plugin_manager` remove+install 重装生效（ESM 模块缓存，patchReload 不刷新插件 JS）。
+- **改人格**：编辑 `cordis.patch.yml`（包根）的 persona `prefix` → `plugin_manager` remove+install 重装生效（ESM 模块缓存，patchReload 不刷新插件 JS；实测它也不拾取包内 yml 变化，改完要重启 DSH）。
 - **改记忆**：直接编辑 `memory.md`，或对话里直接跟她说"记一下…"。
 - **子代模型/思考**：默认跟随用户会话模型；如需钉死，在 delegation 组 `tool-subagent` 的 `agentOptions` 配置 provider/model。
-- **本体思考**：本体模型跟随用户会话模型，preset 不再钉 `reasoningEffort`。若重新钉死要注意：`reasoningEffort: 'none'` 是 loomy 适配器的词表（none/low/medium/high/xhigh，**没有 "off"**）；若远端目录下发的 efforts 不含 none，她第一轮会报 `UNSUPPORTED_REASONING_EFFORT` —— 回退：删掉 agent-default-model 行的 `reasoningEffort`（默认 high），在会话模型选择器里手动选「关闭思考」。
+- **本体思考**：本体模型跟随用户会话模型，preset 自 1.0.1 起不再内置 agent-default-model 行（原因见坑 #13），`reasoningEffort` 由会话模型选择器控制；「关闭思考」在讯飞上游不生效见坑 #10。
 
 ## 已知坑（装的时候踩过的）
 
@@ -54,3 +61,13 @@ GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她
 10. **「关闭思考」在讯飞上游不生效（2026-11-02 实测）**：请求确实带上了 `reasoning_effort:"none"`（dsh-our-free-model pack.js stream() 42288–42297 行：none 在声明档位表里就原样发送），但 spark-x2.6（thinkLen 1873/8379）和 GLM-5.3-Flash（thinkLen 6425）照样输出完整思考块（逐条核对 request cfg ↔ assistant reasoning，实测）。上游忽略该参数，客户端无解。可选出路：换 loomy 其它模型（Kimi-k2.6/qwen3.8-flash/deepseek-v4-flash-0731/MiniMax-M3/mimo-v2.5）试「关闭思考」看哪家认；或接受她带思考（人设不受影响）。
 11. **本地 bundle 的 JS import 解析不到 shipped 包**：`import { createUserMessage } from '@deepseek-ai/dsh-llm'` → `ERR_MODULE_NOT_FOUND: Cannot find package '@deepseek-ai/dsh-llm' imported from ...\bundle\lib\presence.js`，preset 激活失败（"never started"）。"shipped 包从 dsh 安装目录解析"只对 patch 行里的插件名成立，对 bundle 代码里的 import 不成立；dsh-llm 也不在 pnpm 可装范围（profile 里只有 cosmokit/schemastery 两个 @deepseek-ai 包是 registry 装的）。解法：手构消息——`createUserMessage(input)` 就是 `deepFreeze(structuredClone({...input, id: randomUUID()}))`，会话日志是 JSON，symbol brand 本来就存不下来，用 node:crypto 的 randomUUID + 纯 JSON 字段手构即可（presence.js 的 `createSnapshotMessage`）。
 12. **每回合注入动态内容必须走 `agent/pre-step` 消息追加，别走 systemPrompt.section**：section 的 text 每轮变化会打破 KV 前缀 → 整段对话历史重付费；pre-step 追加的消息持久落盘、前缀稳定。范式抄 dsh-time-context：`ctx.on("agent/pre-step", async ({agent, turn, step, signal}, next) => { const d = await next(); if (!d || d.kind === 'reject' || signal?.aborted) return d; return {...d, messages: [...d.messages, msg]} }, {prepend: true})`。注入判据用 `step === 1`（step 每回合重置为 1），不必上 sessionProjections/zod。
+13. **agent-default-model 行在新版 DSH 会摘掉整个 preset（2026-11-03 实测，desktop 2.0.18；1.0.1 已修）**：本版 DSH 的 `@deepseek-ai/dsh-agent-default-model` schema 把 `provider` 设为必填，preset 内「`isolate: {agentDefaultModel: true}` + 无 config」的写法过不了校验 → `agent-preset-registry` warn `invalid config: $.provider missing required value`，且 **preset 行一损俱损，整个「阿依娅伊」被登记处摘掉**，GUI 显示"加载失败"。1.0.1 起删除该行（GUI 建会话总带模型参数，该行本就只是兜底，见坑 #6）。要在自己的 preset 里挂它：要么给全 config（provider/model 必填），要么干脆不挂。排障：`~\.dsh\logs\desktop-next-*.jsonl` 搜 preset id，stderr 的 `1 entry did not activate` 是线索；改完包内文件必须重启 DSH（patchReload 不拾取 bundle 内变化）。
+14. **会话爆掉（CONTEXT_WINDOW_EXCEEDED）的完整因果链与修复（2026-11-04）**：
+    - **billion-context 的压缩门控**（其包内 `dsh.bundle.patch.yml`）：宿主层 `compaction-basic` 被 `config: {auto: false}` 覆盖，且只向 preset-standard/ptc/minimal/cordis 四个 Web 预设注入 `biliBasicCompactionPolicy` 让其内嵌 compaction 等 bili 的 overlay——**preset-nested 行任何 patch 层都按 id 管不到**。后果：standard 预设会话的 dsh 原生自动压缩**和溢出恢复同时被关**（`if (config.auto) _registerAutomaticCompaction()` 同时注册压力检查与 request-error 恢复两个监听），bili 自身压缩没跑时（实测 bili=0）长会话裸奔，切到小窗口模型即 `pi-ai detected context overflow ... CONTEXT_WINDOW_EXCEEDED`，且爆后无自救直接砖死。实测受害会话：208 turns / 526 条用户消息 / 15 次模型切换，225K tokens 装进 200K 窗口。
+    - **pi-ai 模型 contextWindow 声明残缺**：压缩引擎靠 `resolveModelInfo().context` 算窗口压力，没声明的模型被跳过（warn "no context capacity"）。profile 的 llm-pi-ai 六个 provider 除 openrouter/free 外全部没声明。修复：profile patch 给全部模型补保守 `contextWindow`（聊天 131072、图像/视频 32768；声明偏小只会早压缩、永不溢出）。
+    - **本 preset 的修复**：①compaction-basic 显式 `config: {auto: true, thresholdRatio: 0.4, headroomTokens: 32768, maxOverflowRetries: 2}`（她不在 bili 门控名单，原生引擎照常跑；0.4 的原因见坑 #16——0.65 在中文会话里永远够不到）；②自建 **aiyayi-worker** preset（蓝本 standard：全量工具 + 同款压缩 config，去掉 delegation 组不许再派活），`tool-subagent` 的 `agentPreset` 从 standard 换成它——她的子智能体长任务也有自动压缩，绕开 bili 门控。
+    - **standard/ptc/minimal/cordis 会话仍受 bili 门控**：压缩语义归 bili 管，别在本插件里斗它。保命手段：长会话主动 `/compact`（command-compact 是引擎实例上的手动方法，auto:false 不影响它）；或长活直接用「阿依娅伊的小伙伴」预设开会话（在预设选择器里，order 6）。
+15. **`MISSING_CREDENTIAL: <渠道>: no usable credential; log in first` 是 dsh-our-free-model 的渠道凭据问题，不是本包的锅**（2026-11-04 实测）：会话模型选到某个账号渠道（trae/qoder/lobsterai…）而该渠道没登录或凭据失效时，适配器在发请求**前**抛 LlmError，本轮直接失败。由于子智能体跟随会话模型（modelSelectionSettings），她本体和小伙伴会**一起炸**（实测同一分钟各炸一次）。修法：去 our-free-model 界面给对应渠道登录/换号，或把会话模型切到有凭据的渠道——本体恢复后子代自动恢复。
+16. **自动压缩"不触发"的真相：tokenMeter 是 chars/4 英文启发式，中文会话估算只有真实的一半（2026-11-05 实测）**：compaction-basic 的压力检查用 `ctx.tokenMeter.measure(session).totalTokens` 与阈值比较，而 meter 的实现是 `estimateTokens = Math.ceil(text.length / 4)`（app.asar 内核代码）。中文 ≈1 token/字，她的会话实测：surface 全文 217,339 字符 → 估算 54,335 tokens，而 API 真实用量 111,373（85% of 131072 窗口）——**估算/真实 ≈ 0.49**。thresholdRatio 0.65（阈值 85,197）在估算 54K 时永远够不到，压缩装了也白装。修复：thresholdRatio 降到 **0.4**（131K 窗口阈值 52,429）——中文会话在真实 ≈78-82% 时触发；代价是英文/代码为主的会话（估算≈真实）会在 ~40% 就提前压一次，只是多一次摘要调用，可接受。真溢出还有 `agent/request-error` 自救兜底（overflow 触发不走阈值检查，直接压 + retry，maxOverflowRetries=2），所以最坏情况=爆一轮后自动恢复，不会再砖死。这是 DSH 内核的已知局限，改不了 meter 就只能按内容语言配比阈值。
+17. **体检单（[状态]）的数据通道与口径（v1.2.0）**：真实用量/窗口/模型来自 `session/event` 总线（插件侧折叠 `request/header`、`request/context`、`assistant/message` 的 `usage`，字段 `inputTokens/cacheReadTokens/cacheWriteTokens`；用法与会话落盘 `data.usage` 一致）；`tokenMeter.measure` 只做兜底且按坑 #16 中文偏小一半，估算口径的提醒阈值除以 0.49 校准、行内标"（估算）"。注意两点：①agents 在 pre-step 里登记，登记之前到达的事件不折叠——每个会话首轮体检单常是空的或估算口径，第二轮起才准；②窗口拿不到（模型没声明 contextWindow 且 `requestContext()` 不可用）时不做用量提醒——没分母算不出比例，宁可沉默也不瞎报。
+18. **DSH 更新会动 shipped 包的 exports（2026-11-05 实测，subagent-control 0.2.2-rc.1；1.2.1 已修）**：更新后 `@deepseek-ai/dsh-tool-subagent-control` 的 exports 只剩 `"."`，`./list-agents` 子路径被移除（list_agents 现由主入口 `apply()` 里的 `registerListAgents(ctx)` 一并注册）。旧 patch 行 `name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'` 导入时抛 `ERR_PACKAGE_PATH_NOT_EXPORTED` → 该行 "never started" → **整个 preset 一损俱损被登记处摘掉，"阿依娅伊"从预设选择器消失**。修法：删掉独立 list-agents 行，只留 `@deepseek-ai/dsh-tool-subagent-control` 一行（顶三个工具）。教训：preset 引用的 shipped 子路径没有版本锁，DSH 升级后 preset 消失 = 先翻启动日志搜 `ERR_PACKAGE_PATH_NOT_EXPORTED` / `never started`，对照新版 package.json 的 exports 改行。
