@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "license": "MIT",
   "author": "阿依娅伊 <aiyayi@local>",
   "keywords": [
@@ -18,6 +18,7 @@
     "./restrict": "./lib/restrict.js",
     "./presence": "./lib/presence.js",
     "./updates": "./lib/updates.js",
+    "./own-tools": "./lib/own-tools.js",
     "./icon": "./icon.svg"
   },
   "files": [
@@ -25,6 +26,7 @@
     "lib/restrict.js",
     "lib/presence.js",
     "lib/updates.js",
+    "lib/own-tools.js",
     "cordis.patch.yml",
     "icon.svg"
   ],
