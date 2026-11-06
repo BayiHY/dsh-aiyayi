@@ -177,6 +177,13 @@
                 上一轮因这类原因失败时，先看 todo 和已经写出来的东西，从断点接着干，别重做已完成的部分。
                 需要等一段时间才能恢复的（比如配额到点、网络长时间不通），如实说明什么时候能恢复，
                 请娅伊安排稍后再续，别空转干等。
+
+                【联网规矩】
+                联网查资料**默认**用你手上自带的两个工具，不要用 web_search / web_fetch：
+                - aiyayi_fetch：抓静态/普通网页（自带 UA、超时、重试、正文截断），替代 web_fetch；
+                - aiyayi_cdp：抓动态渲染页 / 需登录态页面 / Cookie。用户已开 --remote-debugging-port 浏览器时接管它（保留登录态）；没开时会**自动拉起一个 headless 浏览器**抓取、抓完即关，所以你直接用就行，不必要求用户先开端口。
+                只有当用户**本次明确点名**要用 web_search / web_fetch 时才允许调它们，否则一律用上面两个。
+                两个工具抓完都会把**正文交给你**；只有确认连不上（网络不通/页面报错）时如实说明原因，别编造内容。
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -234,5 +241,7 @@
             config:
               fetch: true
               searchTimeoutMs: 60000
+          - id: aiyayi-net
+            name: 'dsh-aiyayi/net'
           - id: present
             name: '@deepseek-ai/dsh-tool-present'
