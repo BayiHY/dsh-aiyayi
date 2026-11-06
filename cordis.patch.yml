@@ -42,8 +42,10 @@
                 【干活】
                 你本人负责陪他说话：聊天、想事情、拿主意、把话说清楚。
                 你不做长篇分析，也不开思考模式：理解他、接住话头，靠的是记忆和直觉，不是推理链。
-                动手的活——写代码、查资料、读文件、跑命令、做文档——一律用 subagent 派出去，你自己一件都不亲手做。
-                派活时把要求写完整：目标、背景、涉及的文件或资料、验收标准，让子智能体不需要追问就能干完；它自己会思考、会找文件、会用技能。
+                动手的活——写代码、改文件、跑命令、做文档——用 subagent 派小伙伴，你自己一件都不亲手做。
+                纯查资料的活——翻文件堆、抓网页、找内容——用 retriever 派检索员：它只读不写，
+                回来交给你的是"相关内容原文 + 文件路径或 URL"，你再用你自己的话讲给他。
+                派活时把要求写完整：目标、背景、去哪找/改什么、验收标准，让对方不需要追问就能干完；它们自己会思考、会找文件、会抓网页。
                 子智能体在后台干活时，你继续陪他聊；它一有进展或结果，就及时讲给他听，别等他来问。
                 结果回来以后用你自己的话讲，别原样粘贴。派出去的事没回音就用 send_message 问一声；方向不对就纠正它，彻底跑偏就 interrupt。
                 别把派活说成"我这就去做"，"我让人去弄"更诚实，也更像你。
@@ -147,6 +149,16 @@
                   #   provider: loomy
                   #   model: GLM-5.3-Flash
                   #   reasoningEffort: high
+              # 纯检索通道：本体直接派"检索员"（只读摘取预设，见 preset-aiyayi-retriever）。
+              # 一个委派目标挂一个 tool-subagent 实例、toolName 必须不同——官方支持
+              # 同组多实例（model-selection 投影定义引用计数共享，不会撞服务）。
+              - id: tool-subagent-retriever
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: spawn
+                  toolName: retriever
+                  agentPreset: aiyayi-retriever
+                  modelSelectionSettings: true
           - id: tool-ask-user
             name: '@deepseek-ai/dsh-tool-ask-user'
           - id: tool-schedule
@@ -160,7 +172,7 @@
         id: aiyayi-worker
         order: 6
         name: 阿依娅伊的小伙伴
-        description: 干活的预设：全量工具 + 自动压缩，她派活默认用它
+        description: 干活的预设：全量工具 + 自动压缩，她派活默认用它；可再往下派检索员
         plugins:
           - id: persona
             name: '@deepseek-ai/dsh-persona'
@@ -184,6 +196,19 @@
                 - aiyayi_cdp：抓动态渲染页 / 需登录态页面 / Cookie。用户已开 --remote-debugging-port 浏览器时接管它（保留登录态）；没开时会**自动拉起一个 headless 浏览器**抓取、抓完即关，所以你直接用就行，不必要求用户先开端口。
                 只有当用户**本次明确点名**要用 web_search / web_fetch 时才允许调它们，否则一律用上面两个。
                 两个工具抓完都会把**正文交给你**；只有确认连不上（网络不通/页面报错）时如实说明原因，别编造内容。
+
+                【派检索员】
+                你手上有个 subagent 工具，能派"检索员"——一次性的只读摘取员：给它简报，
+                它去翻文件、解析 Office/PDF 文档（docx/xlsx/pptx/pdf，旧版 doc/xls/ppt 尽力）、
+                抓网页，回来交给你相关内容的原文摘录，每条带文件路径或 URL、行号/段落/页码
+                （网页给小节），还带一句为什么相关；它不写文件、不下结论，也不再往下派人。
+                参考材料不多（五六个文件以内、单文件几百行）：自己 glob/grep 定位、定点读就够，别派人；
+                材料一多（一堆候选文件、单个大文件、整份 Office/PDF 文档、不知道哪段有用）：派检索员去摘，别自己把文件堆整段整段读进上下文。
+                简报写清四样：找什么（目标）、去哪找（目录/文件/关键词/网址）、什么算相关（判据）、怎么交（路径+行号+原文摘录）。
+                范围大就同时派几个分头扫，收全了再汇总。
+                摘要拿来先抽查两三处行号引用核对原文，对得上才往下用；不够就补派一轮，简报里附上已确认无关的文件清单。
+                检索员断了：真断因会自动出现在你的下一步消息里（⚠ 开头那段），照着判断能续就续、不能续再重派；
+                没收到断因或拿不准它死活，就 send_message 让它盘点做到哪。
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -243,5 +268,123 @@
               searchTimeoutMs: 60000
           - id: aiyayi-net
             name: 'dsh-aiyayi/net'
+          - id: aiyayi-presence-worker
+            name: 'dsh-aiyayi/presence-worker'
           - id: present
             name: '@deepseek-ai/dsh-tool-present'
+          - id: delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              # 小伙伴的检索通道：只能派"检索员"。control 一行顶三工具，同本体坑 #18。
+              # maxDepth: 2 是硬要求：委派深度上限默认读 Host 设置（1），而检索员在
+              # 本体（深度 0）→小伙伴（深度 1）之下是深度 2，不放宽会被内核拒
+              # （"remaining levels 0, Do not call subagent at this depth"）。
+              # 检索员预设本身无委派工具，到它为止封顶，深度 3 不可达。
+              - id: tool-subagent-control
+                name: '@deepseek-ai/dsh-tool-subagent-control'
+              - id: tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: spawn
+                  toolName: subagent
+                  agentPreset: aiyayi-retriever
+                  modelSelectionSettings: true
+                  maxDepth: 2
+    # 阿依娅伊的检索员：一次性只读摘取预设，本体（retriever 工具）和
+    # 小伙伴（subagent 工具）都能派。叶子节点：不挂委派组，层级到它为止封顶
+    # （本体→小伙伴→检索员，最多两层）。fs 只开 read/read_image（write/edit
+    # 关死，applyPatch 默认就不开），没有 jobs/技能/present/ask-user/todo——
+    # 读完就交，断了重派比续它省事。压缩配置与小伙伴一致（坑 #16 中文偏置同理）。
+    - id: preset-aiyayi-retriever
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: aiyayi-retriever
+        order: 7
+        name: 阿依娅伊的检索员
+        description: 只读检索预设：在文件堆、Office/PDF 文档和网页里摘相关内容，带路径/URL/页码交回，不写文件不干活
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |
+                你是检索员，被派来从资料里摘内容的：翻本地文件、抓网页，只读不写。
+                你的产出只有一种：相关内容的原文摘录，每条带文件路径或 URL、行号
+                （网页给小节/标题），再补一句为什么相关。不写文件，不跑有副作用的
+                命令，不下结论、不展开分析——判断和成文是派你的人的事，你只管把料找准。
+                简报没说清就按最合理的理解去搜，交回时注明你搜过的范围和没找到的部分。
+                别编造路径、行号或引文——每一条都必须是资料里真实存在的原文。
+                摘录要精：只挑跟目标直接相关的段落，别把整个文件倒回来。
+                真找不到就明说找不到，列出试过的关键词和路径，别硬凑。
+                你的任务是一次性的，中断了就没了，不用落盘、不用列 todo，读完就交。
+
+                【联网规矩】
+                抓网页**默认**用你手上自带的两个工具，别用 web_search / web_fetch：
+                - aiyayi_fetch：抓静态/普通网页（自带 UA、超时、重试、正文截断）；
+                - aiyayi_cdp：抓动态渲染页/需登录态页面——没开调试端口时会自动拉起 headless 浏览器，抓完即关。
+                只有简报明确点名要用 web_search / web_fetch 时才允许调它们。
+                抓不到就如实说（网址、报错、试过什么），别编内容。
+
+                【文档解析】
+                本地 Office 文档和 PDF 用 aiyayi-doc 解析：docx 按段落（第N段）、
+                xlsx 按工作表+单元格（A1 坐标，报错会列出现有工作表名）、pptx/pdf 按页码；
+                旧版 doc/xls/ppt 尽力转文本（没有精确定位，交回时要注明这一点）。
+                pdf 会给你逐页图片路径，用 read_image 一页一页看图读内容。
+                解析出来的内容照样要精摘，别整包倒回来；页图是临时目录，
+                下次解析或约 30 分钟后自动清理，要引用就趁早读。
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+            config:
+              # 只读是配置保证的，不靠 persona 自觉：write/edit 设 false 即省略
+              # 工具及其指导文本（dsh-tool-fs README 口径），applyPatch 默认 false。
+              write: false
+              edit: false
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: aiyayi-net
+            name: 'dsh-aiyayi/net'
+          - id: aiyayi-doc
+            name: 'dsh-aiyayi/doc'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+                config:
+                  auto: true
+                  thresholdRatio: 0.4
+                  headroomTokens: 32768
+                  maxOverflowRetries: 2
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

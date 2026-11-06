@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.2.7",
+  "version": "1.4.0",
   "license": "MIT",
   "author": "阿依娅伊 <aiyayi@local>",
   "keywords": [
@@ -20,6 +20,8 @@
     "./updates": "./lib/updates.js",
     "./own-tools": "./lib/own-tools.js",
     "./net": "./lib/net.js",
+    "./doc": "./lib/doc.js",
+    "./presence-worker": "./lib/presence-worker.js",
     "./icon": "./icon.svg"
   },
   "files": [
@@ -29,6 +31,8 @@
     "lib/updates.js",
     "lib/own-tools.js",
     "lib/net.js",
+    "lib/doc.js",
+    "lib/presence-worker.js",
     "cordis.patch.yml",
     "icon.svg"
   ],

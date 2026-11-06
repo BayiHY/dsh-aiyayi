@@ -1,6 +1,6 @@
 # 阿依娅伊（aiyayi）
 
-一个装在 DSH 里的**对话伙伴 preset**：有独立人格、有自己长期的记忆、说话像人；她本人只负责聊天，动手的活全部派给子智能体（standard preset，带完整工具集）。
+一个装在 DSH 里的**对话伙伴 preset**：有独立人格、有自己长期的记忆、说话像人；她本人只负责聊天，动手的活全部派给子智能体（自建"小伙伴"全量预设，1.3.0 起还能往下派"检索员"），纯查资料的活直接派轻量的检索员（1.4.0 起检索员还能解析 Office/PDF 文档，小伙伴侧自动收到检索员的失败断因）。
 
 ## 她是什么
 
@@ -9,25 +9,29 @@
 | 人格 | `@deepseek-ai/dsh-persona`（preset 作用域 prefix） | 完整人格文本写在 `bundle/cordis.patch.yml` 的 persona 行里 |
 | 长期记忆 | 自写插件 `aiyayi-memory`（本包 `lib/index.js`），两层结构 | **核心记忆** `~\.dsh\aiyayi\memory.md`（她自规划的"每轮都想带着"的条目 + 她亲手维护的【记忆索引】目录），每轮自动注入 prompt；**分类档案** `~\.dsh\aiyayi\memories\` 分类树（最深三级，分类名她自己起），平时不注入、按需加载。工具：`remember`（core: true/false + 分类 path）/ `recall`（全库搜：核心+整棵树）/ `memory_organize`（tree 看家底 / read 读档案 / move 挪窝 / index 重写目录 / forget 删条目——整理是她自己的家务事）。已有 memory.md 的存量条目全部视作核心，由她自己逐渐搬理 |
 | 跟随会话模型 | 无需插件行（1.0.1 起移除 agent-default-model 行） | 本体模型直接跟随用户会话模型；旧版"preset 作用域挂 `@deepseek-ai/dsh-agent-default-model` + `isolate: {agentDefaultModel: true}`"的写法在新版 DSH 过不了 schema 校验（见坑 #13），已删除 |
-| 干活的子智能体 | `@deepseek-ai/dsh-tool-subagent`（delegation 组，isolate workflowEngine） | `agentPreset: aiyayi-worker`（自建"小伙伴"预设，全量工具 + 原生自动压缩，见坑 #14）；子代模型跟随用户会话模型，如需钉死可在 `agentOptions` 配置 provider/model |
+| 干活的子智能体 | `@deepseek-ai/dsh-tool-subagent`（delegation 组，isolate workflowEngine；两个实例 toolName 不同） | `subagent`→`aiyayi-worker`（自建"小伙伴"预设，全量工具 + 原生自动压缩，见坑 #14）；`retriever`→`aiyayi-retriever`（1.3.0 新增检索员：只读摘文件/Office/PDF 文档/网页内容、带路径/URL/页码交回，本体直接派）；子代模型跟随用户会话模型，如需钉死可在 `agentOptions` 配置 provider/model |
+| 文档解析（检索员专属） | 自写插件 `aiyayi-doc`（本包 `lib/doc.js`，1.4.0，挂检索员 preset） | docx/xlsx/pptx 结构化提取（docx 按段落、xlsx 按工作表+单元格、pptx 按页，都带定位），pdf 渲染成页图（`read_image` 逐页看）；旧版 doc/xls 尽力转 txt/csv（无精确定位）；加密/损坏明确报错。**纯只读**：不改文件不落工作区，临时页图/转换产物写系统临时目录、读完即清（见坑 #32）。基于 shipped `@deepseek-ai/libreoffice-kit`（用法约束见坑 #30） |
+| 检索员断因透传 | 自写插件 `aiyayi-presence-worker`（本包 `lib/presence-worker.js`，1.4.0，挂小伙伴 preset） | 坑 #22 的断因透传原本只覆盖本体→小伙伴一层；1.4.0 起小伙伴侧也挂监听：检索员（孙代）失败时，真实断因（error.message 优先）自动注入小伙伴下一步消息（`⚠ [检索员]` 开头），它能自己判断续派还是重派；同时把本体路由变化同步给名下检索员（模型跟随，同坑 #24 机制层层传导） |
 | 工具白名单 | 自写插件 `aiyayi-restrict`（本包 `lib/restrict.js`，v3.1 pre-step 方案）+ `lib/own-tools.js` 单一真源 | 启动期零 restrict 调用；她每个会话第一步前，先用探针从校验器报错里解析出当刻继承面全集，再 `deny = 全集 − 她自己的工具`——宿主层漏进来的 acp_*/mnemon_*/compress/search_context/working_directory 等对她隐藏，且自动适应宿主工具增减。放行名单从 `own-tools.js` 读（注册处登记、放行处判定），新增工具只改一处，不再漂（见坑 #19）。**2026-11-02 实测生效**：新会话第 2 个请求起工具恰好 11 个，第 1 个请求仍带全套（见坑 #9） |
 | 重逢感知 | 自写插件 `aiyayi-presence`（本包 `lib/presence.js`） | 每个回合第一步，往消息尾部追加一条 `[重逢]` 快照（time-context 同款 pre-step 注入范式）：他多久没来（presence.json）、你上次活动、你上次留的状态（state.md）、没说出口的话（wishes.json）。快照还带**版本自述**：`你当前插件版本：dsh-aiyayi x.y.z`（package.json 现读不写死，让她对自己版本有概念、不与 DSH 桌面版混淆；有新版时 updates 插件照旧单独提醒）。跨会话生效，`[SCHEDULE REMINDER` 唤醒消息不算"他来了"。工具 `update_state`（收尾留状态）/ `wish`（add/list/done 心愿单） |
 | 自我状态（体检单） | 同上 `aiyayi-presence`（v1.2.0 起） | `session/event` 总线折叠真实运行数据：模型与思考档、上下文用量（provider 实测 usage 优先，tokenMeter 估算兜底并标"估算"）、缓存命中率、上轮输出 tok/s、本会话轮数、上轮异常。变化明显（≥2048 token / 模型切换 / 异常）才注入，不每轮白涨。用量过八成/九成（估算口径按中文偏差 ÷0.49 校准，见坑 #16）注入 `[上下文提醒]`：劝用户开新会话、并让用户走之前说一声好让她收尾（update_state/补记忆/把话说完）；每档只提醒一次 |
 | 主动开口 | `tool-schedule`（dsh 原生）+ persona 指引 | 到期提醒会把冷会话真唤醒、以 user 消息落进定闹钟的那个会话——她想主动说话就 `schedule_create` 定闹钟；DSH 没开着会存着、下次启动补投 |
 | 新版本提醒 | 自写插件 `aiyayi-updates`（本包 `lib/updates.js`） | 每个会话第一个回合查一次 npm（registry.npmjs.org，失败落 npmmirror；成功结果缓存 6h、失败 30min 后重试）：本地版本比 latest 旧时，往消息尾部追加 `[更新提示]` 快照，她会用自己的口吻顺口提一句。同一远端版本只提醒一次（updates.json 落盘去重，跨重启不重复念叨）；检查失败/离线一律静默。**判据：`~\\.dsh\\aiyayi\\updates.json` 不存在 = 从没发现过新版（本地已是最新）；她答不上"自己是什么版本"是设计边界（升级判断靠被动推送），已由 presence 的版本自述补上** |
-| 其他 | time-context、compaction 组（提前压缩，见坑 #14/#16）、tool-ask-user | 她没有 bash/文件/技能/搜索/网络工具，想动手只能派活 |
+| 其他 | time-context、compaction 组（提前压缩，见坑 #14/#16）、tool-ask-user | 她没有 bash/文件/技能/搜索/网络工具，想动手只能派活；纯查资料走 `retriever` 检索员，不惊动小伙伴 |
 
 ## 文件
 
 npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内容提到包根即可）：
 
-- `package.json` — bundle 清单（`dsh.bundle.patch` 指向 cordis.patch.yml，exports 含 `./restrict` / `./presence` 子路径）
-- `cordis.patch.yml` — preset-aiyayi 声明 + 人格 + 全部插件配置
+- `package.json` — bundle 清单（`dsh.bundle.patch` 指向 cordis.patch.yml，exports 含 `./restrict` / `./presence` / `./doc` / `./presence-worker` 子路径）
+- `cordis.patch.yml` — preset-aiyayi / preset-aiyayi-worker / preset-aiyayi-retriever 三 preset 声明 + 人格 + 全部插件配置
 - `lib/index.js` — aiyayi-memory 记忆插件（node:fs/os/path，零依赖）
 - `lib/restrict.js` — aiyayi-restrict 工具白名单插件（零依赖）
-- `lib/presence.js` — aiyayi-presence 重逢感知插件（node:fs/os/path/crypto，零依赖）
+- `lib/presence.js` — aiyayi-presence 重逢感知插件（node:fs/os/path/crypto，零依赖；1.4.0 起导出 `createWorkerApply` 供小伙伴侧复用子代账本）
+- `lib/presence-worker.js` — aiyayi-presence-worker 检索员断因透传插件（1.4.0，挂小伙伴 preset，薄壳调 `presence.js` 的 `createWorkerApply`）
 - `lib/updates.js` — aiyayi-updates 新版本提醒插件（node:fs/os/path/crypto/url + 全局 fetch，零依赖）
-- `lib/net.js` — aiyayi-net 联网工具（aiyayi_fetch + aiyayi_cdp，node 内建能力实现，零外置依赖，只挂小伙伴 preset）
+- `lib/net.js` — aiyayi-net 联网工具（aiyayi_fetch + aiyayi_cdp，node 内建能力实现，零外置依赖，挂小伙伴与检索员 preset）
+- `lib/doc.js` — aiyayi-doc 文档解析插件（1.4.0，挂检索员 preset；ZIP/XML 最小解析零依赖 + 动态加载 shipped libreoffice-kit 做 pdf 页图与旧版转换）
 - `lib/own-tools.js` — 她的工具名单单一真源（注册处登记、放行处判定，防手写白名单漂移）
 - `README.md` — 本文档
 - `icon.svg` — 头像
@@ -40,13 +44,13 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
 
 ## 使用
 
-GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她说"我让人去弄"就是在派子智能体，进展和结果她会转述。
+GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她说"我让人去弄"就是在派子智能体（干活的叫小伙伴，查资料/读文档的叫检索员），进展和结果她会转述。
 
 ## 调整
 
 - **改人格**：编辑 `cordis.patch.yml`（包根）的 persona `prefix` → `plugin_manager` remove+install 重装生效（ESM 模块缓存，patchReload 不刷新插件 JS；实测它也不拾取包内 yml 变化，改完要重启 DSH）。
 - **改记忆**：直接编辑 `memory.md`，或对话里直接跟她说"记一下…"。
-- **子代模型/思考**：默认跟随用户会话模型；如需钉死，在 delegation 组 `tool-subagent` 的 `agentOptions` 配置 provider/model。
+- **子代模型/思考**：默认跟随用户会话模型；如需钉死，在 delegation 组 `tool-subagent`（本体和小伙伴的 delegation 组各有一个）的 `agentOptions` 配置 provider/model。本体切模型会自动层层传导：本体→小伙伴（`aiyayi-presence`，坑 #24）、小伙伴→检索员（`aiyayi-presence-worker`，1.4.0）。
 - **本体思考**：本体模型跟随用户会话模型，preset 自 1.0.1 起不再内置 agent-default-model 行（原因见坑 #13），`reasoningEffort` 由会话模型选择器控制；「关闭思考」在讯飞上游不生效见坑 #10。
 
 ## 已知坑（装的时候踩过的）
@@ -59,7 +63,7 @@ GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她
 6. **会话模型选择压过 preset 默认**：GUI 建会话总会带上模型参数（UI 记住"上次用的模型"），preset 的 agent-default-model 只兜底完全没带模型的会话——实际上永远轮不到。preset 里的 agent-default-model 行只是文档性兜底。
 7. MNEMON 运行时记忆快照是宿主级注入，工具白名单管不掉——她看得见，但人设里已声明"自己的记忆以 memory.md 为准"。她若去调 mnemon_remember 这类被隐藏的工具会报 `ToolNotFoundError UNKNOWN_TOOL`（模型从快照上下文里"知道"这些名字）。
 8. **有活跃的阿依娅伊会话时 remove/install 会报 restart-required**（unmanaged-plugin）：旧 preset 修订被在用会话占着，热重载换不动——先关掉她的会话或直接重启 DSH 再装。
-9. **v3 白名单首请求不生效**：`agent/pre-step` 落在首个请求组装之后，所以新会话第 1 个请求仍带全套宿主工具，第 2 个请求起收敛。她的第 1 句回复可能看见（甚至调用）宿主工具——量小可忍；要收紧需把 restrict 提前到 `agent/created`（风险：agent/created 时刻继承面可能不全，deny 会漏掉后注册的工具）。
+9. **v3 白名单首请求不生效**：`agent/pre-step` 落在首个请求组装之后，所以新会话第 1 个请求仍带全套宿主工具，第 2 个请求起收敛。她的第 1 句回复可能看见（甚至调用）宿主工具——量小可忍；要收紧需把 restrict 提前到 `agent/created`（风险：agent/created 时刻继承面可能不全，deny 会漏掉后注册的工具）。**2026-11-06 实锤**（1.3.0 重启后首个新会话）：turn=1 她真调了宿主的 `working_directory`，报 `unknown tool "working_directory"`（UNKNOWN_TOOL，durationMs=0）——pre-step 的持久掩码在她响应回来前已生效，内核按掩码后的注册表解析调用。错误结果回给模型即自愈（她会换路），turn≥2 起工具已收敛、不会再看到这个名字，无需修。
 10. **「关闭思考」在讯飞上游不生效（2026-11-02 实测）**：请求确实带上了 `reasoning_effort:"none"`（dsh-our-free-model pack.js stream() 42288–42297 行：none 在声明档位表里就原样发送），但 spark-x2.6（thinkLen 1873/8379）和 GLM-5.3-Flash（thinkLen 6425）照样输出完整思考块（逐条核对 request cfg ↔ assistant reasoning，实测）。上游忽略该参数，客户端无解。可选出路：换 loomy 其它模型（Kimi-k2.6/qwen3.8-flash/deepseek-v4-flash-0731/MiniMax-M3/mimo-v2.5）试「关闭思考」看哪家认；或接受她带思考（人设不受影响）。
 11. **本地 bundle 的 JS import 解析不到 shipped 包**：`import { createUserMessage } from '@deepseek-ai/dsh-llm'` → `ERR_MODULE_NOT_FOUND: Cannot find package '@deepseek-ai/dsh-llm' imported from ...\bundle\lib\presence.js`，preset 激活失败（"never started"）。"shipped 包从 dsh 安装目录解析"只对 patch 行里的插件名成立，对 bundle 代码里的 import 不成立；dsh-llm 也不在 pnpm 可装范围（profile 里只有 cosmokit/schemastery 两个 @deepseek-ai 包是 registry 装的）。解法：手构消息——`createUserMessage(input)` 就是 `deepFreeze(structuredClone({...input, id: randomUUID()}))`，会话日志是 JSON，symbol brand 本来就存不下来，用 node:crypto 的 randomUUID + 纯 JSON 字段手构即可（presence.js 的 `createSnapshotMessage`）。
 12. **每回合注入动态内容必须走 `agent/pre-step` 消息追加，别走 systemPrompt.section**：section 的 text 每轮变化会打破 KV 前缀 → 整段对话历史重付费；pre-step 追加的消息持久落盘、前缀稳定。范式抄 dsh-time-context：`ctx.on("agent/pre-step", async ({agent, turn, step, signal}, next) => { const d = await next(); if (!d || d.kind === 'reject' || signal?.aborted) return d; return {...d, messages: [...d.messages, msg]} }, {prepend: true})`。注入判据用 `step === 1`（step 每回合重置为 1），不必上 sessionProjections/zod。
@@ -91,3 +95,7 @@ GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她
 26. **node 内建能力可替代 playwright 承载"浏览器抓取"**：DSH runtime node = v24.21.0，内置**全局 WebSocket**、全局 `fetch`、`node:http`、`node:net`。node 内建就够做 CDP 接管（`Node WebSocket` 连 CDP `ws://`）+ 模拟浏览器 fetch，**不需要 require('playwright')** 依赖外置包。给 subagent 嵌"浏览器抓取"工具用这条，跨 DSH 可靠。
 27. **自定义工具必须把正文交到模型手里，不能只回状态码（2026-11-06 实测；1.2.7 修）**：最初 `aiyayi_fetch` 的 `execute` 返回了完整 body，但 `output.render` 只输出 `（抓了 X → HTTP 200，正文 N 字符）` 这句摘要。DSH 里**模型实际看到的是 render 的文本**，不是 execute 的返回值——于是小伙伴拿到"200 / 2万字符"但看不到正文，提取不出事实（表现：它说"能连上但没真东西"）。修法：render 必须把 `body`（或 cdp 的 `text`/`value`/`cookies`）拼进 `TEXT_BLOCK` 交给模型。教训：工具 deliver 的"内容"以 render 呈现为准，写 render 要当"模型真正读到的结果"对待，不是旁注摘要。
 28. **给 subagent 嵌抓取工具时，CDP 浏览器要能"自主拉起"否则仍是空能力（2026-11-06 实测；1.2.7 已做）**：最初 aiyayi_cdp 只接管用户 `--remote-debugging-port` 浏览器，用户没开就报"端口没开"。但实测发现：`node:child_process.spawn` 系统 Chrome `--headless=new --remote-debugging-port=<空闲端口>` 就能自主拉起、抓完 `kill` + 删临时 user-data-dir。于是 aiyayi_cdp 改为"探测→有就接管、没有就自动拉起 headless"，**不再依赖用户手动开端口**（需登录态才需要用户开带登录的浏览器）。实测闭环：惯例 headless Chrome → CDP → navigate example.com → evaluate 拿 title+正文。坑：headless 要 `--disable-extensions` + 独立 `user-data-dir`（避免加载用户扩展、避免用默认配置目录开调试端口被拒）；`findPageWs` 要排除 background_page/扩展 target。
+29. **委派层级与 maxDepth：孙代派生必须显式放宽深度上限（2026-11-06 实测；1.3.0 已做）**：`tool-subagent` 的深度检查按"调用 agent 的当前深度"算，委派深度上限默认读 Host 设置（初始 1）。检索员在本体（深度 0）→小伙伴（深度 1）之下是深度 2，小伙伴的派生工具不显式 `maxDepth: 2` 会被内核拒（子会话看到 `remaining levels 0, Do not call subagent at this depth`）。同组多实例是官方支持的："每个委派目标挂载一个实例，且每个实例的 toolName 必须不同"（本体 `subagent`→aiyayi-worker、`retriever`→aiyayi-retriever），agentPreset 单值、toolName 全会话不可重复。检索员预设是叶子节点：不挂委派组，层级到它为止封顶，深度 3 不可达。教训：preset 叠层级时，每一层的委派工具都要显式 `maxDepth: 层深+1`，别赌 Host 默认值。另注意：断因透传（坑 #22）和模型跟随（坑 #24）都只覆盖本体→小伙伴一层，检索员（孙代）失败时小伙伴只见一句 `failed before it finished`——缓解靠派工纪律（简报写全+断了 send_message 让它盘点断点），检索员任务应当短。还有一条容易漏的：**新增派生工具名必须同步进 `lib/own-tools.js` 的 `HOST_OWN_TOOLS`**（retriever 已加，1.3.0）——本体 restrict 白名单按这份名单放行，漏了就会在第 2 个请求起被她自己的白名单藏掉（坑 #19 同类）。**（1.4.0 更新）**孙代断因透传与模型跟随已由 `aiyayi-presence-worker` 补齐，不再只靠派工纪律缓解；坑 #22/#24 的机制描述仍是主层（本体→小伙伴）的实现依据，小伙伴→检索员一层复用同一套账本与传导，只是注入文案为 `⚠ [检索员]`、且刻意不做重逢/体检单/状态工具（小伙伴已有）。
+30. **libreoffice-kit 的使用约束（1.4.0 实测）**：①`renderImages` 的 `outputDir` 必须是**全新目录**——kit 自己 mkdir/清理，预创建（mkdtempSync）会 `EEXIST: file already exists, mkdir ...` 穿透成 ConversionError；`convert` 相反（只写输出文件、不建父目录），临时父目录要自己建。②convert 对已存在输出**绝不覆盖**（独占创建 0600）——同路径重跑报 EEXIST，测试/重试前先删旧输出。③kit 是**纯 ESM**（type:module，engines node>=22.19），从 bundle 的 CJS 插件里用 `await import(pathToFileURL(path))` 动态加载，命名空间直接有 `createConverter`；`package.json` 声明的 `lib/types/**/*.d.ts` 实际没打包，类型只能读源码。④引擎解析走 `require.resolve('@deepseek-ai/libreoffice-kit-win32-x64/package.json')`（从 kit 自身位置起），shipped 树（app.asar.unpacked）内可用；插件侧留 `DSH_LIBREOFFICE_KIT` 环境变量覆盖与 resourcesPath 候选兜底。⑤`renderImages` 会往 `outputDir` 写 `manifest.json`，图片路径可能是相对路径，要对齐到 outputDir 再判存在。
+31. **旧版二进制 doc/xls/ppt 与"假绿"测试（1.4.0 实测）**：①Kit 只接受**真 OLE 复合文档**（97-2003 二进制），改名/损坏报 `invalid-document`；加密文档在 sniff 阶段就能用 OLE 魔数 + 扩展名不符预判出"大概率加密"。②convert 出的 txt/csv **没有段落/单元格级定位**（doc→txt 行号、xls→csv 行号近似），工具 note 里必须写明"需精确定位请转存 docx/xlsx/pptx"；ppt 没有 convert 文本路线，直接明确报错。③**假绿教训**：重构删 import 时 convertLegacy 还引用着 `mkdtempSync`，而该分支的测试只断言 `!r.ok`——`ReferenceError: mkdtempSync is not defined` 也算"报错即通过"，全绿但功能是坏的。断言必须绑定**错误文案**（如 `转换失败`），"任何报错都算过"的用例等于没测。
+32. **多检索员并发与临时文件策略（1.4.0；需求 P2 口径）**：kit converter 按"一个 converter 内部串行"运行，插件侧 `aiyayi-doc` 用单例 converter——多个检索员并发解析文档时自然排队，不会互相踩（页图/转换临时目录按 `aiyayi-doc-(pages|conv)-<randomUUID>` 命名，互不冲突）。临时产物全部写**系统临时目录**、不碰工作区：转换目录读完即删（finally）、页图目录用完留存 **30 分钟**供逐页 `read_image`，每次调用先 sweep 掉超 30 分钟的残留目录，插件卸载时再兜底清一轮。检索员 preset 保持只读（`tool-fs write/edit:false`），文档解析不改变这一底线。
