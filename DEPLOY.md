@@ -8,12 +8,12 @@
 2. **发布 npm**：工作区根跑 `node publish.mjs`（实际执行 `npm publish --registry=https://registry.npmjs.org/`，凭据在用户级 `.npmrc` 的 `//registry.npmjs.org/:_authToken=`）。先 `node publish.mjs --dry` 干跑看打包内容。
 3. **验证 npm**：`https://registry.npmjs.org/dsh-aiyayi/latest` 的 `version` 字段。注意发布输出会提示"being processed, may take a few minutes"，刚发布完可能仍显示旧版本，等几分钟再查。
 4. **提交 git**：gh_repo 里 `git add package.json README.md lib/* DEPLOY.md` → commit（消息格式 `1.2.x：<改动摘要>`）。
-5. **推送到 gitcode + gitee**（GitHub 公开仓库连不上，不推送 GitHub）：
+5. **推送到 gitcode + gitee**（GitHub 公开仓库连不上——2026-11-06 发布 1.2.7 时换网络环境实测仍 `Connection was reset`，维持不推）：
    ```
    git push gitcode main
    git push gitee main
    ```
-   remote 已配置：`gitcode` = https://gitcode.com/BayiHY/dsh-aiyayi.git，`gitee` = https://gitee.com/BayiHY/dsh-aiyayi.git（推送凭据在 `~/.git-credentials`，账号 BayiHY）。
+   remote 已配置：`gitcode` = https://gitcode.com/BayiHY/dsh-aiyayi.git，`gitee` = https://gitee.com/BayiHY/dsh-aiyayi.git，`github` = https://github.com/BayiHY/dsh-aiyayi.git（remote 已加，网络恢复后 `git push github main` 即可补推；推送凭据在 `~/.git-credentials`，账号 BayiHY）。
 6. **本地生效**：本地 profile 里 `dsh-aiyayi` 是 junction 指向 `bundle/`（`link:` 依赖），bundle 改了本地即生效，无需重装 npm 包；**但 bundle 内 JS 改动要重启 DSH 才生效**（README 坑 #13：patchReload 不拾取）。
 
 ## 快速部署（推荐）
