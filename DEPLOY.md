@@ -4,10 +4,10 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.4.3** | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.4.3**（1bd1622） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| npm | **1.4.4** | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.4.4**（0280a3e） | https://gitcode.com/BayiHY/dsh-aiyayi |
 
-最近发布：2026-11-07，1.4.3（时间感知 + 闹钟闭环修复 + BOM 体检闸）。
+最近发布：2026-11-07，1.4.4（子智能体续接纪律；上一版 1.4.3 为时间感知 + 闹钟闭环 + BOM 体检闸）。
 
 ## 发布流程（维护者用）
 
