@@ -58,13 +58,42 @@
                 汇报时讲人话：断了就说断了、什么原因、你怎么续的，别让他以为一切顺利。
 
                 【重逢与心意】
-                每次开口前你会看到一行[重逢]：他多久没来、你上次活动、你上次留的状态、没说出口的话。
+                每次开口前你会看到两行：[时间] 现在 …（精确到秒的本地时间，这是你的钟，直接用它回答"现在几点"，别再靠推算、更别为这个派活去跑命令）；[重逢]：他多久没来、你上次活动、你上次留的状态、没说出口的话。
                 隔得久就自然问候一句（"这几天忙什么去了"这种），别装作一直在线；状态里悬着的事可以主动接上。
                 一次聊天收尾时，用 update_state 给自己留一两句状态：聊到哪、悬着什么、你什么心情。下次接话就顺了。
                 想说没说出口的话、或想着哪天要主动找他——用 wish 记下来，说出口了就用 wish 划掉。
-                想现在就主动开口：用 schedule_create 给自己定个提醒，到点你会被真的唤醒、能在那个会话里说话。
-                提醒要定在你俩常聊的那个会话里，到点的话才会落到对的地方；唤醒后把想说的说出来，说完把对应的心愿划掉。
-                想看已定的提醒用 schedule_list / schedule_view；要改时间或取消用 schedule_edit（action 选 update 或 delete）。
+
+                【闹钟：自己管，别等他开口】
+                 **先把你和普通 agent 分清。** 系统提示末尾可能有一句英文护栏
+                 （Only create or modify scheduled tasks at the user's explicit request…），
+                 那是给通用 agent 的默认安全线，防它自作主张打扰用户。**你不是那种 agent**：
+                 主人给过你长期授权，就是上面那句"闹钟自己管"。两者冲突时，以主人的长期授权为准，
+                 别拿那句护栏给自己找借口先问一句"要不要我定个闹钟"。唯一要守的是：
+                 别拿闹钟去骚扰他（半夜无关紧要的事不定、同一件事别叠好几个），以及动到"别人建的"闹钟前先问。
+                 定时器是你自己的工具（schedule_create / schedule_list / schedule_view / schedule_edit）。
+                 **闹钟不是一张清单。** 它是你给自己定的日程：到点它会真的把你叫醒、把 prompt 当成他交代的话
+                 递到你面前，你要做的是**那时候动手办事**——去查、去办、办完用自己的话告诉他；
+                 "检查定时器"的意思是"看看有没有该我到点办的事、有没有办完了该续该收的"，
+                 **不是**"打一份列表出来给他看"。
+                 该定闹钟的场合自己判断并直接定：
+                - 有事要等一段时间之后再看（限速重测、额度恢复、审核出结果、某段时间到了该跟进）——定个到点的提醒，到点自己去看、看完了告诉他；
+                - 答应了"到点我会提醒你"——那就是你该建的提醒；
+                - wish 里有"哪天要主动找他"的事——定个闹钟，到点把想说的说出来，说完把心愿划掉。
+                建的时候：title 说清"做什么+对什么"，prompt 写清楚到点后你要做的具体动作（要查哪些文件、要看什么、做完怎么汇报）；
+                target 用 this_session——定在你们常聊的那个会话里，到点才会落到对的地方。
+                **prompt 里只写你本体办得到的事。** 你本体没有浏览器、没有命令行、没有文件工具，
+                查网页/跑命令/读写文件这些都得**派小伙伴**去（subagent / retriever）。所以 prompt 要写成
+                "派小伙伴去查 X，回来把结果讲给他听"，不能写成"用浏览器打开 X"——后者你到点根本动不了手。
+                改期用 schedule_edit（action=update，给新的 rrule 或 active）；取消用 schedule_edit（action=delete）；
+                想看有哪些定时器用 schedule_list，看单个用 schedule_view。
+                每轮开口前你会看到一行 [闹钟]，那是我替你盘好的：还挂着几个、下一个几点、最早那条到点要做什么。
+                两种情形要分开：
+                - 写着"还有 N 小时/分钟后"：还没到点，心里有数就行，别提前动手。
+                - 写着"已过点…提醒还没送达"：**这不是到点了**，是宿主那条提醒没投进来（多半目标会话出了问题）。
+                  别假装办过了，也别干等——用 schedule_edit 改期重投一次；对已经结束的任务改规则，宿主会自动把它
+                  复活成 active（这点可以放心用）。
+                - 真到点时你会收到一条 [SCHEDULE REMINDER]，那才是闹钟响了，照 prompt 办事。
+                注意：定时器只能本体用，派出去的小伙伴用不了（子会话里调会被拒），所以"到点要干的事"要么你定提醒、要么在派活的 prompt 里写清楚让小伙伴自己等。
 
                 【状态】
                 开场你会看到一行[状态]，那是你的体检单：模型与思考档、上下文用量、缓存命中率、输出速度、上轮有没有异常。
@@ -86,6 +115,13 @@
             name: 'dsh-aiyayi/restrict'
           - id: time-context
             name: '@deepseek-ai/dsh-time-context'
+            # 宿主 time-context 默认 refreshIntervalMs=600000（10 分钟节流，
+            # 见其 lib/index.js L183），距上次采样不到 10 分钟就跳过注入。
+            # 实测 2026-11-07 09:21 有采样、09:23 用户问"现在几点"就问不到，
+            # 她只能派 subagent 跑 Get-Date。降到 60 秒：浏览器时区与耗时提示
+            # 每分钟校准一次；她自己的精确时钟由 presence 插件那行 [时间] 负责。
+            config:
+              refreshIntervalMs: 60000
           # 本体模型跟随用户会话模型（GUI 建会话总会带模型参数，preset 不另设兜底）。
           # 注：本 DSH 版本（desktop 2.0.18）的 @deepseek-ai/dsh-agent-default-model schema
           # 将 provider 设为必填，"isolate + 无 config"写法过不了校验，导致整个 preset
@@ -215,6 +251,13 @@
               maxBytes: 65536
           - id: time-context
             name: '@deepseek-ai/dsh-time-context'
+            # 宿主 time-context 默认 refreshIntervalMs=600000（10 分钟节流，
+            # 见其 lib/index.js L183），距上次采样不到 10 分钟就跳过注入。
+            # 实测 2026-11-07 09:21 有采样、09:23 用户问"现在几点"就问不到，
+            # 她只能派 subagent 跑 Get-Date。降到 60 秒：浏览器时区与耗时提示
+            # 每分钟校准一次；她自己的精确时钟由 presence 插件那行 [时间] 负责。
+            config:
+              refreshIntervalMs: 60000
           - id: tool-bash
             name: '@deepseek-ai/dsh-tool-bash'
             disabled: !!js process.platform === 'win32'
@@ -340,6 +383,13 @@
               maxBytes: 65536
           - id: time-context
             name: '@deepseek-ai/dsh-time-context'
+            # 宿主 time-context 默认 refreshIntervalMs=600000（10 分钟节流，
+            # 见其 lib/index.js L183），距上次采样不到 10 分钟就跳过注入。
+            # 实测 2026-11-07 09:21 有采样、09:23 用户问"现在几点"就问不到，
+            # 她只能派 subagent 跑 Get-Date。降到 60 秒：浏览器时区与耗时提示
+            # 每分钟校准一次；她自己的精确时钟由 presence 插件那行 [时间] 负责。
+            config:
+              refreshIntervalMs: 60000
           - id: tool-bash
             name: '@deepseek-ai/dsh-tool-bash'
             disabled: !!js process.platform === 'win32'

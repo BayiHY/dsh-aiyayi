@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.4.0",
+  "version": "1.4.3",
   "license": "MIT",
   "author": "阿依娅伊 <aiyayi@local>",
   "keywords": [
@@ -34,7 +34,8 @@
     "lib/doc.js",
     "lib/presence-worker.js",
     "cordis.patch.yml",
-    "icon.svg"
+    "icon.svg",
+    "test/"
   ],
   "engines": {
     "node": ">=18"

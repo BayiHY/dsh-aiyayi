@@ -1,0 +1,25 @@
+# 行尾与编码约定。
+#
+# 为什么锁 LF：包里的 .js/.yml/.json 由 Node 与 DSH Loader 读取，跨平台一致性
+# 很重要；Windows 上 core.autocrlf=true 会把 LF 转成 CRLF，导致同一份代码在
+# 不同机器上 hash 不同、diff 噪音大。这里显式声明入库统一 LF。
+#
+# BOM 另有专门体检：test/no-bom.test.mjs —— 带 BOM 的 package.json 会让整个
+# bundle 读不出来（2026-11-07 事故），跑测试即可拦住。
+* text=auto eol=lf
+
+# 二进制/资源不参与换行转换
+*.svg binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary
+
+# 脚本与配置强制 LF
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
