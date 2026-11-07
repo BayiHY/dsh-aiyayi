@@ -1,12 +1,21 @@
 # 阿依娅伊插件部署指南
 
+## 当前发布状态
+
+| 渠道 | 版本 | 位置 |
+|---|---|---|
+| npm | **1.4.3** | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.4.3**（1bd1622） | https://gitcode.com/BayiHY/dsh-aiyayi |
+
+最近发布：2026-11-07，1.4.3（时间感知 + 闹钟闭环修复 + BOM 体检闸）。
+
 ## 发布流程（维护者用）
 
 发新版按此顺序（2026-11-05 起）：
 
 1. **bump 版本**：同时改 `bundle/package.json` 与 `gh_repo/package.json` 的 `version`（两处必须一致，bundle 是 npm 发布源、gh_repo 是 git 仓库）。
 2. **发布 npm**：工作区根跑 `node publish.mjs`（实际执行 `npm publish --registry=https://registry.npmjs.org/`，凭据在用户级 `.npmrc` 的 `//registry.npmjs.org/:_authToken=`）。先 `node publish.mjs --dry` 干跑看打包内容。
-3. **验证 npm**：`https://registry.npmjs.org/dsh-aiyayi/latest` 的 `version` 字段。注意发布输出会提示"being processed, may take a few minutes"，刚发布完可能仍显示旧版本，等几分钟再查。
+3. **验证 npm**：`https://registry.npmjs.org/dsh-aiyayi/latest` 的 `version` 字段。注意发布输出会提示"being processed, may take a few minutes"，刚发布完可能仍显示旧版本，等几分钟再查（2026-11-07 实测：第一次查仍是旧版、约 15 秒后即返回新版，`npm view dsh-aiyayi version` 轮询最省事）。
 4. **提交 git**：gh_repo 里 `git add package.json README.md lib/* DEPLOY.md` → commit（消息格式 `1.2.x：<改动摘要>`）。
 5. **推送到 gitcode + gitee + github**：
    ```
