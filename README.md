@@ -118,3 +118,63 @@ GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她
 39. **`[闹钟]` 只报标题不够用：她到点前不知道要查什么（2026-11-07；1.4.3 加）**：1.4.2 只渲染 `标题（时刻，还有多久）`。但真正要办的事全在 prompt 里（"查补天 QTVA-2026-11332391"这种单号），而宿主投递 prompt 要到点才发生——中间的这段时间她无法判断这个闹钟还该不该留、要不要改。1.4.3 增加一行"「标题」到点要做：<prompt 截断 60 字>"。两个坑：①**挑哪条 prompt**——不能取 `shown[0]`（`shown` 已被截到 3 条）也不能无脑海最早那条，否则会拿一条占位/极短的 prompt 冒充"要做的事"，把真正有内容的挤掉；正确做法是从 `due+upcoming` **全部**里挑第一条 `prompt.trim().length >= 60` 的，没有再退回第一条非空的。②**截断安全**——按码点切（`[...text]`）而不是 `slice`，否则会把 emoji 的代理对切一半、渲染成乱码/替换符。
 40. **`rrule` 带 COUNT=1 也是一次性，别按"会重复"判（2026-11-07 实测踩到；1.4.3 修）**：初版判重复是 `typeof record.rrule === 'string' || record.kind !== 'at'`，于是 `DTSTART;…\nRRULE:FREQ=DAILY;COUNT=1`（**一次性**）被标成"会重复"，而娅伊自己建的一次性闹钟恰恰都是这种写法——等于给她一个错前提。真正判据是规则里有没有 `COUNT=1`：`isRecurringRecord()` 先看 `rrule` 全文有没有 `\bCOUNT\s*=\s*1\b`（有则一次性），没有 `rrule` 才回落到 `kind`（`at` 一次性；`after/every/daily/weekly/cron` 都会再触发）。测试 `test/alarm-content.test.mjs` 用五种 record 形状锁死。
 41. **store 路径必须跟随 `DSH_HOME`，别硬编码 `~/.dsh`（2026-11-07；1.4.3 修）**：`SCHEDULE_FILE` 原为 `join(homedir(), '.dsh', 'storages', 'schedule.json')`。`DSH_HOME` 一旦指向别处（换盘、便携部署、多套并存），这行会**静默读不到而永远不出现**，且没有任何报错——属于最难排查的一类。改为优先级链：`DSH_SCHEDULE_STORE`（显式覆盖/测试）→ `$DSH_HOME/storages` → `~/.dsh/storages`。测试 `test/alarm-home-path.test.mjs` 用两个不同 HOME 分进程验证（因为路径是模块加载时求值的常量，必须换进程才测得出来）。
+
+---
+
+## 三、2026-11-07：子智能体续接（continuable）能力补齐（1.4.4）
+
+### 先厘清宿主的事实（读源码所得，别再猜）
+
+- 子代理分 `one-shot` / `external` / `continuable` / `unknown` 四种模式（`SubagentCatalogEntry`）。
+  **`spawn` provider 实现了 `prepareContinuable()`**（`dsh-subagent-spawn-in-process/lib/index.js:31`），
+  所以我们的小伙伴和检索员**都是 continuable**。
+- `tool-subagent` 在拼工具描述时按 `subagentProvider.prepareContinuable !== void 0` 分支
+  （`dsh-tool-subagent/lib/index.js:373`）：有就走"`send_message` 可续接"那套文案。
+- `send_message` 服务语义（`SubagentService.sendMessage`）：目标在跑 → 下个 step 边界吸收；
+  目标空闲 → 开新一轮；**目标不在（absent） → 从持久化 cold-resume**。
+  即"DSH 重启后、隔天再找它，发条消息就能捞回来"是这个能力的既定行为。
+- `list_agents` 只投影 `mode === "continuable"` 的孩子，**one-shot 会被直接过滤掉**
+  （`dsh-tool-subagent-control/lib/index.js:32` —— `if (entry.mode !== "continuable") return void 0`）。
+- **权限边界**：`send_message` 只认"直接子会话"或"直接父级"。孙代只能用 `interrupt_agent`。
+
+### 我们的结构 + 实测踩到的错法
+
+三层：**本体 →（`subagent` 派）小伙伴 →（小伙伴再派）检索员**。本体自己也能用 `retriever`
+直派检索员（那是直接下级，能直接续）。问题出在**下一层**：小伙伴派的检索员对本
+体就是孙代，本体发消息会被拒。
+
+实测证据（`session-cd646af9`，她 55 轮会话里 `list_agents` 只调 7 次、
+`send_message` 调了 29 次）：
+
+```
+L565  agent_id: 7553531f-3345-45d1-a455-50a56e2c 8db   → Error: is unavailable
+L571  agent_id: 7553531f-3345-45d1-a455-50a56e2c 5ca7  → message delivered
+```
+
+**同一个子代理，她把 UUID 最后几位打错了一个字符。** 模型对长十六进制串逐字符复制
+并不可靠，且 `is unavailable` 这个提示**不区分"ID 打错"与"子代理真的不在了"**——
+按后者反应就会重派、把已完成的活扔掉。
+
+### 修法（只改 persona，零代码改动）
+
+1. **本体【干活】段**加：续接前 `list_agents` 现查 ID、不许凭记忆敲；把
+   `is unavailable` 解释成"查无此号"而非"它死了"。
+2. **本体【干活的规矩】段**重写：
+   - 明确 `continuable` 是什么、"会话记录还在就能唤醒"、**DSH 重启后也能冷启动捞回**
+     （这条最省成本：她原来不知道，重启后倾向于重派）；
+   - 断掉第一反应是 `send_message` 续而不是重派；
+   - 状态语义：跑着 → step 边界吸收；休眠 → 叫醒开新一轮；
+   - **孙代够不着**：走 `send_message` 给小伙伴、让它在自己的 ctx 里续（权限在它手上）。
+3. **小伙伴 persona【派检索员】段**同步加：ID 现查、`is unavailable` 含义、
+   自己能续检索员（因为娅伊够不着，得靠它接住）。
+
+### 回归测试
+
+`test/persona-continuation.test.mjs`：不引 yaml 依赖，用 20 行缩进感知的极简提取
+（预设行缩进 4、`prefix: |` 缩进 14、结束于缩进 ≤10 的插件行），断言本体 10 条 /
+小伙伴 3 条关键纪律的短语仍在，缺任何一条就 FAIL 并点名。
+**已实测闸门有效**：把 "ID 必须现查" 改成别的字，测试立刻 FAIL 并报出两个预设都缺。
+
+> 为什么需要这道闸：persona 是纯文本，删一句不会报错、不会让测试变红，
+> 功能照跑但行为悄悄退化。这类"静默劣化"必须靠文本断言兜住。
+
