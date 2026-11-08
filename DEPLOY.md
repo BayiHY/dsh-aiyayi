@@ -4,10 +4,22 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.4.4** | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.4.4**（0280a3e） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| npm | **1.5.4** | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.5.4**（b57eb38） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.5.4**（b57eb38） | https://gitee.com/BayiHY/dsh-aiyayi |
+| GitHub | 1.4.4（未推） | 需先配 SSH 密钥，见下 |
 
-最近发布：2026-11-07，1.4.4（子智能体续接纪律；上一版 1.4.3 为时间感知 + 闹钟闭环 + BOM 体检闸）。
+最近发布：2026-11-09，1.5.4（记忆根目录可迁移：`location.json` 指路文件 + `lib/home.js` 唯一路径出口；新增 `memory_location` / `memory_relocate` 双工具；硬失败与防误判加固）。
+
+**GitHub 未推的原因（2026-11-09 实测）**：本机 `~/.ssh/` 下没有密钥、也没有 `config`，`git remote -v` 里也没有 github remote（只有 `origin`=gitcode 和 `gitee`）。要补推 GitHub 得先按下面第 5 步配好 SSH 密钥与 remote。
+
+**GitCode 认证方式变更（2026-11-09 实测）**：密码式 git 认证已停用（`remote: The password-based authentication of Git has been removed. Please use your personal access token instead`）。必须用 personal access token。Token 已存在**用户级环境变量 `GITCODE_TOKEN`**（`[Environment]::GetEnvironmentVariable('GITCODE_TOKEN','User')` 读取），推送时临时拼进 URL 即可，**不要写进任何仓库文件或 git config**：
+
+```powershell
+$tok = [Environment]::GetEnvironmentVariable('GITCODE_TOKEN','User')
+git push "https://oauth2:$tok@gitcode.com/BayiHY/dsh-aiyayi.git" main
+```
+
 
 ## 发布流程（维护者用）
 
