@@ -8,7 +8,7 @@
  */
 import { pathToFileURL } from 'node:url'
 
-const mod = await import(pathToFileURL('G:/阿依娅伊/output/dsh-aiyayi-fix/lib/presence.js').href)
+const mod = await import('../lib/presence.js')
 const { renderAlarms, readOwnAlarms } = mod.__testing
 
 const SESSIONS = [

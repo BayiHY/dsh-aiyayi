@@ -50,7 +50,7 @@ writeFileSync(store, JSON.stringify({
 process.env.DSH_SCHEDULE_STORE = store
 process.env.AIYAYI_HOME = tmp
 
-const mod = await import(pathToFileURL('G:/阿依娅伊/output/dsh-aiyayi-fix/lib/presence.js').href)
+const mod = await import('../lib/presence.js')
 const { readOwnAlarms, renderAlarms } = mod.__testing
 
 let ok = true

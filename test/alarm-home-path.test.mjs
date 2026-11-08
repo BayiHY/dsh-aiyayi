@@ -43,7 +43,7 @@ const check = (label, cond, extra = '') => {
 
 // 关键：模块在 import 时就求值 SCHEDULE_FILE，所以必须用两个独立进程来测。
 // 这里用子进程分别以不同 DSH_HOME 跑同一段逻辑。
-const modUrl = 'file:///G:/阿依娅伊/output/dsh-aiyayi-fix/lib/presence.js'
+const modUrl = new URL('../lib/presence.js', import.meta.url).href
 const { execFileSync } = await import('node:child_process')
 
 function probe(home) {

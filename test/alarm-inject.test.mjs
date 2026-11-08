@@ -53,12 +53,12 @@ writeFileSync(
 process.env.DSH_SCHEDULE_STORE = store
 process.env.AIYAYI_HOME = tmp
 
-const mod = pathToFileURL('G:/阿依娅伊/output/dsh-aiyayi-fix/lib/presence.js').href
+const mod = new URL('../lib/presence.js', import.meta.url).href
 const { apply, name } = await import(mod)
 console.log('module loaded:', name)
 
 // 断言：文件里确实加了 protest 名称与调用点，避免"函数写了但没接线"
-const src = readFileSync('G:/阿依娅伊/output/dsh-aiyayi-fix/lib/presence.js', 'utf8')
+const src = readFileSync(new URL('../lib/presence.js', import.meta.url), 'utf8')
 const checks = [
   ['function renderAlarms', src.includes('function renderAlarms')],
   ['function readOwnAlarms', src.includes('function readOwnAlarms')],

@@ -13,7 +13,7 @@
 
 发新版按此顺序（2026-11-05 起）：
 
-1. **bump 版本**：同时改 `bundle/package.json` 与 `gh_repo/package.json` 的 `version`（两处必须一致，bundle 是 npm 发布源、gh_repo 是 git 仓库）。
+1. **bump 版本**：改 `gh_repo/package.json` 的 `version`（2026-11-08 起 npm 发布源就是 gh_repo/，publish.mjs 直接打包它；旧 `bundle/` 目录已归档为工作区 `dsh-aiyayi-bundle-1.4.0.zip`，不再维护）。
 2. **发布 npm**：工作区根跑 `node publish.mjs`（实际执行 `npm publish --registry=https://registry.npmjs.org/`，凭据在用户级 `.npmrc` 的 `//registry.npmjs.org/:_authToken=`）。先 `node publish.mjs --dry` 干跑看打包内容。
 3. **验证 npm**：`https://registry.npmjs.org/dsh-aiyayi/latest` 的 `version` 字段。注意发布输出会提示"being processed, may take a few minutes"，刚发布完可能仍显示旧版本，等几分钟再查（2026-11-07 实测：第一次查仍是旧版、约 15 秒后即返回新版，`npm view dsh-aiyayi version` 轮询最省事）。
 4. **提交 git**：gh_repo 里 `git add package.json README.md lib/* DEPLOY.md` → commit（消息格式 `1.2.x：<改动摘要>`）。
@@ -27,7 +27,7 @@
    - **GitHub 推送必须走 SSH，HTTPS 不可用**（2026-11-06 实测取证：命令行 TLS ClientHello 带 `github.com` SNI 即被 RST；DNS 干净（官方 IP 140.82.x.x）、TCP 443 全通、裸 IP 握手正常——纯 SNI 阻断，**改 hosts 无效**；api.github.com 同被阻断，REST API 建仓/查仓/推 token 均不通）。首次推送记录：1.2.7 的 980cb10+f0d5200 于 2026-11-06 经 SSH 补推成功。
    - **SSH 配置**（换机器照做）：① `ssh-keygen -t ed25519 -f ~/.ssh/github_ed25519 -N ""`；② 浏览器（需代理）把公钥加到 GitHub → Settings → SSH and GPG keys；③ `~/.ssh/config` 写 `Host github.com` → `User git` + `IdentityFile ~/.ssh/github_ed25519` + `IdentitiesOnly yes`；④ remote 用 SSH 形式。注意 OpenSSH 对 `~/.ssh/config` 强校验 Windows ACL（权限过宽直接拒用）：`icacls <config> "/inheritance:r" "/grant:r" "<用户>:F"` 修复。SSH 22 直连已验证可达（SSH 协议无 SNI，不受阻断影响）。
    - **备路** `ssh.github.com:443`：其 DNS 被污染（解析到假 IP），管理员 hosts 写 `140.82.112.36 ssh.github.com` + `ipconfig /flushdns` 后可用；`~/.ssh/config` 已备 `github-443` 别名，仅当 22 端口被封时启用。
-6. **本地生效**：本地 profile 里 `dsh-aiyayi` 是 junction 指向 `bundle/`（`link:` 依赖），bundle 改了本地即生效，无需重装 npm 包；**但 bundle 内 JS 改动要重启 DSH 才生效**（README 坑 #13：patchReload 不拾取）。
+6. **本地生效**：在目标 profile 目录 `pnpm add dsh-aiyayi@<精确版本>`（装到 `profiles\<name>\node_modules\dsh-aiyayi`）。2026-11-08 起旧 bundle junction 已随 `bundle/` 归档废弃；升级后 JS 改动要重启 DSH 才生效（README 坑 #13：patchReload 不拾取）。
 
 ## 快速部署（推荐）
 
