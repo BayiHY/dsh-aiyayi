@@ -53,17 +53,25 @@ writeFileSync(
 process.env.DSH_SCHEDULE_STORE = store
 process.env.AIYAYI_HOME = tmp
 
-const mod = new URL('../lib/presence.js', import.meta.url).href
+const mod = pathToFileURL('G:/阿依娅伊/output/dsh-aiyayi-fix/lib/presence.js').href
 const { apply, name } = await import(mod)
 console.log('module loaded:', name)
 
 // 断言：文件里确实加了 protest 名称与调用点，避免"函数写了但没接线"
-const src = readFileSync(new URL('../lib/presence.js', import.meta.url), 'utf8')
+const src = readFileSync('G:/阿依娅伊/output/dsh-aiyayi-fix/lib/presence.js', 'utf8')
+// 取 sections 那一行做"接线"判据，不把顺序写死：1.5.0 在中间插了 locationLine，
+// 用固定串 `clockLine, alarmLine, reunion` 断言的旧写法会假失败。
+const sectionsLine = (src.split(/\r?\n/).find((line) => /const sections = \[/.test(line)) ?? '')
 const checks = [
   ['function renderAlarms', src.includes('function renderAlarms')],
   ['function readOwnAlarms', src.includes('function readOwnAlarms')],
-  ['SECTIONS 接线', src.includes('clockLine, alarmLine, reunion')],
+  ['SECTIONS 接线（clockLine/reunion 都在）', sectionsLine.includes('clockLine') && sectionsLine.includes('reunion')],
+  ['SECTIONS 接线（alarmLine 真的进了 sections）', sectionsLine.includes('alarmLine')],
+  ['SECTIONS 接线（locationLine 真的进了 sections）', sectionsLine.includes('locationLine')],
   ['调用点', src.includes('renderAlarms(sessionId, now)')],
+  ['记忆位置注入调用点', src.includes('renderMemoryLocationLine(')],
+  ['待办只在本会话首轮给（firstOfSession 参数在位）', src.includes('firstOfSession')],
+  ['已提示过的会话要记住（不每轮念）', src.includes('markLocationTodoShown')],
   ['SNAPSHOT store 路径', src.includes("'storages', 'schedule.json'")],
 ]
 let ok = true
