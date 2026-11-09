@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.5.7",
+  "version": "1.5.8",
   "license": "MIT",
   "author": "阿依娅伊 <aiyayi@local>",
   "keywords": [
@@ -23,6 +23,8 @@
     "./net": "./lib/net.js",
     "./doc": "./lib/doc.js",
     "./presence-worker": "./lib/presence-worker.js",
+    "./feishu": "./lib/feishu.js",
+    "./feishu-logic": "./lib/feishu-logic.js",
     "./icon": "./icon.svg"
   },
   "files": [
@@ -35,6 +37,8 @@
     "lib/net.js",
     "lib/doc.js",
     "lib/presence-worker.js",
+    "lib/feishu.js",
+    "lib/feishu-logic.js",
     "cordis.patch.yml",
     "icon.svg",
     "CHANGELOG.md",

@@ -6,6 +6,17 @@
 
 ---
 
+## 1.5.8（2026-11-09 功能）
+
+- git：本次 commit（2026-11-09，阿依娅伊）1.5.8：新增 aiyayi-feishu 宿主插件——aiyayi 会话接入飞书机器人
+- 功能：新增宿主级服务插件 `aiyayi-feishu`（lib/feishu.js，宿主插件，不塞进任何 agent preset；跨会话桥接服务）。用飞书官方 SDK `@larksuiteoapi/node-sdk` 的 `createLarkChannel` 建立**长连接 WebSocket**（无需公网），订阅 `im.message.receive_v1`。
+  - 收：飞书对话里的消息按**自然语言指令**决定绑到哪个 aiyayi 会话——`绑定会话 <id>` / `接入` / `切换到会话 <id>` 指定已有会话；`新建会话 <名称>` / 无映射普通正文默认新建——新建走 `agents.create`（复用 dsh-webhook 的建会话模板：workspaceRegistry.create → mount aiyayi preset → permissionPresets.set(workspace-write) → sessionTitle.rename）。映射持久化到 aiyayi 记忆根 `feishu/mappings.json`（chat_id→sessionId）。
+  - 发：消息经 `agent.followup(createUserMessage(...))` 投进会话（与 dsh-webhook 同通道，source.kind='feishu'）；回发监听 host 级 `session/event` 总线（已确认 host ctx 能收到所有会话事件）的 `assistant/message`，取最终文本用 `channel.sender.send(chatId, {text})` 发回对应 chat。
+- 配置：App ID/Secret 放 aiyayi 记忆根 `feishu/config.json`（不入 git）或 patch config；缺省 `domain=https://open.feishu.cn`、`defaultPermissionPreset=workspace-write`。纯逻辑（路由/映射/文本抽取）在 lib/feishu-logic.js（无外部依赖，可单测）。
+- 测试：新增 test/feishu-route.test.mjs（extractText / routeMessage 绑定·新建·route·默认新建 / mergeConfig / 配置与映射读写往返），node 运行 ALL PASS。
+
+---
+
 ## 1.5.7（2026-11-09 修复）
 
 - git：本次 commit（2026-11-09，阿依娅伊）1.5.7：主会话切模型后唤醒子智能体不再沿用旧模型
