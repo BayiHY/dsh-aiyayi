@@ -11,13 +11,12 @@
 
 最近发布：2026-11-09，1.5.4（记忆根目录可迁移：`location.json` 指路文件 + `lib/home.js` 唯一路径出口；新增 `memory_location` / `memory_relocate` 双工具；硬失败与防误判加固）。
 
-**GitHub 未推的原因（2026-11-09 实测）**：本机 `~/.ssh/` 下没有密钥、也没有 `config`，`git remote -v` 里也没有 github remote（只有 `origin`=gitcode 和 `gitee`）。要补推 GitHub 得先按下面第 5 步配好 SSH 密钥与 remote。
+**GitHub 推送口径（2026-11-09 更正：原"未推/无密钥"记载已过时）**：`~/.ssh/github_ed25519` 密钥已配好可用，github 走 SSH 推送正常（remote `github` = git@github.com:BayiHY/dsh-aiyayi.git）。HTTPS 才是被 SNI 阻断的死路，别试。注意 SSH 只能推已有仓库，**建新仓要走网页或可达网络下的 API**。
 
-**GitCode 认证方式变更（2026-11-09 实测）**：密码式 git 认证已停用（`remote: The password-based authentication of Git has been removed. Please use your personal access token instead`）。必须用 personal access token。Token 已存在**用户级环境变量 `GITCODE_TOKEN`**（`[Environment]::GetEnvironmentVariable('GITCODE_TOKEN','User')` 读取），推送时临时拼进 URL 即可，**不要写进任何仓库文件或 git config**：
+**GitCode 认证方式变更（2026-11-09 实测；同日更正 token 记载）**：密码式 git 认证已停用（`remote: The password-based authentication of Git has been removed. Please use your personal access token instead`）。必须用 personal access token，但凭证**不在**用户级环境变量 `GITCODE_TOKEN`——该环境变量实测已不存在（Process/User/Machine 三域及注册表均查无），实际由 **git credential manager** 保存，直接推即可：
 
 ```powershell
-$tok = [Environment]::GetEnvironmentVariable('GITCODE_TOKEN','User')
-git push "https://oauth2:$tok@gitcode.com/BayiHY/dsh-aiyayi.git" main
+git push gitcode main   # 凭证由 git credential manager 提供，无需把 token 拼进 URL
 ```
 
 
