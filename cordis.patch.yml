@@ -191,8 +191,7 @@
                   # 派活用自建小伙伴预设（全量工具 + 原生自动压缩）。standard 被 bili
                   # 的压缩门控接管（auto:false 且无溢出恢复），长任务会裸奔到爆。
                   agentPreset: aiyayi-worker
-                  modelSelectionSettings: true
-                  # 子智能体模型跟随用户会话模型（modelSelectionSettings 已开启）。
+                  # 子智能体模型跟随用户会话模型（无显式选择时继承父会话路由）。
                   # 如需指定子智能体模型，可在此配置 provider/model（恢复 agentOptions 即可），例如：
                   # agentOptions:
                   #   provider: loomy
@@ -207,7 +206,6 @@
                   provider: spawn
                   toolName: retriever
                   agentPreset: aiyayi-retriever
-                  modelSelectionSettings: true
           - id: tool-ask-user
             name: '@deepseek-ai/dsh-tool-ask-user'
           - id: tool-schedule
@@ -247,12 +245,13 @@
                 两个工具抓完都会把**正文交给你**；只有确认连不上（网络不通/页面报错）时如实说明原因，别编造内容。
 
                 【派检索员】
-                你手上有个 subagent 工具，能派"检索员"——一次性的只读摘取员：给它简报，
-                它去翻文件、解析 Office/PDF 文档（docx/xlsx/pptx/pdf，旧版 doc/xls/ppt 尽力）、
-                抓网页，回来交给你相关内容的原文摘录，每条带文件路径或 URL、行号/段落/页码
-                （网页给小节），还带一句为什么相关；它不写文件、不下结论，也不再往下派人。
-                参考材料不多（五六个文件以内、单文件几百行）：自己 glob/grep 定位、定点读就够，别派人；
-                材料一多（一堆候选文件、单个大文件、整份 Office/PDF 文档、不知道哪段有用）：派检索员去摘，别自己把文件堆整段整段读进上下文。
+                你手上的 `subagent` 工具就是派检索员的口子——派出的是一次性的只读摘取员：给它简报，
+                它去翻文件堆、解析 Office/PDF、抓网页，回来交原文摘录+路径。
+                需要收集信息时，第一反应是派人；自己动手读是例外。
+                只有当你明确知道目标文件、且只要读其中一小段（具体到文件和大致位置）时，才自己定点读。
+                "要翻一堆候选""不知道在哪""整份文档要消化""抓网页核对"这类，一律派检索员，
+                别把材料整段读进自己的上下文。
+                它不写文件、不下结论，也不再往下派人。
                 简报写清四样：找什么（目标）、去哪找（目录/文件/关键词/网址）、什么算相关（判据）、怎么交（路径+行号+原文摘录）。
                 范围大就同时派几个分头扫，收全了再汇总。
                 摘要拿来先抽查两三处行号引用核对原文，对得上才往下用；不够就补派一轮，简报里附上已确认无关的文件清单。
@@ -353,7 +352,6 @@
                   provider: spawn
                   toolName: subagent
                   agentPreset: aiyayi-retriever
-                  modelSelectionSettings: true
                   maxDepth: 2
     # 阿依娅伊的检索员：一次性只读摘取预设，本体（retriever 工具）和
     # 小伙伴（subagent 工具）都能派。叶子节点：不挂委派组，层级到它为止封顶
