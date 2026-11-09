@@ -6,6 +6,18 @@
 
 ---
 
+## 1.5.9（2026-11-09 功能）
+
+- git：本次 commit（2026-11-09，阿依娅伊）1.5.9：aiyayi 新增 feishu_status / feishu_bind 工具 + persona 飞书自查指引
+- 功能：给 aiyayi 加两个可主动调用的飞书工具（宿主插件 aiyayi-feishu 注册，`registerOwnTool` 登记进 restrict 放行名单）：
+  - `feishu_status`：查当前会话/其它会话的飞书绑定情况（本会话 boundChat、其它绑定 otherBound、长连接是否运行 connected/configured）。新建会话首次对话自查用。
+  - `feishu_bind`：把当前会话绑定到指定飞书 chat（传 chatId，oc_ 开头），写进 `feishu/mappings.json`，之后该飞书对话路由到本会话、回复发回该 chat。
+  - 工具 `execute(args, exec)` 用 `exec.agent.session.id` 取调用方会话（dsh-tools 机制已核实）。relay 回发改为每事件重读映射，避免 feishu_bind 新增绑定后漏发。
+- persona：新增【飞书】指引段——新建会话第一次开口先调 feishu_status 自查对接情况，没绑定且要收飞书的话就 feishu_bind 绑定，别装作已对接。
+- 依赖：`@larksuiteoapi/node-sdk`（profile 依赖，长连接用）。
+
+---
+
 ## 1.5.8（2026-11-09 功能）
 
 - git：本次 commit（2026-11-09，阿依娅伊）1.5.8：新增 aiyayi-feishu 宿主插件——aiyayi 会话接入飞书机器人
