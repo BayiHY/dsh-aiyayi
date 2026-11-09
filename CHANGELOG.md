@@ -6,6 +6,13 @@
 
 ---
 
+## 1.5.10（2026-11-09 修复）
+
+- git：本次 commit（2026-11-09，阿依娅伊）1.5.10：修复 feishu_status / feishu_bind 工具报错 `content.some is not a function`
+- 修复：工具 `output.render` 之前返回**字符串**（`'feishu_status 已执行'`），宿主 dsh-tools `createSuccessResult` 把它直接当作 tool-result 消息的 `content`，而下游 `contentHasImage` / `contentHasFile`（dsh-llm）对 content 调 `.some(...)`，字符串没有 `.some` 就报 `content.some is not a function`。改为返回 content **数组**：`render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }]`，两个工具都改，顺带把真实返回值写进 text 供模型读取。
+
+---
+
 ## 1.5.9（2026-11-09 功能）
 
 - git：本次 commit（2026-11-09，阿依娅伊）1.5.9：aiyayi 新增 feishu_status / feishu_bind 工具 + persona 飞书自查指引
