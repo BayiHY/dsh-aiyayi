@@ -37,6 +37,7 @@
     "lib/presence-worker.js",
     "cordis.patch.yml",
     "icon.svg",
+    "CHANGELOG.md",
     "test/"
   ],
   "engines": {
