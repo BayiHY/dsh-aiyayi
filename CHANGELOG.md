@@ -6,6 +6,15 @@
 
 ---
 
+## 1.5.7（2026-11-09 修复）
+
+- git：本次 commit（2026-11-09，阿依娅伊）1.5.7：主会话切模型后唤醒子智能体不再沿用旧模型
+- 修复：`aiyayi-presence-worker`（挂 preset-aiyayi-worker，即"小伙伴"）新增 `agent/inbox/inserted` 监听 `syncModelWithParentOnWake`——子智能体被唤醒（冷唤醒 coldResume）时，趁唤醒消息插入（早于 wakeDriver→preStep），读父会话当前模型（`agent.session.header.parentSession` → agents 注册表 → `parentAgent.model.current()`），与本子代当前模型比对；路由不同则 `agent.model.select(父模型)`，把 `model/selection` 事件写进子会话日志，wake 首步 pre-step 的 `model.current()` 即用新模型。
+- 根因：宿主 `coldResume` 只从 durable descriptor 读 spawn 时冻结的旧 provider/model 重建子代；本体切模型后若子代不在 agents 注册表（DSH 重启 / 激活释放 / 已 dispose），`propagateModelToChildren` 因拿不到 agent 静默跳过，子会话日志没有 `model/selection` 事件 → 冷唤醒沿用旧模型，报额度错/无法推进任务。本修法与本体侧 `propagateModelToChildren` 互补：本体侧覆盖"子代还活着"的情况，子代侧唤醒对齐覆盖"子代已不在注册表"的情况。
+- 测试：新增 test/wake-model-sync.test.mjs（注册了 inbox/inserted 监听 / 父模型不同路由→select 父模型 / 同路由幂等不 select / 无父会话映射静默 / 父会话无当前模型静默）。
+
+---
+
 ## 1.5.6（2026-11-09 发布）
 
 - git：本次 commit（2026-11-09，阿依娅伊）1.5.6：新会话首轮定时器异常检查（孤儿目标/投递失败/paused 计数）
