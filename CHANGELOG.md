@@ -6,10 +6,15 @@
 
 ---
 
-## 未发布
+## 1.5.6（2026-11-09 发布）
 
-- git：`de63e71`（2026-11-09，阿依娅伊）README 结构重排与 CHANGELOG 拆分
-- git：本次 commit（2026-11-09，阿依娅伊）「记忆路径与迁移」拆出为独立文档 MEMORY-MIGRATION.md，README 正文只留速览+链接
+- git：本次 commit（2026-11-09，阿依娅伊）1.5.6：新会话首轮定时器异常检查（孤儿目标/投递失败/paused 计数）
+- 功能：`aiyayi-presence` 新会话首轮检查宿主定时器存储，检测到异常才注入一行 `[闹钟·异常]`，无异常零输出（不与宿主原生 `[闹钟]` 行重复）；全程只读 `storages/schedule.json`，绝不改写。三种异常：
+  - 孤儿目标：active 任务的目标会话不是当前会话，到点会投进别处（很可能是已归档旧会话），本会话永远收不到。实锤案例：每日日记闹钟 schedule-e79f9c46 于 2026-11-09 10:15 正常触发（lastDelivery 有回执），但投进了已归档旧会话 session-346b0fdb，当前会话毫无感知——宿主 dsh-schedule 按 `task.sessionId` 绑定投递（其 lib/index.js:1576），解析失败只 warn，消息不进任何会话；而 `[闹钟]` 巡检只认"目标=当前会话"，孤儿任务恰好被这条件藏住，两个会话谁都看不见它。
+  - 上次投递失败：`lastDelivery.scheduledAt` 存在而 `deliveredAt` 缺失——宿主回执三字段（scheduledAt/deliveredAt/messageId）本该在投递确认后一起落账，缺 deliveredAt 说明投递链路出过状况。
+  - paused 任务计数：inactive（暂停）任务不会触发，数量作为事实带过一行。
+- 测试：新增 test/alarm-check.test.mjs（孤儿出行/回执缺失出行/正常回执与 ended 任务不报/paused 计数/全正常零输出/坏 store 静默/超 3 条截断+总数）。
+- 注：本版同时包含此前已推送三远端的 README/CHANGELOG 重构（`de63e71`）与 MEMORY-MIGRATION.md 拆分，随本版首次进 npm tarball。
 
 ## 1.5.5（已发布，2026-11-09；npm latest）
 
