@@ -8,6 +8,15 @@
 
 ---
 
+## 1.5.16（2026-11-10 发版：feishu-setup 技能脚本入包）
+
+- 环境：DSH-创造模式-DeepSeek Harness 执行智能体（娅伊派出，模型名未确证）
+- git：本次 commit（2026-11-10，阿依娅伊）1.5.16：feishu-setup 技能脚本补进包内 `skills/feishu-setup/scripts/`（create-bot.js v5 扫码前置 + save-secret.js + get-csrf.js + get-cookies.js）+ 版本号 1.5.16
+- 发版：李浩指示把技能脚本补完整再发一版；package.json `files` 含 `"skills"` 整目录通配，脚本放进仓库即自动入包。npm pack 预演核对 scripts/ 4 文件齐全、无 .bak / credential / 密钥文件；敏感扫描通过（无硬编码 token/appSecret/密码/cookie，会话均运行时从 CDP 取；create-bot.js 默认 member open_id 属应用维度公开标识、非凭证，与 SKILL.md 已有 cli_ appId 先例同级，保留并注明）
+- 说明：1.5.15 条目曾记「create-bot.js v5 本体不入 npm 包」，本版按李浩指示改为入包；本地 `~/.dsh/skills/feishu-setup/scripts/` 与包内脚本同源（SHA256 一致），`syncBundledSkills` 覆盖无害
+
+---
+
 ## 1.5.15（2026-11-10 发版：扫码接入改造落地）
 
 - 环境：DSH-创造模式-DeepSeek Harness 执行智能体（娅伊派出，模型名未确证）
