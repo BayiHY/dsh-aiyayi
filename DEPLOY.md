@@ -4,12 +4,12 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.5.4** | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.5.4**（b57eb38） | https://gitcode.com/BayiHY/dsh-aiyayi |
-| Gitee | **1.5.4**（b57eb38） | https://gitee.com/BayiHY/dsh-aiyayi |
-| GitHub | 1.4.4（未推） | 需先配 SSH 密钥，见下 |
+| npm | **1.5.7** | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.5.7**（c176779） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.5.7**（c176779） | https://gitee.com/BayiHY/dsh-aiyayi |
+| GitHub | **1.5.7**（c176779，SSH 路） | https://github.com/BayiHY/dsh-aiyayi |
 
-最近发布：2026-11-09，1.5.4（记忆根目录可迁移：`location.json` 指路文件 + `lib/home.js` 唯一路径出口；新增 `memory_location` / `memory_relocate` 双工具；硬失败与防误判加固）。
+最近发布：2026-11-09，1.5.7（= 官方 1.5.6 全部内容 + persona【派检索员】段重写：默认派人、自理为例外，补回检索员边界约束句；删除三处 `modelSelectionSettings` 死键及过时注释）。1.5.6 同日先发（新会话首轮定时器异常检查），发布后 persona 改造补上车，随 1.5.7 首次进 npm。
 
 **GitHub 推送口径（2026-11-09 更正：原"未推/无密钥"记载已过时）**：`~/.ssh/github_ed25519` 密钥已配好可用，github 走 SSH 推送正常（remote `github` = git@github.com:BayiHY/dsh-aiyayi.git）。HTTPS 才是被 SNI 阻断的死路，别试。注意 SSH 只能推已有仓库，**建新仓要走网页或可达网络下的 API**。
 
@@ -24,8 +24,8 @@ git push gitcode main   # 凭证由 git credential manager 提供，无需把 to
 
 发新版按此顺序（2026-11-05 起）：
 
-1. **bump 版本**：改 `gh_repo/package.json` 的 `version`（2026-11-08 起 npm 发布源就是 gh_repo/，publish.mjs 直接打包它；旧 `bundle/` 目录已归档为工作区 `dsh-aiyayi-bundle-1.4.0.zip`，不再维护）。
-2. **发布 npm**：工作区根跑 `node publish.mjs`（实际执行 `npm publish --registry=https://registry.npmjs.org/`，凭据在用户级 `.npmrc` 的 `//registry.npmjs.org/:_authToken=`）。先 `node publish.mjs --dry` 干跑看打包内容。
+1. **bump 版本**：改本仓库 `package.json` 的 `version`（**2026-11-09 更正：原记载的 `gh_repo/` 目录与 `publish.mjs` 已不存在**——npm 发布源就是本 git 仓库，1.5.7 即从它手动打包发布；旧 `bundle/` 目录已归档为工作区 `dsh-aiyayi-bundle-1.4.0.zip`，不再维护）。
+2. **发布 npm**：在本仓库 `npm pack`（先核对产物文件清单），再 `npm publish dsh-aiyayi-<版本>.tgz --registry=https://registry.npmjs.org/`（凭据在用户级 `.npmrc` 的 `//registry.npmjs.org/:_authToken=`；**2026-11-09 更正：原 `node publish.mjs` 脚本已不存在，改手动两步**）。发布前逐文件 SHA256 对照上一版官方 tarball 确认零漂移，发布后 `npm view dsh-aiyayi version` 验证（registry 处理有几分钟延迟，轮询即可）。
 3. **验证 npm**：`https://registry.npmjs.org/dsh-aiyayi/latest` 的 `version` 字段。注意发布输出会提示"being processed, may take a few minutes"，刚发布完可能仍显示旧版本，等几分钟再查（2026-11-07 实测：第一次查仍是旧版、约 15 秒后即返回新版，`npm view dsh-aiyayi version` 轮询最省事）。
 4. **提交 git**：gh_repo 里 `git add package.json README.md lib/* DEPLOY.md` → commit（消息格式 `1.2.x：<改动摘要>`）。
 5. **推送到 gitcode + gitee + github**：
