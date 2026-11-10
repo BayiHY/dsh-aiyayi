@@ -1,6 +1,6 @@
 ---
 name: feishu-setup
-description: '阿依娅伊飞书桥接（aiyayi-feishu 宿主插件）的安装、配置与排障：装 SDK、写 profile patch 声明（insert 包裹式声明）、写凭证 config.json、触发 HMR、以日志「已就绪」判定生效，及飞书开发者后台的长连接订阅设置。已知报错多种（not-found / ERR_PACKAGE_PATH_NOT_EXPORTED / BOM）各有对症修法；已实锤的坑还有 SDK createLarkChannel 丢弃 handlers（坑 #58，消息 ACK 后静默蒸发）、建会话链路两连坑（#59 建目录 / #60 preset 按名 set）与投递/生命周期连环坑（#61 裸 Agent / #62 事件字段 / #63 防刷屏 / #64 插件 abort 连坐杀会话）。当用户要接飞书、桥接断线、或会话里 feishu_status 报 configured=false 时使用。'
+description: '阿依娅伊飞书桥接（aiyayi-feishu 宿主插件）的安装、配置与排障：装 SDK、写 profile patch 声明（insert 包裹式声明）、写凭证 config.json、触发 HMR、以日志「已就绪」判定生效，及飞书开发者后台的长连接订阅设置。已知报错多种（not-found / ERR_PACKAGE_PATH_NOT_EXPORTED / BOM）各有对症修法；已实锤的坑还有 SDK createLarkChannel 丢弃 handlers（坑 #58）、建会话链路（#59 建目录 / #60 preset 按名 set）、投递与生命周期（#61 裸 Agent / #62 事件字段 / #63 防刷屏 / #64 插件 abort 连坐 / #65 source 禁 undefined / #66 自消息回环 / #67 默认模型）。当用户要接飞书、桥接断线、或会话里 feishu_status 报 configured=false 时使用。'
 whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关报错出现在日志；用户问"怎么把娅伊接到飞书"。
 ---
 
@@ -86,6 +86,9 @@ whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关�
 | `处理入站消息失败: permission: unknown preset "[object Object]"` | 把 permissionPresets.resolve() 的返回**对象**传给了 set()（坑 #60：set() 要**名字字符串**，resolve 仅校验） | set 传原始名字（1.5.14 已修） |
 | 「已新建并接入」能收到，但**后续消息**没反应且**零日志** | 投递分支静默丢（坑 #61：`ctx.agents.get(id)` 返回**裸 Agent**，`?.agent` 恒 undefined）＋回发读错字段（坑 #62：载荷在 `event.data.message`，不是 `event.message`） | 1.5.14 已修（裸 Agent + event.data.message + turn/end 统一回发防刷屏 #63） |
 | 插件 HMR/重载/宿主重启后，之前绑定好的 chat 再发消息**无回复且零日志**（route 分支照常走） | 插件 dispose 时 `controller.abort()` 把 `agents.create` 建的会话连带杀死（坑 #64：会话是宿主资产不是插件资产），getAgent 拿到 null 后旧代码静默 return | 不传插件级 signal（每会话独立从不 abort 的 signal）；deliverToSession 返回布尔，route 投递失败自动新建+重新映射+告知（自愈，1.5.14 已修） |
+| `处理入站消息失败: session event "agent/inbox/spliced" carries non-JSON-serializable data` | 投递的消息 source 里有 `undefined` 字段（坑 #65）：宿主 `Session.append` 用 snapshotJsonValue 深拷贝，遇到 undefined 直接判不可序列化 | source 只用 `{ kind: 'user' }`（不含任何 undefined；1.5.14 已修） |
+| 只收到「已新建并接入…」模板回复、**始终没有正文回答** | 建会话时 `agentOptions: {}` 没给模型（坑 #67）：宿主 webhook 模板在无 model 时会取 `ctx.agentDefaultModel.currentSelection()`，插件原来传空对象 → agent 没有模型不产回答 | inject 加 `agentDefaultModel`，建会话时照模板取默认选择（1.5.14 已修） |
+| 机器人回复后疑似自问自答/刷屏 | 机器人自己发出的消息也会以 `im.message.receive_v1` 推回来（坑 #66），不过滤就会把回复当用户输入再生一轮 | 用 `channel.botIdentity.openId` 比对 `mergedEvent.senderId` 跳过（1.5.14 已修） |
 | 控制台事件日志 FAIL（重试后仍失败）或压根无记录 | 当时无客户端在线 / 服务端未投递 | 确认插件「已就绪」且日志有 `ws client ready`；检查后台订阅配置（回读法见 docs/接口清单.md） |
 
 ## 决定性判据：消息到底丢在哪一段（2026-11-10 实锤升级）
@@ -130,6 +133,13 @@ whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关�
 - **机制**：插件持有 `controller = new AbortController()` 并把 `controller.signal` 传给 `agents.create({signal})`，同时注册 `ctx.effect(() => () => controller.abort())`——**插件每次重载 dispose 都会 abort 这个信号**，宿主随即将插件建的会话一并 dispose（12:58:42 日志 `agent "feishu-bfb53970-…": agent/disposed listener threw: TypeError: Cannot read properties of undefined (reading 'catch')` 即死亡现场）。之后 route 分支 `getAgent` 拿到 null → 旧代码静默 return，消息蒸发。
 - **修法**：①会话是宿主资产不是插件资产——每会话给一个从不 abort 的独立 signal（`new AbortController().signal`），不传插件级 controller；②`deliverToSession` 返回布尔，route 分支投递失败就自动新建会话、重新映射、告知用户并把消息投进去（自愈）；③防御 `Promise.resolve(channel.disconnect()).catch()`（SDK disconnect 在 WS 未初始化时返回 undefined，直接 `.catch` 会 TypeError）。1.5.14 已修。
 - **教训**：宿主对象（会话/agent）的生命周期归宿主管，插件清理代码别越界连坐；投递失败走自愈（自动重建+告知）比静默或报错都更能兜住未知的会话回收路径。
+
+## 坑 #65/#66/#67：投递内容、自消息过滤、默认模型（2026-11-10 实锤，前面几层修通后才暴露）
+
+- **坑 #65（source 里有 undefined → 投递必失败）**：宿主 `Session.append` 用 `snapshotJsonValue`/`walkJsonValue` 深拷贝事件数据，**遇到 `undefined` 直接返回 undefined**，于是抛 `session event "agent/inbox/spliced" carries non-JSON-serializable data`（asar 1976372-1976373 的 append 校验 + walkJsonValue：非 null/boolean/string/number/object 一律判失败）。旧 source 写了 `senderId: undefined` → 每条消息投递都失败。修：source 只用 `{ kind: 'user' }`（`MessageSourceMap` 里最简单的合法取值，也是宿主自建用户消息同款），**绝不放 undefined 字段**。
+- **坑 #66（自消息回环）**：机器人自己发出的消息也会以 `im.message.receive_v1` 推回来并进同一个 handler，不过滤就会把「已新建并接入…」「正式回答」当用户输入再喂一轮（自问自答）。修：`channel.botIdentity.openId`（connect 时 fetchBotIdentity 填充）与 `mergedEvent.senderId` 相同则跳过。参考：昨晚测试脚本 bot.mjs 就靠 `sender_type === 'app'` 过滤。
+- **坑 #67（没模型 → 只有模板回复没有正文）**：宿主 webhook 模板在 `model === undefined` 时取 `ctx.agentDefaultModel.currentSelection()` 作为 `agentOptions`（asar 2187436-2187439）；插件原来传 `agentOptions: {}`，agent 可能没有可用模型 → 会话能建、模板回复能发，但永远产不出正式回答。修：`inject` 加 `agentDefaultModel`，建会话时 `ctx.agentDefaultModel.currentSelection()` 取默认选择。
+- **本地可复现的验证手法**：不必等用户，用脚本复刻宿主的序列化判定（walkJsonValue 语义：undefined/function/symbol/bigint/NaN/-0/稀疏数组/非纯对象 → 失败），对比新旧 source 形状即可判定投递会不会失败；机器人身份与发送链路可用 `tenant_access_token` + `bot/v3/info`、`im/v1/messages` 直接自检。
 
 ## 待固化（实测后回填）
 
