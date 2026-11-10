@@ -8,6 +8,21 @@
 
 ---
 
+## 1.5.18（2026-11-10 功能：飞书消息附件收发）
+
+- 环境：DSH-执行智能体（娅伊派出的 DeepSeek Harness 子会话，模型名未确证）
+- git：本次 commit（2026-11-10，阿依娅伊）1.5.18：飞书消息附件收发——收件下载落盘 + `[附件:]`/`[图片:]` 标记发件
+- 收件：`onIncomingMessage` 非 bind 分支收集下载附件（bind 只写映射不投递故不下载）。主路径用 SDK `mergedEvent.resources`（SDK dispatchConvert 已从 content 抽好 fileKey/fileName，@larksuiteoapi/node-sdk 1.76.0 lib/index.js:106835/106850）；resources 为空或 file 类缺文件名时兜底拉 `GET /im/v1/messages/{id}` 详情补齐。下载：file/video/audio 走 `/im/v1/messages/{id}/resources/{file_key}?type=file`，image 走 `/im/v1/images/{image_key}`；落盘 `<记忆根>\feishu\attachments\<chatId>\<yyyymmdd-HHmmss>_<文件名>`（同秒同名自动 -2 后缀，Windows 非法字符清洗，缺扩展名按 content-type 补）。投会话文本追加「（飞书附件已保存：<绝对路径>）」；单个失败追加「（飞书附件下载失败：<原因>，msg_id=<id>）」不阻断投递；空文本消息不再投空块（改投「（收到一条无文本内容的飞书消息，msg_id=…）」）。`lib/feishu.js` 收件分支 +13/-4 行；编排全在 `lib/feishu-logic.js`（channel/logger 依赖注入，fetch 用 Node 内建，「零外部依赖」约定不破坏）。
+- 发件：约定标记 `[附件: <绝对路径>]` / `[图片: <绝对路径>]`（全/半角冒号均容忍）——`sendReplyWithAttachments` 用 SDK OutboundSender 原生 `{file:{source,fileName}}`/`{image:{source}}`（MediaUploader 直接读本地路径，SDK lib/index.js:104623/105193/105206），先发文件后发剥离标记的正文；路径不存在或上传失败：剥离标记、正文照发、日志 warn；正文为空且附件全失败时补发一条失败说明避免静默。无标记的纯文本逐字节原样发（与 1.5.17 行为一致）。`lib/feishu.js` 回发点 flushReply 改一行接线；mappings/routeMessage/bind 逻辑未动。
+- 坑 #69（2026-11-10 实锤，真实消息 om_x100b60062bb868a0c1374152dac71e8）：post 消息的附件**不在正文元素里，而在 content JSON 顶层 `files` 数组**（`{"title":"","content":[[text 元素]],"content_v2":…,"files":[{"file_key":"file_v3_…","file_name":"最低单价股票.xlsx","is_folder":false}]}`）——SDK `convertPost` 只走 `body.content` 段落（lib/index.js:106450-106476）同样漏掉它，`mergedEvent.resources` 为空。修法：`parseAttachmentsFromContent` 收集顶层 `files` 数组（`is_folder:true` 的云文件夹引用跳过，资源接口不提供）并按 fileKey 去重；SDK resources 为空时详情接口兜底成为 post 附件的实际主路径。教训：解析器形状必须拿真实消息验证，SDK 的 normalize 也可能漏字段。
+- 坑 #70（2026-11-10 实锤，log_id=20261110224442B6D9C1C31C408776E4C0）：发件上传 `POST /im/v1/files` 需要应用开通 **im:resource:upload（或 im:resource）** scope，与收件下载的读权限是两回事；未开通时返回 99991672 并附申请链接。**发件功能的前置条件**：开发者后台给应用开通该权限并重新发布版本（或用 create-bot.js 的配权限流程补 scope）。收件链路不受影响（读权限已具备）。
+- token：`POST /auth/v3/tenant_access_token/internal`，进程内缓存至过期前 60s（feishu-logic createTokenManager）。
+- 测试：`test/feishu-attachment.test.mjs`（resources 归一化 / post 双形状+顶层 files 解析 / 文件名清洗与防覆盖 / 投递文本合成 / 标记解析剥离 / mock sender 回发编排 / token 缓存 / 下载错误路径）；另真机自测下载链路通过（file_key `file_v3_0017a_e8079604-44f1-4f24-989d-0ca85b990fbg` → 47216 字节 xlsx → 文件头 `50 4b 03 04` PK zip 头）。
+- .gitignore 补 work/（工作产物不入 git）。
+- 待用户实测：①飞书给 bot 发文件/图片/含图图文 → 会话收到附件保存路径提示且文件可打开；②开通 im:resource:upload 后，会话内让 agent 带 `[附件: <路径>]` 回复 → 飞书收到文件。
+
+---
+
 ## 1.5.17（2026-11-10 修复：坑 #68 宿主 append 重入保护）
 
 - 环境：DSH-创造模式-DeepSeek Harness 执行智能体（娅伊派出，模型名未确证）
