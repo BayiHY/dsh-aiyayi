@@ -1,7 +1,7 @@
 ---
 name: feishu-setup
-description: '阿依娅伊飞书桥接（aiyayi-feishu 宿主插件）的安装、配置与排障：装 SDK、写 profile patch 声明（insert 包裹式声明）、写凭证 config.json、触发 HMR、以日志「已就绪」判定生效，及飞书开发者后台的长连接订阅设置。已知报错多种（not-found / ERR_PACKAGE_PATH_NOT_EXPORTED / BOM）各有对症修法；已实锤的坑还有 SDK createLarkChannel 丢弃 handlers（坑 #58）、建会话链路（#59 建目录 / #60 preset 按名 set）、投递与生命周期（#61 裸 Agent / #62 事件字段 / #63 防刷屏 / #64 插件 abort 连坐 / #65 source 禁 undefined / #66 自消息回环 / #67 默认模型）。当用户要接飞书、桥接断线、或会话里 feishu_status 报 configured=false 时使用。'
-whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关报错出现在日志；用户问"怎么把娅伊接到飞书"。
+description: '阿依娅伊飞书桥接（aiyayi-feishu 宿主插件）的安装、配置与排障：装 SDK、写 profile patch 声明（insert 包裹式声明）、写凭证 config.json、触发 HMR、以日志「已就绪」判定生效，及飞书开发者后台的长连接订阅设置。已知报错多种（not-found / ERR_PACKAGE_PATH_NOT_EXPORTED / BOM）各有对症修法；已实锤的坑还有 SDK createLarkChannel 丢弃 handlers（坑 #58）、建会话链路（#59 建目录 / #60 preset 按名 set）、投递与生命周期（#61 裸 Agent / #62 事件字段 / #63 防刷屏 / #64 插件 abort 连坐 / #65 source 禁 undefined / #66 自消息回环 / #67 默认模型）。2026-11-10 改造：新会话扫码接入（会话里说「接入飞书」→ 待接入目标 → 手机飞书扫码进 bot 单聊 → bot_p2p_chat_entered_v1 自动绑定；create-bot.js v5 扫码前置）。当用户要接飞书、桥接断线、或会话里 feishu_status 报 configured=false 时使用。'
+whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关报错出现在日志；用户问"怎么把娅伊接到飞书"；或要从零创建一个新飞书机器人应用（CDP 自主创建已固化，见文末「已固化」节）。
 ---
 
 # feishu-setup
@@ -13,23 +13,30 @@ whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关�
 3. **凭证**——App ID/Secret 写进记忆根 `feishu/config.json`（UTF-8 **无 BOM**）。
 
 > ⚠️ 本技能当前只含**已实测**的安装/验证步骤（2026-11-10 本机验证通过）。
-> 「CDP 自主创建飞书机器人拿凭证」属待固化内容：等一次真实自主创建跑通后回填，
-> 在那之前不臆造步骤，凭证获取一律引导用户手动完成。
+> 「CDP 自主创建飞书机器人拿凭证」**已固化**（2026-11-10 真实跑通）：见文末「已固化」节 +
+> 请求清单 `docs/经验-飞书机器人创建全流程与请求清单.md` + 脚本 `scripts/create-bot.js`。
 
 ## 架构事实（先读再动手）
 
 - aiyayi-feishu 是 dsh-aiyayi 包内的**宿主级服务插件**（`lib/feishu.js`），不塞进任何 agent preset；长连接收发、自然语言绑定/新建会话（`绑定会话 <会话名>` / 任意消息默认新建）。
 - 纯逻辑（路由/映射/文本抽取）在 `lib/feishu-logic.js`；映射持久化在记忆根 `feishu/mappings.json`（chat_id→sessionId）。
+- **新会话扫码接入（2026-11-10 改造）**：GUI 会话里说「接入飞书/接飞书」→ 插件写记忆根 `feishu/pending-bind.json`（待接入目标，30 分钟时效）→ 用户手机飞书扫码进入机器人单聊 → 插件订阅的 `im.chat.access_event.bot_p2p_chat_entered_v1` 事件（SDK 默认 5 类事件之外，`channel.dispatcher.register` 补注册）自动写 `mappings[chat_id]=目标 sessionId` 并回确认。新会话首轮回复后还会自动注入一条接入引导（宿主无回复前拦截 API，挂在 turn/end 用 followup 注入；`feishu/guided.json` 防重复提示；说「不用」跳过并清除 pending）。
 - **坑 #56**：patch 里裸 `- id: aiyayi-feishu / name: dsh-aiyayi/feishu` 行 = 对既有条目的覆盖，目标不存在就 warn `patch: entry "aiyayi-feishu" not found` 后跳过（no-op）。**新增必须用 `- insert:` 包裹**。
 - 判定插件在跑：日志 `host.kernel.aiyayi-feishu` 有 `已就绪，记忆根 …（已绑定 N 个 chat）`。`not found` warn 不等于没跑（良性共存），**没有「已就绪」才是没跑**。
 - 只改 patch 文件的 mtime 不会触发 HMR；要**改内容**。注意（2026-11-10 实测）：仅 Append 注释行会让 host 处理 patch（日志见 `root patch: entry "…" not found`），但**不会重跑 aiyayi-feishu**（无新「已就绪」）；可靠做法是对 insert 条目做**结构性变更**，如 `config: {}` → `config: {reloadTag: "<标记>"}`，随后日志出现新的「已就绪」= 生效。
 
 ## 步骤
 
-### 1. 凭证（没有就先引导用户手动创建）
+### 1. 凭证（没有就先自动创建，见文末「已固化」节）
 
-向用户要 App ID（`cli_` 开头）与 App Secret。用户没有飞书应用时，手动路径：
+向用户要 App ID（`cli_` 开头）与 App Secret。用户没有飞书应用时，**自动路径**（已实锤，2026-11-10）：
 
+1. 起 Edge（`--remote-debugging-port=9222`，保留登录态）→ CDP 确认 open.feishu.cn 已登录；**未登录也没关系（v5）**：create-bot.js 自动检测到 session cookie 缺失 → 导航登录页 → 提示「📱 手机飞书扫码」→ 轮询等登录态就绪（默认 10 分钟，`--login-wait <秒>` 可调）→ 继续创建链路；
+2. 运行 `scripts/create-bot.js create --name <英文名> --desc <用途>`（Node 零依赖，自动 CDP 取 csrf+cookie、自动生成上传图标，全链路请求清单见 `docs/经验-飞书机器人创建全流程与请求清单.md`）：上传图标→创建应用→开机器人→配权限→配长连接订阅→建版本→提交发布；再用 `create-bot.js verify --app-id <id>` 确认 appStatus=1 上线；
+3. 发布免审核（本企业实锤），无人工点；若出现待审状态才需管理员去管理后台通过；
+4. `scripts/save-secret.js --app-id <id>` 接口直读 appSecret，写本地凭证（勿进 git、不明文打印）。
+
+手动路径（备选）：
 1. open.feishu.cn → 开发者后台 → 创建**企业自建应用**（长连接只支持自建应用）；
 2. 凭证与基础信息页拿 App ID / App Secret；
 3. 应用能力 → 添加「机器人」；
@@ -142,6 +149,42 @@ whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关�
 - **坑 #67（没模型 → 只有模板回复没有正文）**：宿主 webhook 模板在 `model === undefined` 时取 `ctx.agentDefaultModel.currentSelection()` 作为 `agentOptions`（asar 2187436-2187439）；插件原来传 `agentOptions: {}`，agent 可能没有可用模型 → 会话能建、模板回复能发，但永远产不出正式回答。修：`inject` 加 `agentDefaultModel`，建会话时 `ctx.agentDefaultModel.currentSelection()` 取默认选择。
 - **本地可复现的验证手法**：不必等用户，用脚本复刻宿主的序列化判定（walkJsonValue 语义：undefined/function/symbol/bigint/NaN/-0/稀疏数组/非纯对象 → 失败），对比新旧 source 形状即可判定投递会不会失败；机器人身份与发送链路可用 `tenant_access_token` + `bot/v3/info`、`im/v1/messages` 直接自检。
 
-## 待固化（实测后回填）
+## 已固化：CDP 自主创建飞书机器人（2026-11-10 实锤，请求清单见 docs）
 
-- **CDP 自主创建飞书机器人**：用户浏览器带 `--remote-debugging-port` → `aiyayi_cdp` 接管 → 自动走「创建应用→读凭证→配长连接订阅→发布」，登录/验证码/管理员确认等敏感点由用户配合。等一次真实跑通后，把实际步骤、断点、授权配合点补进本节，并同步固化到 dsh-aiyayi 插件。
+一条命令重建飞书机器人的全链路已真实跑通**两次**：验证应用 aiyayi-test（cli_aa780cef4c79dc00）与脚本验证应用 **aiyayi-script-test（cli_aa7803a415789c16，v1.0.0 已上线 appStatus=1，2026-11-10 一口气创建成功，全程无人工）**。**完整请求清单与参数说明在工作区 `docs/经验-飞书机器人创建全流程与请求清单.md`**（含本次实跑更新的坑 9-13）。脚本已封装，直接跑：
+
+```bash
+# 一条命令全链路（自动 CDP bootstrap 取 csrf+cookie、自动生成并上传图标；
+# v5 起未登录会自动引导手机飞书扫码，登录后继续）
+node scripts/create-bot.js create --name "aiyayi-xxx" --desc "用途说明" [--icon <png>] [--member <open_id>] [--port 9222] [--login-wait <秒>]
+# 状态汇总（appStatus=1 即上线）
+node scripts/create-bot.js verify --app-id <app_id>
+# 取 AppSecret（接口直读，不明文打印）
+node scripts/save-secret.js --app-id <app_id> [--out <路径>]
+```
+
+速查版步骤序列（脚本已内置，此处为原理）：
+
+1. **授权**：Edge 带 `--remote-debugging-port=9222 --profile-directory=Default` 起（保留登录态）。**CSRF（2026-11-10 更正）**：`x-csrf-token` 必须用**页面 HTML 内嵌的 `window.csrfToken`**（每页加载重签发；cookie `lark_oapi_csrf_token` 的值已作废）；Cookie 头必须含 **httpOnly `session`**（document.cookie 拿不到，用 CDP `Network.getAllCookies`）。不带 token → 9499「csrf token check fail」；缺 session → 99991641「session is invalid」。
+2. **先传图标**：POST `/developers/v1/app/upload/image`（multipart：`file` + `uploadType=4` + `isIsv="false"`）→ `data.url`。**avatar 必填**，`app/create` 传空会在发布时被拦（坑 9）。
+3. **创建应用**：POST `/developers/v1/app/create` body `{"appSceneType":0,"name":"<英文名>","desc":"...","avatar":"<上一步 url>","i18n":{"zh_cn":{...}},"primaryLang":"zh_cn"}` → `data.ClientID` = appId。
+4. **开机器人**：POST `/developers/v1/robot/switch/{app_id}` `{"enable":true}`；POST `/developers/v1/developer_panel/menu_ability` `{"clientId":"{app_id}","ability":["bot"]}`。
+5. **配权限**：POST `/developers/v1/scope/all/{app_id}` `{}` → **响应里 `scopes[]`（1332 个）带数字 id**（scope/search、scope/relation 都不给 id）；POST `/developers/v1/scope/update/{app_id}` body `{"appScopeIDs":["<数字id>"],"userScopeIDs":[],"scopeIds":[],"operation":"add","isDeveloperPanel":true}`。常用：im:message=20001、im:message:send_as_bot=1000、im:chat=21001、im:chat:read=1014181、im:message.p2p_msg:readonly=3000、im:message.group_at_msg:readonly=3001。
+6. **事件订阅长连接**：先 POST `/developers/v1/event/switch/{app_id}` `{"eventMode":4}`（4=长连接），再 POST `/developers/v1/event/update/{app_id}` `{"operation":"add","events":[],"appEvents":["im.message.receive_v1","im.chat.access_event.bot_p2p_chat_entered_v1"],"userEvents":[],"eventMode":4}`（v5 起默认带 `bot_p2p_chat_entered_v1`：用户进入与 bot 的 P2P 单聊时触发、权限要求=无、事件体含 chat_id+operator_id，供新会话扫码接入自动绑定）。
+7. **取凭证**：**POST `/developers/v1/secret/{app_id}`（body `{}`，需先 GET `/app/{app_id}/baseinfo` 从 HTML 提 window.csrfToken + getAllCookies 全量 cookie）→ `data.secret` 即明文**，用 `save-secret.js`。⚠️ 旧「CDP 点眼睛」路线已废弃：点击会把 open.feishu.cn 渲染进程卡死（坑 11）。
+8. **发布**：POST `/developers/v1/app_version/create/{app_id}`（body 见 docs）→ `data.versionId`；POST `/developers/v1/publish/commit/{app_id}/{version_id}` `{}` → 提交发布。
+9. **上线（免审核，2026-11-10 实锤）**：本企业发布免审核，commit 后异步生效，轮询 `/developers/v1/app/{app_id}` 直到 `appStatus=1` 即上线；管理后台审核页无待审项。若出现待审状态（历史情况）才需人工去 `{企业域名}.feishu.cn/admin/appCenter/audit`。删除草稿版本：POST `/developers/v1/app_version/delete/{app_id}/{version_id}`（有未发布草稿时"创建版本"按钮 disabled）。
+
+脚本化注意：全程 HTTP 直调（含上传的 multipart，Node 零依赖手拼）＋ CDP 只用于取 cookie/csrf；React 受控组件赋值必须用原生 setter（详见 docs 坑 #2）；UI 文件选择自动化在 Edge 157 全灭（坑 10），接口真相从前端 bundle 挖。
+
+> 注：SKILL.md 排障表里曾引用 `docs/接口清单.md`，该文件在本机未找到（可能丢失），事件日志查询的接口写法见 `docs/经验-飞书bot收不到消息三层分诊.md`。
+
+## 新会话扫码接入飞书（2026-11-10 改造）
+
+用户在 DSH GUI 开了个新会话、想在手机飞书上随时找它的完整链路（改造落点：`gh_repo/lib/feishu.js`、`gh_repo/lib/feishu-logic.js`、`scripts/create-bot.js` v5；机制细节与验证步骤见经验文档文末「新会话扫码接入飞书」节）：
+
+1. **引导**：新会话首轮回复后（挂 `turn/end`），插件检测该会话未绑定飞书 chat 且未引导过（`feishu/guided.json`）→ followup 注入引导话术（建议接入/先下载飞书 app/扫码→点开机器人/「不用」跳过）。宿主**没有回复前拦截 API**，故实现为「首答后紧跟引导」而非回复前，agent 下一轮自然回复它。
+2. **待接入目标**：会话里说「接入飞书/接飞书/绑定飞书…」（`matchOnboardIntent`）→ 写 `feishu/pending-bind.json`（sessionId+createdAt，**30 分钟时效**，超时自动作废防误绑）→ 注入确认+扫码步骤；说「不用/跳过」（`matchSkipIntent`）→ 清 pending + 标记已引导。
+3. **自动绑定**：用户手机飞书扫码进入 bot 单聊 → `im.chat.access_event.bot_p2p_chat_entered_v1`（SDK 默认 5 类事件之外，`channel.dispatcher.register` 补注册，connect 前挂上即可）→ 有待接入目标则写 `mappings[chat_id]=目标 sessionId`、清 pending、回 chat 确认；无目标仅日志不绑定。
+4. **防自触发的坑**：插件 followup 注入的消息同样触发 `agent/inbox/spliced` 事件，若检测逻辑认不出自己的注入文本会「注入→再检测→再注入」死循环——注入文本带零宽字符前缀 `\u2060`（GUI 几乎不可见），检测函数据此前缀跳过。`agent/inbox/spliced` 的 inserted 与真实用户消息形状相同（source 都是 `{kind:'user'}`），只能靠前缀区分。
+5. **验证顺序**（发版重装后）→ 会话首问看日志「未绑定飞书，注入接入引导」→ 说「接入飞书」看「已记待接入目标」+ pending-bind.json → 飞书进 bot 单聊看「已自动接入会话」+ mappings.json 新增 → 回「不用」看 pending 清除。
