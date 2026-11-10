@@ -8,6 +8,15 @@
 
 ---
 
+## 1.5.15（2026-11-10 发版：扫码接入改造落地）
+
+- 环境：DSH-创造模式-DeepSeek Harness 执行智能体（娅伊派出，模型名未确证）
+- git：本次 commit（2026-11-10，阿依娅伊）d61c09d：新会话扫码接入飞书改造（引导注入 turn/end followup、`bot_p2p_chat_entered_v1` 自动绑定、零宽前缀防自触发循环）+ 技能层 create-bot.js v5 扫码前置（`--login-wait <秒>`）+ SKILL.md 三副本同步
+- 发版：README 补飞书桥接与扫码接入说明（能力表、文件清单、坑号修正 #1–#55→#1–#67）；`lib/feishu.js`、`lib/feishu-logic.js`、`skills/feishu-setup/SKILL.md` 随包发布（npm pack 32 文件核对，无 .bak / credential / config.json / requests-raw.jsonl / work 产物）
+- 说明：create-bot.js v5 本体在技能同步目录（`~/.dsh/skills/feishu-setup/scripts/`），不入 npm 包——presence `syncBundledSkills` 判据 SKILL.md 一致即跳过、`copyTree` 只复制不删除，npm 升级不会动本地脚本
+
+---
+
 ## 1.5.14（2026-11-10 修复）
 
 - 环境：DSH-创造模式-DeepSeek Harness 执行智能体（娅伊派出，模型名未确证）
