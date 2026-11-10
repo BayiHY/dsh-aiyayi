@@ -1,6 +1,6 @@
 ---
 name: feishu-setup
-description: '阿依娅伊飞书桥接（aiyayi-feishu 宿主插件）的安装、配置与排障：装 SDK、写 profile patch 声明（insert 包裹式声明）、写凭证 config.json、触发 HMR、以日志「已就绪」判定生效，及飞书开发者后台的长连接订阅设置。已知报错多种（not-found / ERR_PACKAGE_PATH_NOT_EXPORTED / BOM）各有对症修法；已实锤的坑还有 SDK createLarkChannel 丢弃 handlers（坑 #58，消息 ACK 后静默蒸发）。当用户要接飞书、桥接断线、或会话里 feishu_status 报 configured=false 时使用。'
+description: '阿依娅伊飞书桥接（aiyayi-feishu 宿主插件）的安装、配置与排障：装 SDK、写 profile patch 声明（insert 包裹式声明）、写凭证 config.json、触发 HMR、以日志「已就绪」判定生效，及飞书开发者后台的长连接订阅设置。已知报错多种（not-found / ERR_PACKAGE_PATH_NOT_EXPORTED / BOM）各有对症修法；已实锤的坑还有 SDK createLarkChannel 丢弃 handlers（坑 #58，消息 ACK 后静默蒸发）、建会话链路两连坑（#59 建目录 / #60 preset 按名 set）与投递/生命周期连环坑（#61 裸 Agent / #62 事件字段 / #63 防刷屏 / #64 插件 abort 连坐杀会话）。当用户要接飞书、桥接断线、或会话里 feishu_status 报 configured=false 时使用。'
 whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关报错出现在日志；用户问"怎么把娅伊接到飞书"。
 ---
 
@@ -82,6 +82,10 @@ whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关�
 | `SyntaxError: Unexpected token '锘?…`（JSON.parse） | config.json/mappings.json 带 UTF-8 BOM | 重写为无 BOM（Node `writeFileSync` 或 PowerShell `UTF8Encoding($false)`） |
 | 有「已就绪」但飞书发消息没反应 | 四种候选：后台订阅未配 / **SDK handlers 断线（坑 #58）** / SafetyPipeline 静默丢弃 / 同凭证多个长连接客户端抢消息 | 先用「决定性判据」分诊（见下节），再对症修 |
 | 控制台事件日志显示 SUCCESS 但本地零痕迹（无 mappings/回复/warn） | 事件已送达客户端且被 ACK，丢在 SDK→插件管线内：八成是坑 #58（handlers 未接线），少数是 SafetyPipeline 静默丢弃 | 补接线 `channel.handlers.message = fn`（见坑 #58 节）；再查 isStale/去重/策略（都是 debug 级日志，可临时开 debug 看） |
+| `处理入站消息失败: ENOENT … realpath '…\feishu\workspaces\feishu-<uuid>'` | 建会话时叶子目录没建就传给 workspaceRegistry.create（坑 #59：它内部只 realpath，不代建） | 先 `mkdirSync(workspacePath,{recursive:true})` 再 create（1.5.14 已修） |
+| `处理入站消息失败: permission: unknown preset "[object Object]"` | 把 permissionPresets.resolve() 的返回**对象**传给了 set()（坑 #60：set() 要**名字字符串**，resolve 仅校验） | set 传原始名字（1.5.14 已修） |
+| 「已新建并接入」能收到，但**后续消息**没反应且**零日志** | 投递分支静默丢（坑 #61：`ctx.agents.get(id)` 返回**裸 Agent**，`?.agent` 恒 undefined）＋回发读错字段（坑 #62：载荷在 `event.data.message`，不是 `event.message`） | 1.5.14 已修（裸 Agent + event.data.message + turn/end 统一回发防刷屏 #63） |
+| 插件 HMR/重载/宿主重启后，之前绑定好的 chat 再发消息**无回复且零日志**（route 分支照常走） | 插件 dispose 时 `controller.abort()` 把 `agents.create` 建的会话连带杀死（坑 #64：会话是宿主资产不是插件资产），getAgent 拿到 null 后旧代码静默 return | 不传插件级 signal（每会话独立从不 abort 的 signal）；deliverToSession 返回布尔，route 投递失败自动新建+重新映射+告知（自愈，1.5.14 已修） |
 | 控制台事件日志 FAIL（重试后仍失败）或压根无记录 | 当时无客户端在线 / 服务端未投递 | 确认插件「已就绪」且日志有 `ws client ready`；检查后台订阅配置（回读法见 docs/接口清单.md） |
 
 ## 决定性判据：消息到底丢在哪一段（2026-11-10 实锤升级）
@@ -102,6 +106,30 @@ whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关�
 - **机制**（@larksuiteoapi/node-sdk **1.76.0** 实测；SDK lib/index.js）：构造函数 `this.handlers = {}`（106879 行）**从不读 opts.handlers**；`createLarkChannel(opts)`（107359 行）只是 `new LarkChannel(opts)` 原样返回；消息派发处（106902-106912）`const handler = this.handlers.message; if (handler) yield handler(merged)` —— handlers.message 为 undefined 时**静默 no-op、零日志**；而帧泵（102959 行）只要 invoke 不抛错就无条件回 ACK 200 → 飞书后台显示 SUCCESS。
 - **修法**：`createLarkChannel({...})` 返回后在 channel 上**显式补接线**：`channel.handlers.message = onMessage`（handlers.message 在派发时才读取，事后赋值有效）。dsh-aiyayi **1.5.14** 已修（gh_repo\lib\feishu.js，部署后 HMR 生效）。
 - **教训**：升级 SDK 版本后要回归测试收消息；新 SDK 包装 API（createLarkChannel/LarkChannel）不能只看 TypeScript 类型，要核实运行时行为。
+
+## 坑 #59/#60：建会话链路两连坑——对照宿主模板时别漏语义差异（2026-11-10 实锤）
+
+坑 #58 修好后，事件能进 handler 了，但「new 分支」建会话又连环暴露两层，都出在 `lib/feishu.js createAiyayiSession`：
+
+- **坑 #59（workspace 目录）**：`ctx.workspaceRegistry.create(path)` 的契约是**路径必须已存在**（内部 realpath，不代建；dsh-webhook 的 workspacePath 来自规则配置的既有目录）。插件只 mkdir 了 `feishu\workspaces` 父目录，叶子 `feishu-<uuid>` 没建 → `处理入站消息失败: ENOENT … realpath '…\feishu\workspaces\feishu-<uuid>'`。修法：先 `mkdirSync(workspacePath,{recursive:true})` 再 create。
+- **坑 #60（permission preset）**：`permissionPresets.resolve(名字)` 返回**已解析对象**，而 `permissionPresets.set(session, x)` 要**名字字符串**（dsh-webhook 模板里 resolve 只作校验、返回值丢弃，set 传原始名字）。插件把 resolve 的返回对象传给 set → `permission: unknown preset "[object Object]" (known: read-only, workspace-write, danger-full-access)`。修法：set 传名字字符串。
+- **教训**：照宿主模板（app.asar 内 dsh-webhook createWebhookSession）接线时，逐个调用点核对**参数语义**（名字 vs 解析对象、代建 vs 必须已存在），不能只看"同样调了这个方法"。修复路径上的每个 warn 都是下一层的路标——一条条钉到底。
+
+## 坑 #61/#62/#63：确认回复之后的两条静默断点（2026-11-10 实锤）
+
+收到「已新建并接入」只证明**新建分支**通了，投递分支和回发链路还在后面埋着两颗雷：
+
+- **坑 #61（投递静默丢，零日志最阴险）**：`ctx.agents.get(id)` 返回**裸 Agent**（宿主文档：「句柄只暴露给创建它的消费方」），写成 `get(id)?.agent` 恒 undefined → deliverToSession 无声 return → 后续消息不进会话、无任何日志。
+- **坑 #62（回复发不出）**：宿主 assistant/message 事件载荷在 **`event.data.message`**（宿主消费者 asar 59377/301690 行均读 `event.data.message.content`），读 `event.message` 恒 undefined → role 检查恒 false → 回复永远发不出。
+- **坑 #63（防刷屏）**：一轮 turn 里 assistant/message 按 step 渐进追加（多条事件），逐条回发会把一条回复拆成 N 条 → 攒每会话最新文本，`turn/end` 统一回发一条（`turn/start` 兜底冲残留）。
+- **教训**：端到端验证要**每种代码路径各来一条真实消息**（新建 / 投递 / 回发）；「收到模板确认回复」≠ 链路通。静默 return 路径零日志，只能对照宿主模板+文档逐调用点核对。
+
+## 坑 #64：插件生命周期 abort 会杀死它建的会话——静默 return 的第三处（2026-11-10 实锤）
+
+- **现象**：「已新建并接入」收到过、mappings 有映射，但插件某次 HMR 重载后该 chat 再发消息**无回复且零日志**（route 分支照常找到 sessionId，会话却已死）。
+- **机制**：插件持有 `controller = new AbortController()` 并把 `controller.signal` 传给 `agents.create({signal})`，同时注册 `ctx.effect(() => () => controller.abort())`——**插件每次重载 dispose 都会 abort 这个信号**，宿主随即将插件建的会话一并 dispose（12:58:42 日志 `agent "feishu-bfb53970-…": agent/disposed listener threw: TypeError: Cannot read properties of undefined (reading 'catch')` 即死亡现场）。之后 route 分支 `getAgent` 拿到 null → 旧代码静默 return，消息蒸发。
+- **修法**：①会话是宿主资产不是插件资产——每会话给一个从不 abort 的独立 signal（`new AbortController().signal`），不传插件级 controller；②`deliverToSession` 返回布尔，route 分支投递失败就自动新建会话、重新映射、告知用户并把消息投进去（自愈）；③防御 `Promise.resolve(channel.disconnect()).catch()`（SDK disconnect 在 WS 未初始化时返回 undefined，直接 `.catch` 会 TypeError）。1.5.14 已修。
+- **教训**：宿主对象（会话/agent）的生命周期归宿主管，插件清理代码别越界连坐；投递失败走自愈（自动重建+告知）比静默或报错都更能兜住未知的会话回收路径。
 
 ## 待固化（实测后回填）
 
