@@ -22,7 +22,7 @@ whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关�
 - 纯逻辑（路由/映射/文本抽取）在 `lib/feishu-logic.js`；映射持久化在记忆根 `feishu/mappings.json`（chat_id→sessionId）。
 - **坑 #56**：patch 里裸 `- id: aiyayi-feishu / name: dsh-aiyayi/feishu` 行 = 对既有条目的覆盖，目标不存在就 warn `patch: entry "aiyayi-feishu" not found` 后跳过（no-op）。**新增必须用 `- insert:` 包裹**。
 - 判定插件在跑：日志 `host.kernel.aiyayi-feishu` 有 `已就绪，记忆根 …（已绑定 N 个 chat）`。`not found` warn 不等于没跑（良性共存），**没有「已就绪」才是没跑**。
-- 只改 patch 文件的 mtime 不会触发 HMR；要**改内容**（如 Add-Content 追一行注释）。
+- 只改 patch 文件的 mtime 不会触发 HMR；要**改内容**。注意（2026-11-10 实测）：仅 Append 注释行会让 host 处理 patch（日志见 `root patch: entry "…" not found`），但**不会重跑 aiyayi-feishu**（无新「已就绪」）；可靠做法是对 insert 条目做**结构性变更**，如 `config: {}` → `config: {reloadTag: "<标记>"}`，随后日志出现新的「已就绪」= 生效。
 
 ## 步骤
 
@@ -69,9 +69,10 @@ whenToUse: 用户要求新配/重配/修复飞书对接；aiyayi-feishu 相关�
 
 ### 5. 触发 HMR 并验证
 
-1. 对 profile 根 patch 追加一行注释（如 `# feishu reload`）改内容触发重载；
+1. 对 profile 根 patch 里 aiyayi-feishu 的 insert 条目做**结构性变更**（如 `config: {}` → `config: {reloadTag: "<标记>"}`）触发重载——只追加注释行不保证重跑插件（2026-11-10 实测）；
 2. 日志（`~/.dsh/logs/desktop-next-<日期>.*.jsonl`）grep `aiyayi-feishu`，看到「已就绪」＝成功；
 3. 让用户在飞书里给机器人随便发一条消息 → 自动新建 aiyayi 会话并绑定（mappings.json 生成、回复回到该 chat）。
+   - 若要路由到**指定 DSH 会话**（如 GUI 会话）：让用户**首条消息**发 `绑定会话 <sessionId>`（例：`绑定会话 session-b8785a4a-362a-4e43-8aa6-33410efca76c`）→ bind 分支写映射，之后该 chat 全部消息 route 进目标会话、回复回发。首条是普通正文则会自动新建会话，之后发绑定命令会被当正文（映射已存在走 route 分支）。
 
 ## 排障速查
 
