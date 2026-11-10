@@ -4,12 +4,12 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.5.7** | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.5.7**（c176779） | https://gitcode.com/BayiHY/dsh-aiyayi |
-| Gitee | **1.5.7**（c176779） | https://gitee.com/BayiHY/dsh-aiyayi |
-| GitHub | **1.5.7**（c176779，SSH 路） | https://github.com/BayiHY/dsh-aiyayi |
+| npm | **1.5.17** | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.5.17**（aae1527） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.5.17**（aae1527） | https://gitee.com/BayiHY/dsh-aiyayi |
+| GitHub | **1.5.17**（aae1527，SSH 路） | https://github.com/BayiHY/dsh-aiyayi |
 
-最近发布：2026-11-09，1.5.7（= 官方 1.5.6 全部内容 + persona【派检索员】段重写：默认派人、自理为例外，补回检索员边界约束句；删除三处 `modelSelectionSettings` 死键及过时注释）。1.5.6 同日先发（新会话首轮定时器异常检查），发布后 persona 改造补上车，随 1.5.7 首次进 npm。
+最近发布：2026-11-10，1.5.17（坑 #68 修复：宿主 dsh-session append 重入保护——yieldHostPublication + safeDeliverToSession + effect .catch + 三处引导/接入注入分支改 safe 包装；lib/feishu.js +51/-5）。
 
 **GitHub 推送口径（2026-11-09 更正：原"未推/无密钥"记载已过时）**：`~/.ssh/github_ed25519` 密钥已配好可用，github 走 SSH 推送正常（remote `github` = git@github.com:BayiHY/dsh-aiyayi.git）。HTTPS 才是被 SNI 阻断的死路，别试。注意 SSH 只能推已有仓库，**建新仓要走网页或可达网络下的 API**。
 
