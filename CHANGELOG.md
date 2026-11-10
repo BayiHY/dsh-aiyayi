@@ -6,6 +6,14 @@
 
 ---
 
+## 1.5.11（2026-11-09 修正引导）
+
+- git：本次 commit（2026-11-09，阿依娅伊）1.5.11：飞书接入引导改为「从飞书侧自动发起」，不再让用户提供 chat_id
+- 修正：此前 persona 与工具描述引导 aiyayi「让用户提供 chat_id 再 feishu_bind」，方向走反。事实上接入主要从飞书侧自动发起——用户在飞书里给机器人随便发一条消息，bot 自己取到该 chat 的 chat_id、自动新建 aiyayi 会话并绑定（`routeMessage` 默认分支 `action:'new'`）；要接入指定已有会话就在飞书里发 `绑定会话 <会话名>`，chat_id 同样自动已知。
+- 改动：`cordis.patch.yml` persona【飞书】段重写为「不让用户填 chat_id，引导去飞书发消息自动接入 / 发 `绑定会话 <会话名>` 接指定会话」；`lib/feishu.js` 中 `feishu_status` / `feishu_bind` 的工具 description 同步说明「大多数接入从飞书侧自动发起，用户无需提供 chat_id，feishu_bind 仅在确有明确 chat_id 时才用」。
+
+---
+
 ## 1.5.10（2026-11-09 修复）
 
 - git：本次 commit（2026-11-09，阿依娅伊）1.5.10：修复 feishu_status / feishu_bind 工具报错 `content.some is not a function`
