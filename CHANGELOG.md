@@ -2,9 +2,17 @@
 
 > **维护约定**：新版本发布时在顶部加条目。本文件由 README 正文拆出（2026-11-09 重构）：版本条目与踩坑记录原文照录，数字、时间、日期一律不改（量化保真是本插件的规矩）。版本事实以 npm registry 为准。
 >
-> **npm 发布一览（2026-11-10 核对 registry）**：latest = **1.5.16**（2026-11-10 发布）。已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**；跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm（本地开发线：1.5.8–1.5.11 飞书桥接、1.5.12 思考纪律约束、1.5.13 内置技能同步+feishu-setup 骨架）；1.5.14 已发布（坑 #58–#67 修复）；1.5.15 已发布（扫码接入改造）；1.5.16 已发布（feishu-setup 技能脚本入包）。
+> **npm 发布一览（2026-11-10 核对 registry）**：latest = **1.5.17**（2026-11-10 发布）。已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**；跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm（本地开发线：1.5.8–1.5.11 飞书桥接、1.5.12 思考纪律约束、1.5.13 内置技能同步+feishu-setup 骨架）；1.5.14 已发布（坑 #58–#67 修复）；1.5.15 已发布（扫码接入改造）；1.5.16 已发布（feishu-setup 技能脚本入包）；1.5.17 已发布（坑 #68 重入保护修复）。
 >
 > **环境标识约定（2026-11-10 新增）**：写版本条目/坑条目时，**顺手记录当时的 智能体工具-智能体模式-模型供应商-模型**（如 **DSH-创造模式-loomy讯飞-GLM5.3FLASH**），写在条目内（紧跟 git 记录行、或坑条目首行），方便回溯该条目是在哪套智能体/模型环境下产出与验证的。
+
+---
+
+## 1.5.17（2026-11-10 修复：坑 #68 宿主 append 重入保护）
+
+- 环境：DSH-创造模式-DeepSeek Harness 执行智能体（娅伊派出，模型名未确证）
+- git：本次 commit（2026-11-10，阿依娅伊）1.5.17：坑 #68 修复——宿主 dsh-session append 重入保护导致插件服务进程 fatal load failure 退出码 1
+- 坑 #68（2026-11-10 实锤，插件服务进程退出码 1 + `dsh: fatal load failure` 堆栈）：宿主 `Session.append` 有重入保护——一次 publish 尚未结束时，任何新的 `Session.append` 都抛 `session append cannot reenter while another append is being published`。触发链：插件 effect 回调（`turn/end` / `agent/inbox/spliced` 事件）里 `await agent.followup(...)`（= `ReactLoopInbox.splice` → `mutate` → `Session.append`）在宿主当前 publish 尚未收尾时同步重入 append → 抛错 → 宿主升级为 fatal load failure → 进程退出码 1。原代码 fire-and-forget 无 `.catch()`，unhandled rejection 沿 effect 回调传播为宿主 fatal。修法：① `yieldHostPublication()`——投递前 `Promise.resolve()` + `setTimeout(0)` 让出宏任务，跳出宿主 publish 窗口；② `safeDeliverToSession()`——包 try/catch，append 失败只记 `ctx.logger.warn` 不逃逸；③ effect 回调两处 fire-and-forget 补 `.catch(error => ctx.logger.warn(...))`；④ 三处引导/接入注入分支（skip / onboard / maybeGuideNewSession）全部改用 `safeDeliverToSession`。`lib/feishu.js` +51/-5 行。
 
 ---
 
