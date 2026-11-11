@@ -21,6 +21,8 @@
 | 主动开口 | `tool-schedule`（dsh 原生）+ persona 指引 | 到期提醒会把冷会话真唤醒、以 user 消息落进定闹钟的那个会话——她想主动说话就 `schedule_create` 定闹钟；DSH 没开着会存着、下次启动补投 |
 | 新版本提醒 | 自写插件 `aiyayi-updates`（本包 `lib/updates.js`） | 每个会话第一个回合查一次 npm（registry.npmjs.org，失败落 npmmirror；成功结果缓存 6h、失败 30min 后重试）：本地版本比 latest 旧时，往消息尾部追加 `[更新提示]` 快照，她会用自己的口吻顺口提一句。同一远端版本只提醒一次（updates.json 落盘去重，跨重启不重复念叨）；检查失败/离线一律静默。**判据：`~\\.dsh\\aiyayi\\updates.json` 不存在 = 从没发现过新版（本地已是最新）；她答不上"自己是什么版本"是设计边界（升级判断靠被动推送），已由 presence 的版本自述补上** |
 | 飞书桥接 | 自写插件 `aiyayi-feishu`（本包 `lib/feishu.js`，1.5.8 起）+ 纯逻辑 `lib/feishu-logic.js` | 长连接 WebSocket 接入飞书机器人（SDK `@larksuiteoapi/node-sdk`，无需公网）。**2026-11-10 扫码改造**：新会话说「接入飞书」→ 引导出待接入目标 → 手机飞书扫码进 bot 单聊 → `bot_p2p_chat_entered_v1` 事件自动绑定（30 分钟时效）；凭证 `feishu/config.json` 存记忆根（**不入 npm 包**）。**发附件需权限 `im:resource`**（后台真实标识「获取与上传图片或文件资源」，免审）——开发者后台搜 **`im:resource:upload` 为 0 条，后台不存在这个独立 scope**，真名就是 `im:resource`（详见坑 #70 / #71） |
+| 微信桥接 | 自写插件 `aiyayi-weixin`（本包 `lib/weixin.js` + `lib/weixin/`，1.5.27 起） | 微信 **ClawBot 机器人**通道（腾讯官方 iLink 协议，长轮询，无需公网）。**默认关闭**：profile patch 里 `weixin.enabled` 必须显式 `true` 才加载，`weixin.accounts` 写 `[{accountId, credentialRef}]`，凭证先 `weixin_login` 扫码拿（二维码 121 秒寿命）。工具 `weixin_status` / `weixin_login` / `weixin_bind` / `weixin_unbind`。`allowlist` 留空 = **只放行已显式绑定的用户**（与官方相反，陌生消息丢弃）。**没有 weixin-setup 技能** |
+| **对接落到哪个会话（默认规则，1.5.32 固化）** | `lib/feishu.js` 的 pending-bind + `lib/weixin/accounts.js` 的 pending-bind | **对机器人默认落到「发起对接的那个会话」，能复用就复用、不新建**：会话 A 里说「接入飞书/微信」→ 待接入目标记的就是 A → 扫码/绑定成功后该 chat 绑回 A，聊天接着聊。只有用户明确说「新建会话」才新建；chat 从没走过对接、也没有待接入目标时程序会新建一个会话接住（**兜底，非首选**）。这条同时写进 persona【飞书】【微信】两段，属行为约定而非可选配置 |
 | 其他 | time-context、compaction 组（提前压缩，见坑 #14/#16）、tool-ask-user | 她没有 bash/文件/技能/搜索/网络工具，想动手只能派活；纯查资料走 `retriever` 检索员，不惊动小伙伴 |
 
 ## 安装与启用
