@@ -15,6 +15,7 @@ import {
   extFromContentType,
   extractAttachmentMarkers,
   fetchMessageDetail,
+  markdownMode,
   normalizeSdkResources,
   parseAttachmentsFromContent,
   sanitizeFileName,
@@ -204,15 +205,29 @@ assert.equal(composeDeliveryText('  ', null, 'om_3'), '（收到一条无文本�
 assert.equal(composeDeliveryText('正文', null, 'om_4'), '正文')
 
 // ── 标记解析与剥离（全/半角冒号、多标记、无效标记忽略）──
+// 1.5.19：extractAttachmentMarkers 额外返回 items（带 index/tag），files/images 语义不变。
+// 断言改为「只比 files/images 两个旧字段」，items 另测。
+const legacyMarkers = (text) => {
+  const { files, images } = extractAttachmentMarkers(text)
+  return { files, images }
+}
 assert.deepEqual(
-  extractAttachmentMarkers('开头 [附件: F:\\a b.xlsx] 中 [附件： D:\\图.png] 尾'),
+  legacyMarkers('开头 [附件: F:\\a b.xlsx] 中 [附件： D:\\图.png] 尾'),
   { files: ['F:\\a b.xlsx', 'D:\\图.png'], images: [] },
 )
 assert.deepEqual(
-  extractAttachmentMarkers('图 [图片: F:\\pic.jpg] 和 [附件没闭合: F:\\x] 和 []'),
+  legacyMarkers('图 [图片: F:\\pic.jpg] 和 [附件没闭合: F:\\x] 和 []'),
   { files: [], images: ['F:\\pic.jpg'] },
 )
-assert.deepEqual(extractAttachmentMarkers('没有标记'), { files: [], images: [] })
+assert.deepEqual(legacyMarkers('没有标记'), { files: [], images: [] })
+// items：按正文出现位置返回，tag 区分标记种类
+assert.deepEqual(
+  extractAttachmentMarkers('A [附件: F:\\a.xlsx] B [图片: F:\\p.jpg]').items,
+  [
+    { index: 2, path: 'F:\\a.xlsx', tag: 'file' },
+    { index: 20, path: 'F:\\p.jpg', tag: 'image' },
+  ],
+)
 assert.equal(
   stripAttachmentMarkers('看 [附件: F:\\a.xlsx]\n\n\n这个'),
   '看\n\n这个',
@@ -223,6 +238,27 @@ assert.equal(stripAttachmentMarkers(''), '')
 {
   const raw = '保持  双空格\n\n\n和  尾部  '
   assert.equal(stripAttachmentMarkers(raw), raw)
+}
+
+// ── 正文出口断言助手（1.5.20：默认卡片，AIYAYI_FEISHU_MARKDOWN=text 回退纯文本）──
+/**
+ * 断言「正文」这条 payload 的通道形态。
+ * - 卡片模式（默认）：payload 有 card，正文在 elements[0].text.content，且 tag=lark_md
+ * - 纯文本模式：payload 只有 text
+ * 这样断言不再写死 { text }，两种通道都能覆盖，且能抓住"默认竟然走了纯文本"这种回归。
+ */
+function assertBodyPayload(entry, expectedContent, label) {
+  if (markdownMode() === 'card') {
+    assert.ok(entry.payload.card, `${label}：默认应走卡片，实际 payload=${JSON.stringify(entry.payload)}`)
+    assert.equal(entry.payload.text, undefined, `${label}：卡片模式不该同时带 text`)
+    const el = entry.payload.card.elements[0]
+    assert.equal(el.tag, 'div', `${label}：卡片首元素应为 div`)
+    assert.equal(el.text.tag, 'lark_md', `${label}：正文应为 lark_md`)
+    assert.equal(el.text.content, expectedContent, `${label}：卡片正文内容不符`)
+  } else {
+    assert.equal(entry.payload.text, expectedContent, `${label}：纯文本模式正文不符`)
+    assert.equal(entry.payload.card, undefined, `${label}：纯文本模式不该带 card`)
+  }
 }
 
 // ── sendReplyWithAttachments：mock sender 全链路编排 ──
@@ -245,7 +281,7 @@ assert.equal(stripAttachmentMarkers(''), '')
     // 顺序：先文件后正文；不存在的图剥离不阻断
     assert.equal(calls.length, 2)
     assert.deepEqual(calls[0], { chatId: 'oc_1', payload: { file: { source: filePath, fileName: 'ok.txt' } } })
-    assert.deepEqual(calls[1], { chatId: 'oc_1', payload: { text: '说明 和' } })
+    assertBodyPayload(calls[1], '说明 和', 'r1 正文')
     assert.deepEqual(
       { filesTotal: r1.filesTotal, filesSent: r1.filesSent, imagesTotal: r1.imagesTotal, imagesSent: r1.imagesSent, textSent: r1.textSent },
       { filesTotal: 1, filesSent: 1, imagesTotal: 1, imagesSent: 0, textSent: true },
@@ -253,11 +289,26 @@ assert.equal(stripAttachmentMarkers(''), '')
     assert.equal(r1.problems.length, 1)
     assert.ok(logs.warn.some((m) => m.includes('不存在.png')))
 
-    // 纯文本路径：与旧版行为一致（单条 text）
+    // 纯文本路径：1.5.20 起默认走卡片，通道随 AIYAYI_FEISHU_MARKDOWN 开关变化
     calls.length = 0
     const r2 = await sendReplyWithAttachments(channel, 'oc_2', '普通回复', logger)
-    assert.deepEqual(calls, [{ chatId: 'oc_2', payload: { text: '普通回复' } }])
-    assert.deepEqual(r2, { filesTotal: 0, filesSent: 0, imagesTotal: 0, imagesSent: 0, textSent: true, problems: [] })
+    assert.equal(calls.length, 1, 'r2：单条正文应只发一次（未分片）')
+    assert.equal(calls[0].chatId, 'oc_2')
+    assertBodyPayload(calls[0], '普通回复', 'r2 正文')
+    // 1.5.19：返回值新增 imageFallbacks / order（字段只增不减），旧字段语义不变。
+    assert.deepEqual(
+      {
+        filesTotal: r2.filesTotal,
+        filesSent: r2.filesSent,
+        imagesTotal: r2.imagesTotal,
+        imagesSent: r2.imagesSent,
+        textSent: r2.textSent,
+        problems: r2.problems,
+      },
+      { filesTotal: 0, filesSent: 0, imagesTotal: 0, imagesSent: 0, textSent: true, problems: [] },
+    )
+    assert.equal(r2.imageFallbacks, 0)
+    assert.deepEqual(r2.order, [])
 
     // 附件全失败 + 正文为空：补一条失败说明，不静默
     calls.length = 0
@@ -309,7 +360,11 @@ assert.equal(stripAttachmentMarkers(''), '')
       () => downloadFileResource('https://open.feishu.cn', 'tk', { messageId: 'om_1', fileKey: 'fk' }),
       /403.*99991672|no permission/s,
     )
-    await assert.rejects(() => downloadImageResource('https://open.feishu.cn', 'tk', 'ik'), /no permission/)
+    // 1.5.19：图片走 messages/{id}/resources?type=image，签名带 messageId
+    await assert.rejects(
+      () => downloadImageResource('https://open.feishu.cn', 'tk', { messageId: 'om_1', imageKey: 'ik' }),
+      /no permission/,
+    )
     // 200 + JSON 错误体（飞书偶发形态）也要当失败
     globalThis.fetch = async () => ({
       ok: true,
@@ -404,8 +459,21 @@ assert.equal(stripAttachmentMarkers(''), '')
     assert.ok(logs.info.some((m) => m.includes('附件已保存')))
 
     // image 消息：resources 空 → 详情解析出 image_key → 图片接口下载
+    // 1.5.19：图片下载改走 messages/{id}/resources/{key}?type=image
+    // （旧 /im/v1/images/{key} 对消息内 img_v3_* 必 400，见 报告-图片下载400根因.md）。
+    // 注意顺序：资源下载 URL 也含 /im/v1/messages/om_img，必须先匹配 /resources/。
     globalThis.fetch = async (url) => {
       const u = String(url)
+      if (u.includes('/resources/ik_zz')) {
+        assert.ok(u.includes('type=image'), `图片下载必须带 type=image: ${u}`)
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => 'image/png' },
+          json: async () => { throw new Error('binary') },
+          arrayBuffer: async () => new Uint8Array([0x89, 0x50]).buffer,
+        }
+      }
       if (u.includes('/im/v1/messages/om_img')) {
         return {
           status: 200,
@@ -413,15 +481,6 @@ assert.equal(stripAttachmentMarkers(''), '')
             code: 0,
             data: { items: [{ msg_type: 'image', body: { content: JSON.stringify({ image_key: 'ik_zz' }) } }] },
           }),
-        }
-      }
-      if (u.includes('/im/v1/images/ik_zz')) {
-        return {
-          ok: true,
-          status: 200,
-          headers: { get: () => 'image/png' },
-          json: async () => { throw new Error('binary') },
-          arrayBuffer: async () => new Uint8Array([0x89, 0x50]).buffer,
         }
       }
       throw new Error(`unexpected url ${u}`)

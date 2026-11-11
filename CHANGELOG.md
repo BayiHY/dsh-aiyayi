@@ -8,6 +8,101 @@
 
 ---
 
+## 1.5.20（2026-11-11 修复：飞书 markdown 正文渲染）
+
+- 环境：DSH-执行智能体（娅伊派出的 DeepSeek Harness 子会话，模型名未确证）
+- git：本次 commit（2026-11-11，阿依娅伊）1.5.20：飞书正文改走 interactive 卡片 + lark_md——纯文本 `msg_type=text` 不渲染 markdown
+- 回填说明：本次把已在线上验证通过的 1.5.20 改动**回填源码仓**。源码仓此前停在 1.5.18，故一并补入 1.5.19 的
+  `lib/feishu.js` 与 `lib/feishu-logic.js`、以及 1.5.19 的两个测试文件。两个 lib 文件来源均以 SHA256 核对为准
+  （`lib/feishu.js`=ADBA20BC…（1.5.19 payload 与线上逐字节一致）、`lib/feishu-logic.js`=47442E13…（线上 1.5.20 版）），
+  **纯复制，未重写、未重构、未格式化**。回填前原 1.5.18 文件已备份为 `*.bak-1.5.18`（不入 git）。
+- 根因（为什么 markdown 原先不渲染）：回发正文唯一出口是 `sendReplyWithAttachments()` 结尾的
+  `channel.sender.send(chatId, { text: cleanText })`。SDK `@larksuiteoapi/node-sdk@1.76.0` 按 key 分派
+  （`'text' in input → sendText()`，`lib/index.js:105094-105100`），`sendText` 固定 `msgType: 'text'`、
+  `content: { text: chunk }`（`:105154-105172`），`rawSend` 打成 `msg_type: "text"`（`:105335-105339`）。
+  **飞书客户端对 `msg_type=text` 不做 markdown 渲染**，于是 `**粗体**`、`## 标题`、`- 列表` 原样显示成符号。
+  改前既无 markdown 转换，也无 post 富文本、无长消息分片。
+- 改动（仅 `lib/feishu-logic.js`，新增代码块 902-1180 行）：
+  - `MARKDOWN_MODE_ENV` / `markdownMode()`——读开关 `AIYAYI_FEISHU_MARKDOWN`，返回 `'card'`/`'text'`，默认 card。
+  - `CARD_CONTENT_LIMIT = 3500`——单卡正文上限（对齐 SDK `DEFAULT_CHUNK_LIMIT`，`lib/index.js:105084`；
+    飞书卡片整体 JSON 上限 30KB，正文留足 JSON 包装与 CJK 多字节余量）。
+  - `markdownToLarkMd(md)`——**核心转换**：`#`~`######`→`**粗体**`（lark_md 无 heading 语法）；`__x__`→`**x**`；
+    `- / * / +` 列表→`•`（lark_md 的 `- ` 渲染不稳，`•` 必出）；`> 引用`→`▏`；`---`→`————————`（lark_md 无 hr）；
+    `|表格|`→空格对齐纯文本（lark_md 无表格，按显示宽度对齐，CJK 算 2 列）。
+    **代码块保护**是顺序两重占位：先把 ``` 围栏整块换成 `\u0000C<n>\u0000`，再换行内代码 `\u0000I<n>\u0000`，
+    跑完所有规则按序还原，故块内 `# 注释`/`- 参数`/`| 管道` 一个都不会被改（有单测覆盖）。
+  - `splitMarkdownForCard(text, limit)`——**围栏安全分片**：切在代码块中间时给当前片补 ``` 闭合、下一片重新开
+    ```lang`（与 SDK `splitWithCodeFences`，`lib/index.js:103826-103868` 同法）；单行自身超长（超长 URL、单行日志）
+    先按 `limit-64` 硬切；`replyTo` 只挂首片，后续片不带（否则飞书会拒）。
+  - `buildMarkdownCard(content, opts)`——构造 `{ config:{wide_screen_mode,update_multi}, elements:[{tag:'div',text:{tag:'lark_md',content}}] }`，
+    形状复用 1.5.19 已验证的 `buildQuestionCard`（对照 SDK 类型 `types/index.d.ts:321494-321541`：`InteractiveCard` /
+    `InteractiveCardDivElement` / `InteractiveCardLarkMdItem` 全部合法；`{ card }` 载荷经 `OutboundSender.send → sendCard`
+    `lib/index.js:105255-105266` 打成 `msgType: 'interactive'`）。
+  - `sendMarkdownCard(channel, chatId, text, logger, opts)`——发送 + 失败降级纯文本。
+- 改动（`sendReplyWithAttachments()` 正文出口，843-862 行）：默认走卡片，`AIYAYI_FEISHU_MARKDOWN=text` 回退纯文本。
+  **附件分流逻辑（图片/文件）完全未动**，仍是先发附件、再发正文。回发日志末尾新增 `正文通道 card:1/1` / `text(开关)` 字段，
+  排障时一眼看出走的哪条路。
+- 兜底（三级）：①卡片发成功即完事；②卡片第 N 片失败→**只把第 N 片及之后按纯文本重发**，已发出的卡片不撤回不重发
+  （否则用户会看到重复内容），日志 warn 带失败 code+msg；③纯文本也失败→抛异常，交 `feishu.js:298` 的 `.catch`
+  记 `aiyayi-feishu: 回发 … 失败:`，**不静默**。
+- 回滚开关（**一键、零改代码**）：设 `AIYAYI_FEISHU_MARKDOWN=text`（或 `0`/`off`/`false`/`plain`）后重启 DSH 即退回旧纯文本；
+  不设或 `card`/`1`/`on`/`yes` 走卡片（默认）。文件级回滚另有线上备份 `lib/feishu-logic.js.pre-1.5.20-markdown`
+  （54219 字节，逐字节还原的 1.5.19 原文，`node --check` 通过）。
+- 风险：**表格错位**——lark_md 无表格语法，只能转空格对齐纯文本，飞书卡片正文非等宽字体会有轻微错位
+  （但远比原样 `|---|` 好）；**>3500 字分片**——超长回复拆成多张卡片，观感比原来一条长文本碎，
+  `CARD_CONTENT_LIMIT` 可调大，但飞书卡片 JSON 上限 30KB 且 CJK 转义后膨胀，建议不超过 6000；
+  lark_md 实际渲染与预期不符（中）——加粗/链接/列表/代码块确定支持，`•` 作列表符是保险选择，最坏退化成普通行不会报错；
+  占位符 `\u0000`（极低）——正常正文不会有 NUL，万一模型输出含 NUL 会还原成空串。
+- 测试（83 项断言全过）：`test-md.mjs`（50 项：转换规则逐条、代码块保护、表格对齐、CJK 宽度、边界空/null/纯文本、
+  分片上限/拼回/围栏成对/单行硬切、卡片结构、开关矩阵）；`test-send.mjs`（33 项：正常卡片发送、`replyTo` 只挂首片、
+  卡片全失败降级、第 N 片失败只补剩余、双失败抛异常、空文本不发、`sendReplyWithAttachments` 端到端走卡片、开关回退、
+  附件+卡片组合、卡片失败不影响附件、超长正文端到端）。自测期间抓到并修掉一个真 bug：卡片降级文本后 `textSent` 仍为 false
+  （旧判断只看 `sent>0`），已改为 `r.fallback === 'text' || r.sent > 0`。
+- 回填回归（本次入仓后实测，16/16 测试文件全过）：`test/feishu-image-download.test.mjs` exit 0；
+  `test/feishu-attachment.test.mjs` 在默认卡片模式 exit 0，**设 `AIYAYI_FEISHU_MARKDOWN=text` 后同样 exit 0 全通过**
+  ——这条正是「回滚开关有效」的实测证据。该测试原有的两处 `payload: { text: … }` 硬断言已改为**卡片感知**
+  （默认模式断言 `payload.card.elements[0].text.tag === 'lark_md'`，纯文本模式断言 `payload.text`），
+  两种通道都覆盖，且能抓「默认竟然走了纯文本」这类回归；**未留任何红测试入仓**。
+- 验证：`node --check` 两个文件均 exit 0；线上肉眼确认回发正文渲染正常（标题/粗体/列表不再显示原始符号），
+  日志出现 `正文通道 card:1/1`。
+
+---
+
+## 1.5.19（2026-11-11 修复：图片收/发接口 + 接入引导误触发 + 新增卡片问答）
+
+- 环境：DSH-执行智能体（娅伊派出的 DeepSeek Harness 子会话，模型名未确证）
+- git：并入本次 commit（2026-11-11，阿依娅伊）——源码仓此前停在 1.5.18，从未有 1.5.19 条目，本节为**事后补录**，
+  内容依据 1.5.19 部署包（`deploy-1.5.19/payload`，带 `SHA256SUMS.txt`，已核对与线上安装逐字节一致）与
+  `CHANGELOG-1.5.19.md` / `报告-合并1.5.19.md`。
+- 性质：四份已验修补丁的合并版（A + B + C + D），合并过程**零冲突**
+- 改动文件：`lib/feishu.js`、`lib/feishu-logic.js`、`package.json`、`test/feishu-image-download.test.mjs`（新增）
+- 修一（B）**图片收件接口用错**：1.5.18 加了附件收发，但收图片这条链路调错接口。原
+  `downloadImageResource(domain, token, imageKey)` 直接打 `/im/v1/images/{image_key}`，**缺消息上下文**；
+  飞书对「消息里的图片」要求走消息维度资源接口
+  `GET /im/v1/messages/{message_id}/resources/{image_key}?type=image`，少了 `message_id` 就拿不到，收件侧图片静默失败。
+  修法：新增两个纯函数 `fileResourceUrl(domain, messageId, fileKey)` / `imageResourceUrl(domain, messageId, imageKey)`
+  把 URL 拼接从调用点抽出、可单测（`feishu-logic.js:466` / `:475`）；`downloadImageResource` **改签名**为
+  `(domain, token, { messageId, imageKey })`，消息 id 变必填（`:493`）；收件侧改调新签名（`:563`），
+  失败日志补 `kind=` / `url=`，以后再生病一眼看出是哪个 URL 失败（`:571-582`）。
+  为什么这么改：把 URL 构造成纯函数，是让「接口形状」这件事能被测试钉死——1.5.18 的教训就是接口用错了却没人发现，
+  因为 URL 是硬编码在下载函数里的。
+- 修二（C）**图片发件没走 image 类型**：发件沿用 1.5.18 的 `{file}` 通道，图片被当普通文件发出去，
+  客户端不显示为图片。改为图片走 SDK `{image:{source}}`（MediaUploader 直读本地路径），按实际类型分别计数
+  （返回值新增 `imagesTotal`/`imagesSent`/`imageFallbacks`/`order`，「按**实际发送类型**统计，不是按标记名」）。
+- 修三（A）**接入引导被任务简报误触发**：新增子会话识别 `isSubagentSession()` / `rememberSubagentSession()`，
+  只对真实用户会话做扫码/接入引导注入，止住「子会话被反复注入引导」的噪声。
+- 修四（D）**新增「卡片问答」能力**：`feishu-logic.js` 新增 `buildQuestionCard()`（`:946`）/`parseQuestionReply()`（`:1097`）/
+  `composeAnswerBatch()`（`:1172`）/`applyCardAction()`（`:1208`）/`readPendingQuestions()`（`:1245`）/
+  `writePendingQuestions()`（`:1257`）/`prunePendingQuestions()`（`:1266`），配套 `feishu.js` 新增
+  `onCardAction`/`registerQuestionAnswerer`/`waitForQuestionAnswer`/`patchQuestionCard`/`tryAnswerByText`/
+  `deliverLateAnswer`/`answerViaFeishu`/`liveQuestion` 等 11 个函数，使宿主 `ask_user_question` 能在飞书里点选作答。
+  **注意：这 11 个符号横跨两个文件**，1.5.20 默认正文卡片（`buildMarkdownCard`）即复用本节已验证的卡片形状。
+- 测试：新增 `test/feishu-image-download.test.mjs`（9D7F24C9…）；`test/feishu-attachment.test.mjs` 同步更新（60AF52F7…）。
+- 注：1.5.19 部署脚本按设计**不改 `CHANGELOG.md`**（线上该文件仍是 1.5.17 时代的副本，缺整个 1.5.18 段），
+  故本节与 1.5.18 段均以源码仓这份为准，不可用线上 CHANGELOG 覆盖。
+
+---
+
 ## 1.5.18（2026-11-10 功能：飞书消息附件收发）
 
 - 环境：DSH-执行智能体（娅伊派出的 DeepSeek Harness 子会话，模型名未确证）
