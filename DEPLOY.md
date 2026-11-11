@@ -4,12 +4,19 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.5.21** | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.5.21**（c2cc1be） | https://gitcode.com/BayiHY/dsh-aiyayi |
-| Gitee | **1.5.21**（c2cc1be） | https://gitee.com/BayiHY/dsh-aiyayi |
-| GitHub | **1.5.21**（c2cc1be，SSH 路） | https://github.com/BayiHY/dsh-aiyayi |
+| npm | **1.5.25** | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.5.25**（d6a20a2） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.5.25**（d6a20a2） | https://gitee.com/BayiHY/dsh-aiyayi |
+| GitHub | **1.5.25**（d6a20a2，SSH 路） | https://github.com/BayiHY/dsh-aiyayi |
 
-最近发布：2026-11-11，**1.5.21**（修飞书回复正文首尾空白行——**无附件标记**路径；主修 `lib/feishu.js` `extractText(message).trim()`、兜底 `lib/feishu-logic.js` `stripAttachmentMarkers(text).trim()`；坑 #72。npm 发布 2026-11-11T02:41:49Z，tarball sha1 `1a228c30f01776f13b1d13710cb82cf9546ae4bf`，**40 个文件**（比 1.5.20 的 39 个多 1 个 `test/feishu-trim.test.mjs`）；lib/feishu.js SHA256=`124DC5947869542C5E626AA6397D1386AF40F0C85584A0A844B48784B64E92F6`、lib/feishu-logic.js=`C08FA889FD54D27C138377A7F8A26324CEB82E644A57F960EBFF6E668EBDAE57`）。
+最近发布：2026-11-11，**1.5.22→1.5.25 四连发（多应用多长连接改造 + 三轮装版断言增量修复）**。
+- **1.5.22**（多应用多长连接，commit `1eb6255`）：config 支持 `apps` 数组（旧单 app 格式自动迁移+备份）；每应用独立 WS 长连接互不干扰；chat 归属机制（`chat-owners.json` 落盘 + `GET /im/v1/messages` 成员探测 + 230002 自愈重试）根因消灭「用 A 应用凭证往 B 应用的 chat 发消息」的 230002/400；`feishu_status` 增逐应用状态/chatOwners，`feishu_bind` 绑定前归属探测；messageId 去重防多 bot 重复投递。npm 发布 2026-11-11T04:59:21Z，tarball sha1 `65fcfa85ec3d1254e8394eeb3f5c7e26f0c3bd88`，**41 个文件**（files 数组排除 `skills/feishu-setup/scripts/logs`——此前运行日志会被打进包）；lib/feishu.js SHA256=`C19509A9A7549EF1875CF77E3384B4D74B3718B02AF7D32BD0914841E17A62BE`、lib/feishu-logic.js=`F56E3F198D409E4405C0EF9B22C4ED3E86D564CF2DEFE123176A2A1C4A449348`。
+- **1.5.23**（commit `632c38a`）：`feishu_bind` 边界——230001 invalid container_id（chat 不存在/伪造）与 230002 同判 not-member 确定拒绝。npm 发布 2026-11-11T05:13:48Z，sha1 `ca6e7b0ad0d8d35eec88ec012c5dbc91893dfad4`。
+- **1.5.24**（commit `c37fb1f`）：修 1.5.23 遗漏 import（`extractFeishuErrorCode` 未导入，probe 抛错即 ReferenceError）；**禁用宿主 `ask_user_question` 选项组件**（`cordis.patch.yml` 两处挂载 `disabled: true`，李浩拍板提问一律纯文本；1.5.18 的飞书点选作答链路随之退役，`tryAnswerByText` 文字兜底保留）。npm 发布 2026-11-11T05:20:36Z，sha1 `8d4e01f18becfc25390bb92fced1630c02a35d2d`。
+- **1.5.25**（commit `d6a20a2`，**当前 latest**）：`extractFeishuErrorCode` 候选链补顶层 `feishuCode`（probe 抛错形状此前不被认出，230001 判定失效）。npm 发布 2026-11-11T05:24:34Z，sha1 `98ae715c91b414c131dd2c26f12f377648bbb000`，41 个文件；lib/feishu.js SHA256=`3F596A8E7741FBCBDB80A014E84300541D4B74DDFE974CC995F336443DF60302`、lib/feishu-logic.js=`AFF5CDAEDDBBFE422F6BE23EACF629B97B2A79665478899A9F1F9274A6398A40`。
+- 1.5.23/24/25 的 tarball sha1 均与 `npm view` 官方源核验一致；desktop profile 已装 1.5.25 并跑通装版静态断言（mock ctx + 真实归属探测，ALL PASS）。
+
+（上一版：1.5.21，修飞书回复正文首尾空白行——**无附件标记**路径；主修 `lib/feishu.js` `extractText(message).trim()`、兜底 `lib/feishu-logic.js` `stripAttachmentMarkers(text).trim()`；坑 #72。npm 发布 2026-11-11T02:41:49Z，tarball sha1 `1a228c30f01776f13b1d13710cb82cf9546ae4bf`，**40 个文件**（比 1.5.20 的 39 个多 1 个 `test/feishu-trim.test.mjs`）；lib/feishu.js SHA256=`124DC5947869542C5E626AA6397D1386AF40F0C85584A0A844B48784B64E92F6`、lib/feishu-logic.js=`C08FA889FD54D27C138377A7F8A26324CEB82E644A57F960EBFF6E668EBDAE57`。）
 （上一版：1.5.20，飞书正文改走 interactive 卡片 + lark_md——纯文本 `msg_type=text` 不渲染 markdown；含 1.5.19 附件收发与交互卡片、1.5.20 markdown 渲染，及 create-bot v6 权限集中化。npm 发布 2026-11-11T01:26:23Z，tarball sha1 `6f1df9fb81341d6e449ff0d303aa6c07e7f87c39`，39 个文件；lib/feishu-logic.js SHA256=47442E13…、lib/feishu.js=ADBA20BC…。）
 
 **1.5.21 的 commit 口径（2026-11-11 补）**：1.5.21 的原始 commit 是 `d470d3e`（提交信息「1.5.21：修飞书回复正文首尾空白行（无附件标记路径）…坑 #72」），
@@ -22,20 +29,19 @@
 它在源码仓**单独成 commit `2c16bee`**，与 1.5.20 的插件改动（commit `2de3f46`）互不依赖。
 故上表「1.5.20（2c16bee）」表示的是**四渠道推的都是仓库 HEAD `2c16bee`**，不是「create-bot v6 是 1.5.20 的一部分」。
 
-**npm 发布一览（2026-11-11 核对 registry，`npm view dsh-aiyayi versions --json`）**：latest = **1.5.21**（2026-11-11 发布）。
-已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**、**1.5.21**；
+**npm 发布一览（2026-11-11 核对 registry，`npm view dsh-aiyayi versions --json`）**：latest = **1.5.25**（2026-11-11 发布）。
+已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**、**1.5.21**、**1.5.22**、**1.5.23**、**1.5.24**、**1.5.25**；
 跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm；
 **1.5.18 / 1.5.19 也从未发布到 npm**——它们的代码最终随 1.5.20 一起进 npm。
 **版本事实以 npm registry 为准**，本表与 CHANGELOG 顶部「npm 发布一览」保持同一口径。
 
-**git tag 现状（2026-11-11 核对）**：仓库 tag 只到 **v1.5.16**——`v1.5.14` 是 **annotated tag**（指向 commit `1aa4774`），
-`v1.5.15` / `v1.5.16` 是 **lightweight tag**（三种语义混用，历史遗留）；**v1.5.17 / v1.5.18 / v1.5.19 / v1.5.20 / v1.5.21 均无 tag**。
+**git tag 现状（2026-11-11 核对）**：`v1.5.14` 是 **annotated tag**（指向 commit `1aa4774`），`v1.5.15` / `v1.5.16` 是 **lightweight tag**（三种语义混用，历史遗留）；**v1.5.17–v1.5.21 均无 tag**；**v1.5.22（`1eb6255`）、v1.5.23（`632c38a`）、v1.5.24（`c37fb1f`）、v1.5.25（`d6a20a2`）是 2026-11-11 补建的 lightweight tag，三远端已推齐**。
 另外 **1.5.19 没有独立 commit**（`git log --all | grep 1.5.19` 为空）——它的代码被**并入 1.5.20 的 commit `2de3f46`** 才进仓库，
 **别再去找「1.5.19 的 commit」**，那是不存在的。（1.5.18 有自己的 commit `f115874`，但同样**没有 tag**；
 另注：该 commit 的**提交信息**里写的是「#70 上传需 im:resource:upload」，属旧笔误——git 历史不可改，
 真名订正见 CHANGELOG 坑 #70 / #71：真名是 `im:resource`。）
 
-**版本对齐说明（2026-11-11）**：npm 1.5.21 与源码仓 `c2cc1be` 逐字节一致（2026-11-11 实测：`npm pack dsh-aiyayi@1.5.21` 解包后与源码仓逐文件 SHA256 对照——`lib/feishu.js`、`lib/feishu-logic.js`、`package.json`、`CHANGELOG.md`、`README.md`、`test/feishu-trim.test.mjs` 六个文件全部 MATCH；装进 desktop profile 后 40/40 个文件与官方 tarball 完全相同）。此前 npm 1.5.20 与源码仓 `2c16bee` 亦逐字节一致（`lib/feishu-logic.js`/`lib/feishu.js` SHA256 与源码仓、线上运行副本三方相同）。线上运行目录此前停在 1.5.20，已按下方「本地生效」重装为 1.5.21 对齐版本号。
+**版本对齐说明（2026-11-11）**：npm **1.5.25** 与源码仓 `d6a20a2` 逐字节一致（装进 desktop profile 后实测 `lib/feishu.js`=3F596A8E…、`lib/feishu-logic.js`=AFF5CDAE… 与源码仓 SHA256 相同；1.5.22/1.5.23/1.5.24 各自装版时也做过同样的逐字节核对）。此前 npm 1.5.21 与源码仓 `c2cc1be` 逐字节一致（2026-11-11 实测：`npm pack dsh-aiyayi@1.5.21` 解包后与源码仓逐文件 SHA256 对照——六个文件全部 MATCH）。desktop profile 当前停在 **1.5.25**，等用户重启 DSH 做两条长连接的真连验收。
 
 **GitHub 推送口径（2026-11-09 更正：原"未推/无密钥"记载已过时）**：`~/.ssh/github_ed25519` 密钥已配好可用，github 走 SSH 推送正常（remote `github` = git@github.com:BayiHY/dsh-aiyayi.git）。HTTPS 才是被 SNI 阻断的死路，别试。注意 SSH 只能推已有仓库，**建新仓要走网页或可达网络下的 API**。
 
