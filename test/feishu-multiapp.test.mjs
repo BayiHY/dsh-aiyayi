@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  extractFeishuErrorCode,
   isOutOfChatError,
   migrateConfigFile,
   normalizeApps,
@@ -126,6 +127,26 @@ assert.equal(isOutOfChatError(new Error('plain boom')), false)
 assert.equal(isOutOfChatError({ cause: { response: { data: { code: 99991663 } } } }), false)
 assert.equal(isOutOfChatError(null), false)
 assert.equal(isOutOfChatError('230002-string'), false, 'bare string is not an error code object')
+
+// ── extractFeishuErrorCode：probeChatMembership 顶层 feishuCode 候选（1.5.25 钉死）──
+// 1.5.24 装版断言实测：probe 抛错把码放 error.feishuCode（feishu-logic.js:200），
+// 候选链不查它 → 230001 判定失效走回 probe-error → 伪造 chat 被照绑。
+{
+  const probeErr = new Error('成员探测失败: HTTP 400 code=230001 msg=invalid container_id')
+  probeErr.feishuCode = 230001
+  assert.equal(extractFeishuErrorCode(probeErr), 230001, '顶层 feishuCode 被挖出')
+  // 顶层 code 仍在（旧路径不回退）。
+  assert.equal(extractFeishuErrorCode({ code: 230002 }), 230002)
+  // 顶层 code 与 feishuCode 并存时 feishuCode 优先（probe 错误以它为准）。
+  const both = new Error('dual')
+  both.code = 99991663
+  both.feishuCode = 230002
+  assert.equal(extractFeishuErrorCode(both), 230002, 'feishuCode 优先于 code')
+  // isOutOfChatError 同样受益（probe 抛的 230002 也能判定）。
+  const p230002 = new Error('成员探测失败: code=230002')
+  p230002.feishuCode = 230002
+  assert.equal(isOutOfChatError(p230002), true, 'isOutOfChatError 认 feishuCode')
+}
 
 // ── 与旧测试共存检查：迁移后的 config 能被 normalizeApps 直接消化 ──
 const root3 = mkdtempSync(join(tmpdir(), 'feishu-roundtrip-test-'))

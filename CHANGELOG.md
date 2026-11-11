@@ -8,6 +8,15 @@
 
 ---
 
+## 1.5.25（2026-11-11 修复：extractFeishuErrorCode 补挖顶层 feishuCode——1.5.23 的 230001 判定真正生效）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- git：本次 commit（2026-11-11，阿依娅伊）1.5.25：装版静态断言连续抓出的第二处遗漏。
+- 现象：1.5.24 修好 import 后装版断言仍显示伪造 chatId 走 `ok:true + warning`（probe-error 分支），230001 判定没生效。
+- 根因：`probeChatMembership` 抛错时把飞书错误码放在 **`error.feishuCode`**（`feishu-logic.js` 抛错处），而 `extractFeishuErrorCode` 的候选链只挖 `cause.response.data.code`/`cause.data.code`/`cause.code`/`data.code`/顶层 `code`——不认 `feishuCode`，返回 null，`=== 230001` 恒 false。
+- 修法：候选链首位补 `typeof error?.feishuCode === 'number' ? error.feishuCode : undefined`（顶层 feishuCode 优先——probe 错误以它为准）；`test/feishu-multiapp.test.mjs` 钉死：顶层 feishuCode 挖出、feishuCode 优先于 code、isOutOfChatError 认 feishuCode 抛错。
+- 教训：**「函数级单测全过」≠「链路行为正确」**——extractFeishuErrorCode 的旧测试全是手工造的 SDK 形状错误，没人测 probe 自己抛的形状；两条修复（1.5.24 import、1.5.25 候选链）都是装版静态断言（mock ctx + 真实飞书 API）抓出来的。装版后断言应当作发版链路的固定环节。
+
 ## 1.5.24（2026-11-11 修复 1.5.23 遗漏 import + 禁用宿主 ask_user_question 选项组件）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
