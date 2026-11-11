@@ -4,12 +4,14 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.5.17** | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.5.17**（aae1527） | https://gitcode.com/BayiHY/dsh-aiyayi |
-| Gitee | **1.5.17**（aae1527） | https://gitee.com/BayiHY/dsh-aiyayi |
-| GitHub | **1.5.17**（aae1527，SSH 路） | https://github.com/BayiHY/dsh-aiyayi |
+| npm | **1.5.20** | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.5.20**（2c16bee） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.5.20**（2c16bee） | https://gitee.com/BayiHY/dsh-aiyayi |
+| GitHub | **1.5.20**（2c16bee，SSH 路） | https://github.com/BayiHY/dsh-aiyayi |
 
-最近发布：2026-11-10，1.5.17（坑 #68 修复：宿主 dsh-session append 重入保护——yieldHostPublication + safeDeliverToSession + effect .catch + 三处引导/接入注入分支改 safe 包装；lib/feishu.js +51/-5）。
+最近发布：2026-11-11，1.5.20（飞书正文改走 interactive 卡片 + lark_md——纯文本 `msg_type=text` 不渲染 markdown；含 1.5.19 附件收发与交互卡片、1.5.20 markdown 渲染，及 create-bot v6 权限集中化。npm 发布 2026-11-11T01:26:23Z，tarball sha1 `6f1df9fb81341d6e449ff0d303aa6c07e7f87c39`，39 个文件；lib/feishu-logic.js SHA256=47442E13…、lib/feishu.js=ADBA20BC…）。
+
+**版本对齐说明（2026-11-11）**：npm 1.5.20 与源码仓 `2c16bee` 逐字节一致（打包后校验 `lib/feishu-logic.js`/`lib/feishu.js` SHA256 与源码仓、线上运行副本三方相同）。线上运行目录此前因手工改文件停在 `package.json` 1.5.19（代码已等同 1.5.20），需按下方「本地生效」重装一次对齐版本号——**重装只改版本号，lib/ 字节不变**，可用 SHA256 复核。
 
 **GitHub 推送口径（2026-11-09 更正：原"未推/无密钥"记载已过时）**：`~/.ssh/github_ed25519` 密钥已配好可用，github 走 SSH 推送正常（remote `github` = git@github.com:BayiHY/dsh-aiyayi.git）。HTTPS 才是被 SNI 阻断的死路，别试。注意 SSH 只能推已有仓库，**建新仓要走网页或可达网络下的 API**。
 
@@ -39,6 +41,9 @@ git push gitcode main   # 凭证由 git credential manager 提供，无需把 to
    - **SSH 配置**（换机器照做）：① `ssh-keygen -t ed25519 -f ~/.ssh/github_ed25519 -N ""`；② 浏览器（需代理）把公钥加到 GitHub → Settings → SSH and GPG keys；③ `~/.ssh/config` 写 `Host github.com` → `User git` + `IdentityFile ~/.ssh/github_ed25519` + `IdentitiesOnly yes`；④ remote 用 SSH 形式。注意 OpenSSH 对 `~/.ssh/config` 强校验 Windows ACL（权限过宽直接拒用）：`icacls <config> "/inheritance:r" "/grant:r" "<用户>:F"` 修复。SSH 22 直连已验证可达（SSH 协议无 SNI，不受阻断影响）。
    - **备路** `ssh.github.com:443`：其 DNS 被污染（解析到假 IP），管理员 hosts 写 `140.82.112.36 ssh.github.com` + `ipconfig /flushdns` 后可用；`~/.ssh/config` 已备 `github-443` 别名，仅当 22 端口被封时启用。
 6. **本地生效**：在目标 profile 目录 `pnpm add dsh-aiyayi@<精确版本>`（装到 `profiles\<name>\node_modules\dsh-aiyayi`）。2026-11-08 起旧 bundle junction 已随 `bundle/` 归档废弃；升级后 JS 改动要重启 DSH 才生效（README 坑 #13：patchReload 不拾取）。
+   - **安装方式（2026-11-11 实测，装 1.5.20 时踩到）**：desktop profile 是 **pnpm hoisted workspace**（`pnpm-lock.yaml` lockfileVersion 9.0，`pnpm-workspace.yaml` 写 `nodeLinker: hoisted`），**不要用 `npm i` 装**，会破坏 pnpm 的链接结构。
+   - 若系统 `pnpm` / `dsh` 命令本身报 MODULE_NOT_FOUND（当时 DSH 的 shim 指向不存在的 `app.asar\node_modules\pnpm\bin\pnpm.mjs` 与 `lib\desktop-cli.js`），改用 DSH 界面里的插件管理升级；命令行兜底可用 `npx --yes pnpm@10 install`（先在该 profile 的 `package.json` 里把 `dependencies.dsh-aiyayi` 改成精确版本，再在 profile 目录执行），装完确认 `pnpm-lock.yaml` 的 lockfileVersion 仍是 9.0。
+   - 校验口径：升级后 `node_modules\dsh-aiyayi\lib\` 的 SHA256 应与官方 tarball 完全一致；若线上代码本就等于目标版，重装只改 `package.json` 的版本号，lib 字节不变。
 
 ## 快速部署（推荐）
 
