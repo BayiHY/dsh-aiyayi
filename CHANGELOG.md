@@ -8,6 +8,15 @@
 
 ---
 
+## 1.5.23（2026-11-11 修复：feishu_bind 对无效 chatId 的确定性拒绝——230001 与 230002 同判 not-member）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- git：本次 commit（2026-11-11，阿依娅伊）1.5.23：1.5.22 装版静态断言发现的边界修正。
+- 现象：用伪造 chatId（`oc_aaa…` 32 个 a）调 `feishu_bind`，归属探测返回的不是 230002（非成员）而是 **230001 invalid container_id**（chat 根本不存在）——探测代码把非 0/230002 的码一律当"探测故障"抛出，于是走了「探测基建故障→`ok:true + warning` 原样绑定」分支，把一个不存在的 chat 绑进了 mappings。
+- 根因：230001 与 230002 同为飞书的**确定性答案**（前者=chatId 无效/不存在，后者=合法 chat 但非成员），两者都意味着"绑了也没用"；只有网络/其他未知错误才是真正的探测故障，应保留 ok:true+warning 的可用性兜底。
+- 修法（`lib/feishu.js` `resolveChannelForChat`）：probe 抛错时经 `extractFeishuErrorCode` 挖出 feishuCode===230001 → 不计入探测故障（视同该 app 非成员证据）；全部 app 均为 230002 非成员或 230001 抛错且无其他错误 → `{ok:'not-member'}` → `feishu_bind` 返回 `ok:false` 确定拒绝（拒绝文案同时说明两种情形）。
+- 验证：装版后对伪造 chatId 实测返回 ok:false；对真实已绑定 chat 归属探测照常 ok:true+appId。
+
 ## 1.5.22（2026-11-11 多应用多长连接：双机器人各自收发，根因消灭 230002 错绑发送）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
