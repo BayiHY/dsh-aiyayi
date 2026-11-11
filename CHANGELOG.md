@@ -8,6 +8,14 @@
 
 ---
 
+## 1.5.24（2026-11-11 修复 1.5.23 遗漏 import + 禁用宿主 ask_user_question 选项组件）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- git：本次 commit（2026-11-11，阿依娅伊）1.5.24：装版静态断言抓到的运行时 ReferenceError 修复 + 李浩拍板的工具禁用。
+- **修：`lib/feishu.js` `resolveChannelForChat` 里 `extractFeishuErrorCode is not defined`**——1.5.23 的 230001 判定在 catch 块里调用了 `extractFeishuErrorCode`（定义在 `feishu-logic.js`），但忘了加进 import；任何 probe 抛错（含 230001/网络错）都会 ReferenceError。`node --check` 查不出运行时引用错误，multiapp 测试够不到这条 SDK+网络路径，是装版静态断言（伪造 chatId 实测）抓出来的。修法：import 列表补 `extractFeishuErrorCode`。
+- **禁用宿主工具 `ask_user_question`（选项组件）**：`cordis.patch.yml` 两处挂载（preset-aiyayi 约 :236-240、preset-aiyayi-worker 约 :361-365）加 `disabled: true`——李浩 2026-11-11 拍板「提问一律纯文本，别折腾组件」：该工具在飞书侧没有交互载体，他点不了会卡死对话。工具定义在本体 `@deepseek-ai/dsh-tool-ask-user`，禁用挂载即从模型侧消失。
+- **连带废弃（预期内，死代码不删）**：1.5.18 引入的「飞书点选作答」链路（`buildQuestionCard`/`onCardAction`/`registerQuestionAnswerer` 等，见 1.5.18 条目「修四（D）」）随宿主工具禁用不再被触发；`tryAnswerByText` 文字兜底仍在（问答语义未消失，只是不再发卡片）。启动不受影响（相关代码仅在收到卡片回调/问题请求时执行）。
+
 ## 1.5.23（2026-11-11 修复：feishu_bind 对无效 chatId 的确定性拒绝——230001 与 230002 同判 not-member）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）

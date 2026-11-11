@@ -235,6 +235,9 @@
                   agentPreset: aiyayi-retriever
           - id: tool-ask-user
             name: '@deepseek-ai/dsh-tool-ask-user'
+            # 1.5.24（李浩 2026-11-11 拍板）：提问一律纯文本，禁用选项组件——
+            # 飞书侧没有交互载体，点不了会卡死对话。
+            disabled: true
           - id: tool-schedule
             name: '@deepseek-ai/dsh-tool-schedule'
     # 阿依娅伊的小伙伴：她派活用的执行预设（蓝本=standard，去掉委派组——
@@ -357,6 +360,9 @@
                   tailChars: 1024
           - id: tool-ask-user
             name: '@deepseek-ai/dsh-tool-ask-user'
+            # 1.5.24（李浩 2026-11-11 拍板）：提问一律纯文本，禁用选项组件——
+            # 飞书侧没有交互载体，点不了会卡死对话。
+            disabled: true
           - id: tool-todo
             name: '@deepseek-ai/dsh-tool-todo'
             config:
