@@ -10,6 +10,42 @@
 
 ---
 
+## 1.5.28（2026-11-11 新功能：首次对话里的 PowerShell 版本体检；**本地开发版，未发布 npm、未打 tag、未装 profile**）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- git：本次 commit（2026-11-11，阿依娅伊）1.5.28：首次对话检测里加 PowerShell 版本检查，低于 7 建议用户升级；新增 31 个单测。
+- 需求（李浩 2026-11-11 原话）："首次对话检测里加上：如果当前用户是 windows 环境就检查 PowerShell 版本，如果低于 PowerShell 7 就建议用户自己可以协助升级 PowerShell，以便日后更好的协助用户。"
+- **挂点选择**：插件里没有名为"首次对话检测"的独立模块。实际承担这件事的是 `lib/presence.js` 的 `agent/pre-step`（`step===1`）注入器——它已经在做同一类事：新会话首轮检查"关闭思考建议"、记忆搬家待办、闹钟异常，"每个会话只提醒一次"的节拍全在这条钩子上，提示也统一走"往消息尾部追加一条 snapshot"的范式。把检测挂在这里，**不新增 ctx.on、不抢消息顺序**（与 L1276 原有注释同一条纪律）。
+  - 没选 `feishu.js` 的 `maybeGuideNewSession`：那是"飞书未绑定会话"的引导，跟平台体检无关，且挂了会把检测绑死在飞书通道上。
+  - 没选 `updates.js`：它做的是插件版本，且本需求要与 presence 的 `step===1` 节拍共用"只提一次"纪律。
+- 新增文件 `lib/pwsh-check.js`（零外部依赖，只用 `node:child_process` / `node:fs`）：
+  - `detectPwshVersion()`：跑 `pwsh -NoProfile -Command '$PSVersionTable.PSVersion.Major'`。**探 `pwsh` 不是 `powershell.exe`**（后者是系统自带 5.1，探它永远不会失败）。超时 `PROBE_TIMEOUT_MS=2500`（需求给的是 2~3 秒），超时 kill 子进程并按"未安装"降级；`ENOENT` → `status:'missing'`（= 只有 5.1，需要提示）；非零退出/输出解析不出来 → `major:null`，同样按旧版处理。**全路径不抛错**。
+  - `parsePwshMajor()`：逐行取第一处 1~2 位纯数字，容忍 CRLF/空白/噪音行；`7.4.1` 这种带小版本号的不硬认（返回 null）。
+  - `isPwshTooOld()`：`major >= 7` 才算够用；`null` 一律当旧（探不出来 = 没装）。
+  - `decidePwshNotice()`：纯函数决策（是否要探、是否要说、理由），单测直接打。
+  - `maybePwshNotice()`：pre-step 入口。状态缓存在 `pwsh.json`（与 `updates.json` 同目录同风格），`STATE_TTL_MS=7天` 过期重查——用来兜住"这期间用户自己装上了 pwsh"。**对话里最多等 `AWAIT_BUDGET_MS=1200`**，预算内没探完就这一轮先闭嘴、把结果接到后台落盘，下一轮/下个会话再说。
+  - `warmPwshProbe()`：`apply` 期预热（`void`、不 await、不抛），等第一个会话真来问时缓存多半已热，不占对话延迟——与 `updates.js` 开机预热 registry 同一个思路。
+- 只提一次：`notifiedAt` 落盘，提过就再也不提；装上新版（`major>=7`）连 `notifiedAt/notifiedMajor` 一起清掉——将来万一降级回 5.1 还能再提一次。缓存过期只触发重查，不代表要重新唠叨（说没说过由 `notifiedAt` 单独管）。
+- 提示文案：走系统提示注入，她读到后用自己口吻顺口提一句（与 💡 关闭思考建议同一范式）。刻意写成"顺口一提"而不是警告/报错，并**明确要求她只提这一次**，避免她自己反复念。
+- 平台：`process.platform !== 'win32'` 时 `status:'skip'`，**一次子进程都不起**（有单测断言 spawn 调用数为 0）。
+- 全量基线：`node --test "test/*.test.mjs"` → **130 项，127 过，3 挂**；挂的仍是 `alarm-inject` / `home-relocate` / `tools-surface`，与 1.5.21/1.5.22/1.5.27 记录的同一基线一致（磁盘类型探测与旧硬编码路径，环境相关，非本次引入）。
+- 测试 `test/pwsh-check.test.mjs`（31 项）：平台判断（非 win32 不起进程）、命令行形态（必须是 pwsh + `-NoProfile` + `windowsHide`）、版本解析（CRLF/噪音/带小版本号/三位数/空值）、`<7` 与 `≥7` 判定、ENOENT / 其他 error / 非零退出 / 不可解析 四种降级、超时（按时返回 + 真 kill 子进程 + spawn 同步抛）、只提示一次（第二次/换进程/重启后都不再提）、`≥7` 不提示、升级后清记录、7 天过期重查、缓存新鲜不重查、坏时间戳不永远认账、预算内卡住直接返回空串、坏 JSON 状态文件不炸、文案口径（不得出现"错误/失败/警告/必须/立即"）。
+- **⚠️ 本版不发**：按李浩 2026-11-11 指令，本 commit 只落代码 + 单测，**不发 npm publish、不打 tag、不装 profile**——当时正在验证微信通道，热重载/重装会打断它。发版时机另等指令。
+- **实现期新坑（坑 #74，本版实测）**：
+  - **坑 #74：测试里只设 `AIYAYI_HOME` 并不能隔离记忆根——真机上的 `location.json` 优先于环境变量。**
+    `lib/home.js` 的解析优先级是 **指路文件 > AIYAYI_HOME > 默认路径**（`resolveRoot()`，home.js:160-218）。一旦用户搬过家，`~/.dsh/aiyayi/location.json` 就存在，它会**直接压掉** `process.env.AIYAYI_HOME`——测试里写文件的路径函数（`pwshFile()` / `updatesFile()` / `presenceFile()` / `stateFile()`）于是全部指向**用户真实的记忆根**。
+    本版实测经过：先按 `presence-clock.test.mjs` 的老写法（只设 `AIYAYI_HOME`）跑单测，跑完发现真机 `D:\阿依娅伊\记忆\pwsh.json` 被创建，里面 `notifiedAt` 已被写成"提过了"——**等于把用户本该在首次对话看到的那唯一一次提示提前吃掉了**。污染源逐个排查（对 24 个测试文件挨个删掉状态文件后单跑、检查是否重建）只命中 `presence-clock.test.mjs` 一个。
+    正确写法（`home-relocate` / `tools-surface` / `feishu-accumulate` 早就在用）：**环境变量 + 指路文件双定向**
+    ```js
+    const home = mkdtempSync(join(tmpdir(), 'aiyayi-xxx-'))
+    process.env.AIYAYI_HOME = home
+    const homeLib = await import('../lib/home.js')
+    homeLib.__testing.setPointerPath(join(home, 'location.json')) // ← 这行才是关键
+    // 再兜一道：真落不到沙盘就当场判测试坏了，绝不静默写脏真机
+    if (!homeLib.pwshFile().startsWith(home)) throw new Error('测试沙盘失效，拒绝继续')
+    ```
+    **新增任何会读/写记忆根的测试，都必须上这两道。**（`test/pwsh-check.test.mjs` 与已补修的 `test/presence-clock.test.mjs` 都已按此改。）
+
 ## 1.5.27（2026-11-11 新功能：微信通道并入——iLink 长轮询，默认关闭）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）

@@ -1,6 +1,13 @@
 /**
  * presence 时钟自检：验证 [时间] 行真的被注入，且格式可用。
  * 只测注入与格式，不碰她的记忆文件（用 AIYAYI_HOME 指到临时目录）。
+ *
+ * 2026-11-11 补：**光设 AIYAYI_HOME 不够**。home.js 的解析优先级是
+ * 指路文件 > AIYAYI_HOME > 默认路径；真机装过插件、搬过家的话
+ * ~/.dsh/aiyayi/location.json 存在，它直接压掉环境变量——本测试就会写到
+ * 用户**真实的记忆根**里。当天实测：apply() 的 pwsh 体检预热在真机记忆根下
+ * 写出了 pwsh.json，等于把用户"该看到的一次性提示"提前用掉了。
+ * 所以必须像 home-relocate/tools-surface 那样，连指路文件一起定向到沙盘。
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -8,6 +15,14 @@ import { join } from 'node:path'
 
 const home = mkdtempSync(join(tmpdir(), 'aiyayi-clock-'))
 process.env.AIYAYI_HOME = home
+
+const homeLib = await import('../lib/home.js')
+homeLib.__testing.setPointerPath(join(home, 'location.json'))
+
+// 兜底：真落不到沙盘就当场判测试坏了，绝不静默写脏真机记忆根。
+if (!homeLib.pwshFile().startsWith(home)) {
+  throw new Error(`测试沙盘失效：pwshFile()=${homeLib.pwshFile()} 不在 ${home} 内`)
+}
 
 const { apply, name } = await import('../lib/presence.js')
 
