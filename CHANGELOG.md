@@ -2,11 +2,62 @@
 
 > **维护约定**：新版本发布时在顶部加条目。本文件由 README 正文拆出（2026-11-09 重构）：版本条目与踩坑记录原文照录，数字、时间、日期一律不改（量化保真是本插件的规矩）。版本事实以 npm registry 为准。
 >
-> **npm 发布一览（2026-11-11 核对 registry，`npm view dsh-aiyayi versions --json`）**：latest = **1.5.26**（2026-11-11 发布）。已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**、**1.5.21**、**1.5.22**、**1.5.23**、**1.5.24**、**1.5.25**、**1.5.26**；跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm（本地开发线：1.5.8–1.5.11 飞书桥接、1.5.12 思考纪律约束、1.5.13 内置技能同步+feishu-setup 骨架）；1.5.14 已发布（坑 #58–#67 修复）；1.5.15 已发布（扫码接入改造）；1.5.16 已发布（feishu-setup 技能脚本入包）；1.5.17 已发布（坑 #68 重入保护修复）；**1.5.18 / 1.5.19 也从未发布到 npm**（见下方 1.5.18 / 1.5.19 条目——它们的代码最终随 1.5.20 一起进 npm）；**1.5.20 已发布**（飞书正文改走 interactive 卡片 + lark_md，含 1.5.19 附件收发与问答卡片、1.5.20 markdown 渲染，以及 create-bot v6 权限集中化）；**1.5.21 已发布**（修飞书回复正文首尾空白行，坑 #72）；**1.5.22 已发布**（多应用多长连接改造+chat 归属机制，见下方 1.5.22 条目）；**1.5.23–1.5.25 已发布**（230001 边界/补 import/补 feishuCode 挖码三轮装版断言增量修复，见下方对应条目）；**1.5.26 已发布**（回发多文本段覆盖丢段修复，坑 #73，见下方 1.5.26 条目）。
+> **npm 发布一览（2026-11-11 核对 registry，`npm view dsh-aiyayi versions --json`）**：latest = **1.5.27**（2026-11-11 发布）。已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**、**1.5.21**、**1.5.22**、**1.5.23**、**1.5.24**、**1.5.25**、**1.5.26**、**1.5.27**；跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm（本地开发线：1.5.8–1.5.11 飞书桥接、1.5.12 思考纪律约束、1.5.13 内置技能同步+feishu-setup 骨架）；1.5.14 已发布（坑 #58–#67 修复）；1.5.15 已发布（扫码接入改造）；1.5.16 已发布（feishu-setup 技能脚本入包）；1.5.17 已发布（坑 #68 重入保护修复）；**1.5.18 / 1.5.19 也从未发布到 npm**（见下方 1.5.18 / 1.5.19 条目——它们的代码最终随 1.5.20 一起进 npm）；**1.5.20 已发布**（飞书正文改走 interactive 卡片 + lark_md，含 1.5.19 附件收发与问答卡片、1.5.20 markdown 渲染，以及 create-bot v6 权限集中化）；**1.5.21 已发布**（修飞书回复正文首尾空白行，坑 #72）；**1.5.22 已发布**（多应用多长连接改造+chat 归属机制，见下方 1.5.22 条目）；**1.5.23–1.5.25 已发布**（230001 边界/补 import/补 feishuCode 挖码三轮装版断言增量修复，见下方对应条目）；**1.5.26 已发布**（回发多文本段覆盖丢段修复，坑 #73，见下方 1.5.26 条目）；**1.5.27 已发布**（微信通道并入，默认关闭，见下方 1.5.27 条目）。
 >
 > **环境标识约定（2026-11-10 新增）**：写版本条目/坑条目时，**顺手记录当时的 智能体工具-智能体模式-模型供应商-模型**（如 **DSH-创造模式-loomy讯飞-GLM5.3FLASH**），写在条目内（紧跟 git 记录行、或坑条目首行），方便回溯该条目是在哪套智能体/模型环境下产出与验证的。
 
 ---
+
+---
+
+## 1.5.27（2026-11-11 新功能：微信通道并入——iLink 长轮询，默认关闭）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- git：本次 commit（2026-11-11，阿依娅伊）1.5.27：把已跑通的微信 iLink 协议探针并入插件（默认关闭），按 docs/经验-微信通道自研.md 4.9 迁移路线阶段 2–4 落地；新增 73 个单测。
+- 背景：`work/weixin-probe/`（零 npm 依赖探针，真实微信号验证过扫码登录/收消息/发消息三动作闭环，见同名经验文档第二节）此前只是脚本。本版把协议层搬进插件，实现"微信发消息 → 落到 DSH 会话 → 她回复 → 发回微信"的闭环能力。**装上不等于开启**：`weixin.enabled` 默认 `false`。
+- 新增文件：
+  - `lib/weixin.js` —— **薄壳**（cordis 入口，`name='aiyayi-weixin'`）。`enabled !== true` 时**一个模块都不 import**；启用后走 `import('./weixin/index.js')` 动态载入 + try/catch；生命周期挂 `ctx.effect`（dispose → abort → `await runtime.stop()`）。
+  - `lib/weixin/protocol.js` —— 纯函数协议层（零 IO）：端点常量、header 公式（`iLink-App-Id`/`iLink-App-ClientVersion`/`X-WECHAT-UIN`）、**uint64 精度保护 `parseWeixinJson`**、出站报文构造、分片、入站准入判定、错误码分类、脱敏。
+  - `lib/weixin/api.js` —— HTTP IO：`requestJson` 把**内部超时 controller 与外部 AbortSignal 合并**（官方 `combineAbortSignals` 同法），区分「外部 abort」与「客户端超时」。
+  - `lib/weixin/config.js` —— 配置归一化 + `credentialRef` 解析（`env:NAME` 或 weixin 目录内文件，**拒绝 ../ 穿越**）。
+  - `lib/weixin/accounts.js` —— 按账号分文件的状态存储（凭证 0600 / 游标 `.sync.json` / context-token `.context.json`）、**账号级文件锁（PID + 心跳，心跳过期的死锁可接管）**、出站流水 `outbound.jsonl`。
+  - `lib/weixin/poll.js` —— 长轮询循环：游标续传、`longpolling_timeout_ms` 收到即采纳、`-14` 走 `pauseUntil` 时间戳（**不 `await sleep(1h)`**）、连续 3 败退避 30s 否则 2s、客户端超时不算失败、`message_id` 二级幂等。
+  - `lib/weixin/send.js` —— 出站：context_token 有则带/**缺失照发但强制记 `withContextToken=false`**、分片逐条发、`ret=-3` 永久失败不重试、`ret=0` 不自动重试。
+  - `lib/weixin/login.js` / `lib/weixin/qr.js` —— 扫码登录状态机（可编程调用，need_verifycode 走回调）+ 二维码 PNG（零依赖，vendor 内联 qrcode-terminal 核心，MIT）。
+  - `lib/weixin/session.js` —— 会话建/投/查（建会话模板照 `lib/feishu.js`，但**不 import feishu.js**，两通道零耦合；坑 #59/#60/#61/#64/#65/#67/#68 的处理全部沿用）。
+  - `lib/weixin/index.js` —— 运行时编排：逐账号拿锁/读凭证 → `void pollLoop(...)`（**绝不 await**）→ 入站准入 → 建/绑会话 → 投递；回发 relay 监听 `session/event`，`turn/end` 单条回发（多文本段按 step 累积，坑 #73 同理）。
+  - `lib/weixin/vendor/QRCode/` —— qrcode-terminal@0.12.0 的 QR 核心（MIT，内联非 npm 安装），同目录 `package.json` 声明 CommonJS 作用域（**坑 6**：包根 `type=module`，不划作用域 `.js` 会被当 ESM 解析、`require` 全失效）。
+- **硬安全要求（今天炸启动的教训，逐条落实）**：
+  1. 微信模块**能失败而不影响宿主启动**：壳不顶层 import 实现；动态 import + try/catch；加载失败/初始化异常只 `warn` 并停用微信通道，`apply` 正常返回。飞书通道完全不受影响。
+  2. 功能**默认关闭**：`weixin.enabled` 默认 `false`（只有严格 `true` 才算开，字符串 `"true"`/`1` 都不算，防误开）。
+  3. **零 peer 依赖**：只用 `node:` 内置模块 + 自带 vendor；不 peer 依赖任何 `@deepseek-ai/*` 或第三方包。
+  4. **不碰飞书代码路径**：除新文件、`package.json`、`CHANGELOG.md` 外无改动；`lib/weixin/*` 无一处 import feishu 或 `@larksuiteoapi`（有单测断言）。
+- **allowlist 语义（刻意收紧，与官方不同）**：官方 2.4.8 的空白名单 = **放行所有 sender**（危险）。本版空白名单 = **只放行已被显式绑定的用户**（`bindings.json` / `config.bindings` 里有的），未绑定用户的陌生消息一律丢弃并记 `丢弃未授权消息 ... reason=unbound`；非空 allowlist 则只放行名单内。`weixin_status` 用 `allowlistMode: 'bound-only' | 'allowlist'` 明示当前语义。
+- **context_token 策略（跟随 2.2 的防御性结论，不跟随其猜测）**：有就带上，没有就照发并强制记 `withContextToken=false` + `contextTokenFp`（指纹，不落明文）。**不做硬门禁**（实测缺 token 也能送达 5-D/6-E1..3），**不做补发队列**（基于已被推翻的假设）。
+- **错误分类（4.7）**：`ret=-3` 永久失败不重试（后续分片也不再试）；`-14` 暂停该账号 `staleTokenPauseMs`（默认 1h）后**用原 token 重试**（保留凭证）；`ret=0` **不自动重试**（重复消息比丢一条更糟，需靠 `outbound.jsonl` 流水事后排查）。
+- **配置形态**（`weixin` 段，也可放记忆根 `weixin/config.json`，patch 优先）：
+  ```yaml
+  enabled: false            # 必须显式 true 才跑长轮询
+  accounts: []              # [{accountId: "xxxx@im.bot", credentialRef: "accounts/xxx-im-bot.json"}]
+  allowlist: []             # 空 = 只放行已绑定用户
+  route: { mode: per-user, sessionPrefix: weixin- }
+  poll: { longPollTimeoutMs: 35000, staleTokenPauseMs: 3600000 }
+  send: { chunkLimit: 1800 }
+  ```
+  微信没有 appId 概念，身份 = `accountId`（即 `ilink_bot_id`）；**token 绝不进配置文件**，走 `credentialRef`（`env:NAME` 或 weixin 目录下的文件）。
+- **新增工具**：`weixin_status`（通道状态/账号/绑定/最近出站流水/allowlist 模式，不含 token 明文）、`weixin_login`（发起扫码登录，返回 PNG 路径 + 扫码 URL；**二维码只有 121 秒寿命**，要立刻扫）。两者只在 `enabled=true` 时注册；未就绪时返回可执行的开启指引而不是报错。
+- 测试（`node --test "test/weixin-*.test.mjs"` → **73 项全过**，5 个文件）：
+  - `weixin-protocol.test.mjs`：19 位 `message_id` 无损（实测值 `7526219523554115848`）并反证裸 `JSON.parse` 会改值；`buildClientVersion('1.0.11')===65547` 自校验；出站报文 `message_type=2`/`state=2`/`from_user_id=''`/单 item；`decideInbound` 空白名单拒绝陌生 sender、放行已绑定；错误码分类；脱敏不漏明文。
+  - `weixin-config-store.test.mjs`：默认 `enabled=false`（含 `"true"`/`1` 反例）；`credentialRef` 穿越拒绝；原子写；游标断点续传；context_token 按发送者；账号锁互斥 + 死锁接管。
+  - `weixin-poll.test.mjs`：**abort 能在 1s 量级打断在飞的长轮询**；`-14` 进暂停且暂停期可被 abort 打断（不死睡 1h）；客户端超时不算失败；`longpolling_timeout_ms` 采纳；游标落盘与续传；`message_id` 二级幂等；3 连败退避 30s 且可被 abort 打断。
+  - `weixin-send.test.mjs`：带/不带 context_token 两条路径与 `withContextToken` 记录；`ret=-3` 不重试且后续分片停发；`ret=0` 不自动重试；分片逐条发；**token/context_token 明文不进日志与流水**。
+  - `weixin-isolation.test.mjs`（**炸启动防护的真实回归**）：在临时包里把实现换成 7 种坏法（语法错误/顶层 throw/缺导出/同步抛/异步 reject/依赖解析失败/空文件）+ 整个文件缺失，逐一验证「壳仍可 import、`apply` 不抛、只 warn、dispose 不抛、工具仍注册」；并断言壳与协议层不 import feishu、不 import 任何外部包。
+  - 仓库全量基线不变：24 个测试文件里仍是 3 个已知失败（`alarm-inject` 硬编码不存在的旧路径 `G:\阿依娅依\output\...`；`home-relocate`/`tools-surface` 磁盘类型探测断言），与本次改动无关，1.5.21/1.5.22 条目已记录同一基线。
+- **实现期新坑（本版实测，已同步进 docs/经验-微信通道自研.md 第五节）**：
+  - **坑 9：`setTimeout` 被 `unref()` 会让轮询循环静默停摆。** 退避 sleep 里的定时器一旦 unref，事件循环没有其它 ref 工作时定时器被丢弃，`await sleep()` 永不返回、循环永久挂起，**且没有任何日志**。是单测（业务错误退避那条）抓出来的。结论：轮询循环里的 sleep **一律不 unref**，退出靠 abort 打断。
+  - **坑 10：`ctx.get('tools')` 在部分宿主上对未提供的服务直接抛，不是返回 null。** 只写 `if (!tools?.register)` 会漏掉抛错分支。两路都要接。同理，`ctx.effect` 的回调不是 `apply` 里同步执行的——单测里必须显式触发 effect 才能验证异步启动路径（否则会误以为"没日志"是实现问题）。
+  - **坑 11：账号 ID 归一化要用官方的 `[^A-Za-z0-9_-] → -`。** 只替换 `@` 而保留 `.` 会得到 `d4f...-im.bot`，与官方 `-im-bot` 布局不一致（探针/store 文件名跟着漂）。本版按官方口径：`@` 和 `.` 都变 `-`，顺带挡住 `../` 路径成分。
+- 发布后状态：1.5.27 已发布；profile 装版后 **`weixin.enabled` 仍保持 `false`**（先确认宿主启动/热重载日志无异常、飞书通道照常，再由李浩显式开启）。
 
 ## 1.5.26（2026-11-11 修复：回发攒批覆盖式 set——多文本段 turn 丢失前段文本，坑 #73）
 

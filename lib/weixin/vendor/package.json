@@ -1,0 +1,6 @@
+{
+  "name": "dsh-aiyayi-weixin-vendor",
+  "private": true,
+  "type": "commonjs",
+  "description": "Vendored qrcode-terminal@0.12.0 QRCode core (MIT, Kazuhiko Arase / soldair). Local scope only: the package root declares type=module, so this nested package.json forces CommonJS for these files (see 经验-微信通道自研.md 坑 6). No npm install involved, no peer dependency."
+}

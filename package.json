@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.5.26",
+  "version": "1.5.27",
   "license": "MIT",
   "author": "巴依浩爷 (bayihy)",
   "keywords": [
@@ -25,6 +25,7 @@
     "./presence-worker": "./lib/presence-worker.js",
     "./feishu": "./lib/feishu.js",
     "./feishu-logic": "./lib/feishu-logic.js",
+    "./weixin": "./lib/weixin.js",
     "./icon": "./icon.svg"
   },
   "files": [
@@ -39,6 +40,8 @@
     "lib/presence-worker.js",
     "lib/feishu.js",
     "lib/feishu-logic.js",
+    "lib/weixin.js",
+    "lib/weixin/",
     "skills",
     "!skills/feishu-setup/scripts/logs",
     "cordis.patch.yml",
