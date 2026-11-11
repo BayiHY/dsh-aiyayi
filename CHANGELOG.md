@@ -13,7 +13,7 @@
 ## 1.5.28（2026-11-11 新功能：首次对话里的 PowerShell 版本体检；**本地开发版，未发布 npm、未打 tag、未装 profile**）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
-- git：本次 commit（2026-11-11，阿依娅伊）1.5.28：首次对话检测里加 PowerShell 版本检查，低于 7 建议用户升级；新增 31 个单测。
+- git：本次 commit（2026-11-11，阿依娅伊）1.5.28：首次对话检测里加 PowerShell 版本检查，低于 7 建议用户升级；新增 31 个单测。（后追加一个 commit：ENOENT 时补绝对路径兜底探测，修掉"PATH 未刷新导致已装 pwsh 误报为没装"的坑 #75，单测扩到 38 项。）
 - 需求（李浩 2026-11-11 原话）："首次对话检测里加上：如果当前用户是 windows 环境就检查 PowerShell 版本，如果低于 PowerShell 7 就建议用户自己可以协助升级 PowerShell，以便日后更好的协助用户。"
 - **挂点选择**：插件里没有名为"首次对话检测"的独立模块。实际承担这件事的是 `lib/presence.js` 的 `agent/pre-step`（`step===1`）注入器——它已经在做同一类事：新会话首轮检查"关闭思考建议"、记忆搬家待办、闹钟异常，"每个会话只提醒一次"的节拍全在这条钩子上，提示也统一走"往消息尾部追加一条 snapshot"的范式。把检测挂在这里，**不新增 ctx.on、不抢消息顺序**（与 L1276 原有注释同一条纪律）。
   - 没选 `feishu.js` 的 `maybeGuideNewSession`：那是"飞书未绑定会话"的引导，跟平台体检无关，且挂了会把检测绑死在飞书通道上。
@@ -28,8 +28,10 @@
 - 只提一次：`notifiedAt` 落盘，提过就再也不提；装上新版（`major>=7`）连 `notifiedAt/notifiedMajor` 一起清掉——将来万一降级回 5.1 还能再提一次。缓存过期只触发重查，不代表要重新唠叨（说没说过由 `notifiedAt` 单独管）。
 - 提示文案：走系统提示注入，她读到后用自己口吻顺口提一句（与 💡 关闭思考建议同一范式）。刻意写成"顺口一提"而不是警告/报错，并**明确要求她只提这一次**，避免她自己反复念。
 - 平台：`process.platform !== 'win32'` 时 `status:'skip'`，**一次子进程都不起**（有单测断言 spawn 调用数为 0）。
-- 全量基线：`node --test "test/*.test.mjs"` → **130 项，127 过，3 挂**；挂的仍是 `alarm-inject` / `home-relocate` / `tools-surface`，与 1.5.21/1.5.22/1.5.27 记录的同一基线一致（磁盘类型探测与旧硬编码路径，环境相关，非本次引入）。
-- 测试 `test/pwsh-check.test.mjs`（31 项）：平台判断（非 win32 不起进程）、命令行形态（必须是 pwsh + `-NoProfile` + `windowsHide`）、版本解析（CRLF/噪音/带小版本号/三位数/空值）、`<7` 与 `≥7` 判定、ENOENT / 其他 error / 非零退出 / 不可解析 四种降级、超时（按时返回 + 真 kill 子进程 + spawn 同步抛）、只提示一次（第二次/换进程/重启后都不再提）、`≥7` 不提示、升级后清记录、7 天过期重查、缓存新鲜不重查、坏时间戳不永远认账、预算内卡住直接返回空串、坏 JSON 状态文件不炸、文案口径（不得出现"错误/失败/警告/必须/立即"）。
+- **绝对路径兜底（追加 commit，坑 #75 的修复）**：`detectPwshVersion()` 先 `probeCommand('pwsh')`；**只在 ENOENT 时**再按已知安装位置挨个试绝对路径（`pwshPathCandidates()`：`%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`、`%ProgramFiles%\PowerShell\7\pwsh.exe`、`7-preview`、`%ProgramFiles(x86)%\PowerShell\7`、以及 `%ProgramFiles%\WindowsApps\Microsoft.PowerShell_*` 包目录扫描），命中 `status:'ok', via:<路径>`。只对 ENOENT 触发（毫秒级）；超时/其他 error **不触发**（否则每条候选都等满 2.5s 把对话拖死）。
+  - **关键教训（坑 #75 的核心）：绝不能拿 `existsSync` 预过滤候选路径。** WindowsApps 的 0 字节 app execution alias（本机 pwsh 7.7.0 就是这种）`statSync` 抛 `EACCES` → `existsSync` 返回 `false`，但那其实是**有效可跑**的 pwsh（`accessSync` 通过、`spawn` 正常返回 7）。预过滤会把真 alias 当不存在跳过，兜底就白做了。正确做法是**直接对每条候选 spawn**，不存在的那条自然 ENOENT（毫秒级），靠 ENOENT 过滤而不是靠 existsSync。
+- 全量基线：`node --test "test/*.test.mjs"` → **150 项，142 过，8 挂**。其中 3 挂仍是 `alarm-inject` / `home-relocate` / `tools-surface`（与 1.5.21/1.5.22/1.5.27 同一基线，环境相关非本次引入）；**另外 5 挂全部在 `test/weixin-bind.test.mjs` / weixin 相关**，是 facf96ef 那边未提交的 weixin_bind 在途改动（本会话开始前已存在），**与本次 PowerShell 改动无关、也不是本会话引入**。PowerShell 相关单测 38 项全过。
+- 测试 `test/pwsh-check.test.mjs`（38 项）：平台判断（非 win32 不起进程）、命令行形态（必须是 pwsh + `-NoProfile` + `windowsHide`）、版本解析（CRLF/噪音/带小版本号/三位数/空值）、`<7` 与 `≥7` 判定、ENOENT / 其他 error / 非零退出 / 不可解析 四种降级、超时（按时返回 + 真 kill 子进程 + spawn 同步抛）、只提示一次（第二次/换进程/重启后都不再提）、`≥7` 不提示、升级后清记录、7 天过期重查、缓存新鲜不重查、坏时间戳不永远认账、预算内卡住直接返回空串、坏 JSON 状态文件不炸、文案口径（不得出现"错误/失败/警告/必须/立即"）、**兜底**（候选清单覆盖已知安装位置、PATH 没有但绝对路径存在→ok、候选不存在也会被 probe 靠 ENOENT 过滤、全没命中仍 missing、noFallback 关掉兜底、只在 ENOENT 触发超时/error 不触发）。
 - **⚠️ 本版不发**：按李浩 2026-11-11 指令，本 commit 只落代码 + 单测，**不发 npm publish、不打 tag、不装 profile**——当时正在验证微信通道，热重载/重装会打断它。发版时机另等指令。
 - **实现期新坑（坑 #74，本版实测）**：
   - **坑 #74：测试里只设 `AIYAYI_HOME` 并不能隔离记忆根——真机上的 `location.json` 优先于环境变量。**
@@ -45,6 +47,11 @@
     if (!homeLib.pwshFile().startsWith(home)) throw new Error('测试沙盘失效，拒绝继续')
     ```
     **新增任何会读/写记忆根的测试，都必须上这两道。**（`test/pwsh-check.test.mjs` 与已补修的 `test/presence-clock.test.mjs` 都已按此改。）
+  - **坑 #75（追加 commit，本版实测）：PATH 里找不到 `pwsh` ≠ 没装——DSH 宿主进程继承的是旧环境变量。**
+    场景：用户刚用 winget 装好 PowerShell 7.7.0（msstore 源，入口 `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`，一个 0 字节的 app execution alias）。winget 同时修了 HKCU `Path`（原来丢了 `%LOCALAPPDATA%\Microsoft\WindowsApps` 这一项），但 **DSH 宿主进程是装之前启动的**，继承的是修复前的旧环境变量 → 进程里 `spawn('pwsh')` 必然 ENOENT。只看 PATH 就会把"已装好"误判成"没装"，给用户弹一条**错误的**升级提示。
+    修复：ENOENT 时补「绝对路径兜底探测」——挨个试 `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`、`%ProgramFiles%\PowerShell\7(或 7-preview)\pwsh.exe`、`%ProgramFiles(x86)%\PowerShell\7\pwsh.exe`、以及 `%ProgramFiles%\WindowsApps\Microsoft.PowerShell_*` 包目录，命中即视为已装。真机实测兜底后返回 `{status:'ok', major:7, via:'C:\Users\lihaorj\AppData\Local\Microsoft\WindowsApps\pwsh.exe'}`，不再误报。
+    **派生坑（必须记住）：WindowsApps 的 0 字节 app execution alias 上，`node:fs` 的 `statSync` 抛 `EACCES`、`existsSync` 返回 `false`，但 `accessSync` 通过、`spawn` 能正常跑起来。** 所以兜底候选**绝不能用 `existsSync` 预过滤**（会把真 alias 当不存在跳过）；直接对每条候选 spawn，不存在那条自然 ENOENT（毫秒级）过滤掉。
+    **排查过程**：父级（另一会话）18:26-18:28 装了 pwsh 7.7.0，反馈我的第一版会误报；我实测确认绝对路径存在（Size=0）、`& 它 -NoProfile -Command '$PSVersionTable.PSVersion.Major'` 返回 7、自己进程 `$env:PATH` 无 WindowsApps、`Get-Command pwsh` 空 → 坐实是 PATH 未刷新的 ENOENT 误报。真机 sanity 脚本（临时文件，跑完即删）验证兜底命中。
 
 ## 1.5.27（2026-11-11 新功能：微信通道并入——iLink 长轮询，默认关闭）
 

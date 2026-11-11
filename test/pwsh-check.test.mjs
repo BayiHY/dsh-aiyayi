@@ -48,6 +48,7 @@ const {
   isPwshTooOld,
   maybePwshNotice,
   parsePwshMajor,
+  pwshPathCandidates,
   readPwshState,
   warmPwshProbe,
   writePwshState,
@@ -182,7 +183,9 @@ test('判旧：< 7 是旧，≥ 7 够用，null 一律当旧', () => {
 test('降级：ENOENT = 机器上只有 5.1 → status:missing，major:null，不抛', async (t) => {
   t.after(reset)
   reset()
-  const result = await detectPwshVersion({ platform: 'win32', spawnImpl: fakeSpawn({ errorCode: 'ENOENT' }) })
+  // 用空 env 隔离：避免兜底候选扫到本机真实存在的 WindowsApps pwsh.exe
+  // （那是已经装好的 7.7.0，会让 detail 变成 fallback tried 而非裸 ENOENT）。
+  const result = await detectPwshVersion({ platform: 'win32', env: {}, spawnImpl: fakeSpawn({ errorCode: 'ENOENT' }) })
   assert.equal(result.status, 'missing')
   assert.equal(result.major, null)
   assert.equal(result.detail, 'ENOENT')
@@ -194,6 +197,148 @@ test('降级：其他 error 也是 major:null，不抛', async (t) => {
   const result = await detectPwshVersion({ platform: 'win32', spawnImpl: fakeSpawn({ errorCode: 'EACCES' }) })
   assert.equal(result.status, 'error')
   assert.equal(result.major, null)
+})
+
+/* ------------------------------------------------------------------ *
+ * 3b. 绝对路径兜底（坑 #75：PATH 没刷新但 pwsh 已装）
+ * ------------------------------------------------------------------ */
+
+test('候选清单：pwshPathCandidates 覆盖已知安装位置', () => {
+  const env = {
+    LOCALAPPDATA: 'C:\\Users\\test\\AppData\\Local',
+    ProgramFiles: 'C:\\Program Files',
+    'ProgramFiles(x86)': 'C:\\Program Files (x86)',
+  }
+  const list = pwshPathCandidates(env)
+  assert.ok(list.includes('C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe'), '应含 msstore alias')
+  assert.ok(list.includes('C:\\Program Files\\PowerShell\\7\\pwsh.exe'), '应含传统 MSI 正式版')
+  assert.ok(list.includes('C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe'), '应含预览版')
+  assert.ok(list.includes('C:\\Program Files (x86)\\PowerShell\\7\\pwsh.exe'), '应含 32 位重定向目录')
+  // 去重：重复项不该出现两次。
+  assert.equal(new Set(list).size, list.length)
+})
+
+test('候选清单：环境变量缺失时跳过对应项，不崩', () => {
+  const list = pwshPathCandidates({})
+  assert.ok(Array.isArray(list))
+})
+
+test('兜底：PATH 里没有但 WindowsApps 绝对路径存在 → 视为已装（status ok）', async (t) => {
+  t.after(reset)
+  reset()
+  // 第一个 spawn('pwsh') 报 ENOENT（PATH 里没有），随后兜底命中有真实文件存在的候选。
+  // 用空 env + 注入一个真实存在的候选文件来模拟"PATH 没有但绝对路径在盘上"。
+  const fakeExe = join(home, 'fake-pwsh.exe')
+  writeFileSync(fakeExe, 'placeholder', 'utf8')
+  // 按 command 区分：'pwsh' 走 PATH 报 ENOENT，fakeExe 兜底成功返回 7。
+  const calls = []
+  const spawnImpl = (command, args, options) => {
+    calls.push({ command, args, options })
+    const child = new EventEmitter()
+    child.stdout = new EventEmitter()
+    child.stderr = new EventEmitter()
+    child.kill = () => { child.killed = true }
+    child.killed = false
+    setImmediate(() => {
+      if (command === 'pwsh') {
+        const error = new Error('spawn ENOENT')
+        error.code = 'ENOENT'
+        child.emit('error', error)
+      } else {
+        child.stdout.emit('data', '7\r\n')
+        child.emit('close', 0)
+      }
+    })
+    return child
+  }
+  spawnImpl.calls = calls
+  const result = await detectPwshVersion({
+    platform: 'win32',
+    env: {}, // 空 env → 默认候选为空
+    candidates: [fakeExe],
+    spawnImpl,
+  })
+  assert.equal(result.status, 'ok')
+  assert.equal(result.major, 7)
+  assert.equal(result.via, fakeExe, '应标注走的是兜底绝对路径')
+  assert.ok(calls.length >= 2, '先试 pwsh 再试绝对路径')
+  assert.equal(calls[0].command, 'pwsh')
+  assert.equal(calls[1].command, fakeExe, '第二个探测应是兜底绝对路径')
+})
+
+test('兜底：候选路径不存在也会被 probe（ENOENT 自然过滤，不用 existsSync 预筛）', async (t) => {
+  t.after(reset)
+  reset()
+  // 关键：**不存在的候选也要试**。坑 #75——WindowsApps 的 0 字节 alias 上
+  // statSync 抛 EACCES → existsSync 返回 false，但那其实是有用的 pwsh。若用
+  // existsSync 预筛会把真 alias 跳过，兜底失效。所以对每个候选都直接 probe。
+  const spawnImpl = fakeSpawn({ errorCode: 'ENOENT' })
+  const result = await detectPwshVersion({
+    platform: 'win32',
+    env: {},
+    candidates: [join(home, 'no-such-dir', 'pwsh.exe')], // 不存在
+    spawnImpl,
+  })
+  assert.equal(result.status, 'missing')
+  assert.equal(spawnImpl.calls.length, 2, 'pwsh + 候选都被 probe；候选 ENOENT 自然过滤')
+})
+
+test('兜底：全都没命中 → 仍保持 missing，detail 记录试过哪些', async (t) => {
+  t.after(reset)
+  reset()
+  const exe = join(home, 'existing-but-bad.exe')
+  writeFileSync(exe, 'placeholder', 'utf8')
+  const spawnImpl = fakeSpawn({ errorCode: 'ENOENT' })
+  const result = await detectPwshVersion({
+    platform: 'win32',
+    env: {},
+    candidates: [exe], // 存在但 probe 仍 ENOENT
+    spawnImpl,
+  })
+  assert.equal(result.status, 'missing')
+  assert.ok(result.detail.includes('fallback tried'), `detail 应记录兜底路径，实际: ${result.detail}`)
+  assert.ok(result.detail.includes(exe))
+})
+
+test('兜底：noFallback=true 关掉兜底，命中也不认', async (t) => {
+  t.after(reset)
+  reset()
+  const exe = join(home, 'real-exists.exe')
+  writeFileSync(exe, 'placeholder', 'utf8')
+  const spawnImpl = fakeSpawn({ errorCode: 'ENOENT' })
+  const result = await detectPwshVersion({
+    platform: 'win32',
+    env: {},
+    candidates: [exe],
+    noFallback: true,
+    spawnImpl,
+  })
+  assert.equal(result.status, 'missing')
+  assert.equal(spawnImpl.calls.length, 1, 'noFallback 时不该碰候选')
+})
+
+test('兜底：只在 ENOENT 时触发，超时/报错不触发', async (t) => {
+  t.after(reset)
+  reset()
+  const exe = join(home, 'exists-for-timeout.exe')
+  writeFileSync(exe, 'placeholder', 'utf8')
+  // 超时场景：第一条命令卡住 → timeout，不该走兜底。
+  const timeoutImpl = fakeSpawn({ never: true })
+  const timeoutResult = await detectPwshVersion({
+    platform: 'win32', env: {}, candidates: [exe],
+    spawnImpl: timeoutImpl, timeoutMs: 60,
+  })
+  assert.equal(timeoutResult.status, 'timeout')
+  assert.equal(timeoutImpl.calls.length, 1, 'timeout 不该去试兜底（否则每条候选都等满超时）')
+
+  // 非 ENOENT 的 error 场景：EACCES → error，不该走兜底。
+  const errImpl = fakeSpawn({ errorCode: 'EACCES' })
+  const errResult = await detectPwshVersion({
+    platform: 'win32', env: {}, candidates: [exe],
+    spawnImpl: errImpl,
+  })
+  assert.equal(errResult.status, 'error')
+  assert.equal(errImpl.calls.length, 1, '非 ENOENT 的 error 不该去试兜底')
 })
 
 test('降级：非零退出 = major:null', async (t) => {
