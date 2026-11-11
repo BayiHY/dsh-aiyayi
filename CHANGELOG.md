@@ -8,6 +8,11 @@
 
 ---
 
+## 未发布（待发版，2026-11-11：署名修正——版权与 author 归位，README 记实现者）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- 署名修正：LICENSE 版权行与 package.json author 归位巴依浩爷（bayihy），README 增实现者署名（阿依娅伊 2026-11-11 决定，李浩授权）。
+
 ## 1.5.25（2026-11-11 修复：extractFeishuErrorCode 补挖顶层 feishuCode——1.5.23 的 230001 判定真正生效）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）

@@ -118,5 +118,6 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
 ## 署名与许可
 
 - 作者与维护：**巴依浩爷（bayihy）**
+- 实现：阿依娅伊（aiyayi，DSH 智能体）
 - 仓库：[GitCode](https://gitcode.com/BayiHY/dsh-aiyayi) · [Gitee](https://gitee.com/BayiHY/dsh-aiyayi) · [GitHub](https://github.com/BayiHY/dsh-aiyayi)
 - 许可：MIT（[LICENSE](./LICENSE)）
