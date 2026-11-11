@@ -2,13 +2,36 @@
 
 > **维护约定**：新版本发布时在顶部加条目。本文件由 README 正文拆出（2026-11-09 重构）：版本条目与踩坑记录原文照录，数字、时间、日期一律不改（量化保真是本插件的规矩）。版本事实以 npm registry 为准。
 >
-> **npm 发布一览（2026-11-11 核对 registry，`npm view dsh-aiyayi versions --json`）**：latest = **1.5.28**（2026-11-11 发布；**初版记为 1.5.27，1.5.29 发版时据 registry 更正**）。已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**、**1.5.21**、**1.5.22**、**1.5.23**、**1.5.24**、**1.5.25**、**1.5.26**、**1.5.27**、**1.5.28**；跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm（本地开发线：1.5.8–1.5.11 飞书桥接、1.5.12 思考纪律约束、1.5.13 内置技能同步+feishu-setup 骨架）；1.5.14 已发布（坑 #58–#67 修复）；1.5.15 已发布（扫码接入改造）；1.5.16 已发布（feishu-setup 技能脚本入包）；1.5.17 已发布（坑 #68 重入保护修复）；**1.5.18 / 1.5.19 也从未发布到 npm**（见下方 1.5.18 / 1.5.19 条目——它们的代码最终随 1.5.20 一起进 npm）；**1.5.20 已发布**（飞书正文改走 interactive 卡片 + lark_md，含 1.5.19 附件收发与问答卡片、1.5.20 markdown 渲染，以及 create-bot v6 权限集中化）；**1.5.21 已发布**（修飞书回复正文首尾空白行，坑 #72）；**1.5.22 已发布**（多应用多长连接改造+chat 归属机制，见下方 1.5.22 条目）；**1.5.23–1.5.25 已发布**（230001 边界/补 import/补 feishuCode 挖码三轮装版断言增量修复，见下方对应条目）；**1.5.26 已发布**（回发多文本段覆盖丢段修复，坑 #73，见下方 1.5.26 条目）；**1.5.27 已发布**（微信通道并入，默认关闭，见下方 1.5.27 条目）；**1.5.28 已发布**（PowerShell 版本体检 + 微信通道收尾，见下方 1.5.28 条目）；**1.5.29 为本次发版版**（发布包排除 `test/` + 测试残留空目录清理，见下方 1.5.29 条目；其 npm 发布状态以 registry 为准）。
+> **npm 发布一览（2026-11-11 核对 registry，`npm view dsh-aiyayi versions --json`）**：latest = **1.5.28**（2026-11-11 发布；**初版记为 1.5.27，1.5.29 发版时据 registry 更正**）。已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**、**1.5.21**、**1.5.22**、**1.5.23**、**1.5.24**、**1.5.25**、**1.5.26**、**1.5.27**、**1.5.28**；跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm（本地开发线：1.5.8–1.5.11 飞书桥接、1.5.12 思考纪律约束、1.5.13 内置技能同步+feishu-setup 骨架）；1.5.14 已发布（坑 #58–#67 修复）；1.5.15 已发布（扫码接入改造）；1.5.16 已发布（feishu-setup 技能脚本入包）；1.5.17 已发布（坑 #68 重入保护修复）；**1.5.18 / 1.5.19 也从未发布到 npm**（见下方 1.5.18 / 1.5.19 条目——它们的代码最终随 1.5.20 一起进 npm）；**1.5.20 已发布**（飞书正文改走 interactive 卡片 + lark_md，含 1.5.19 附件收发与问答卡片、1.5.20 markdown 渲染，以及 create-bot v6 权限集中化）；**1.5.21 已发布**（修飞书回复正文首尾空白行，坑 #72）；**1.5.22 已发布**（多应用多长连接改造+chat 归属机制，见下方 1.5.22 条目）；**1.5.23–1.5.25 已发布**（230001 边界/补 import/补 feishuCode 挖码三轮装版断言增量修复，见下方对应条目）；**1.5.26 已发布**（回发多文本段覆盖丢段修复，坑 #73，见下方 1.5.26 条目）；**1.5.27 已发布**（微信通道并入，默认关闭，见下方 1.5.27 条目）；**1.5.28 已发布**（PowerShell 版本体检 + 微信通道收尾，见下方 1.5.28 条目）；**1.5.29 已发布**（发布包排除 `test/` + 测试残留空目录清理，见下方 1.5.29 条目）；**1.5.30 已发布**（create-bot 注释改用 `<记忆根>` 占位，见下方 1.5.30 条目）；**1.5.31 为本次发版版**（PowerShell 体检 `major:null` 根因修复：探测链补上 powershell.exe 一级，见下方 1.5.31 条目；其 npm 发布状态以 registry 为准）。
 >
 > **环境标识约定（2026-11-10 新增）**：写版本条目/坑条目时，**顺手记录当时的 智能体工具-智能体模式-模型供应商-模型**（如 **DSH-创造模式-loomy讯飞-GLM5.3FLASH**），写在条目内（紧跟 git 记录行、或坑条目首行），方便回溯该条目是在哪套智能体/模型环境下产出与验证的。
 
 ---
 
 ---
+
+## 1.5.31（2026-11-11 修复：PowerShell 体检拿到 `major: null`——探测链补上 powershell.exe 一级）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- 症状：1.5.28 的首次对话 PowerShell 体检，落盘的 `pwsh.json` 里 `major` 恒为 `null`。提醒虽然提过一次，但底层判断是空的——`isPwshTooOld(null)` 恒为 true，碰巧说出了对的话，却拿不出"当前到底是几"。
+- **根因（实测确认，不是 BOM、不是编码、不是字段名对不上）**：探测链只到 `pwsh` 为止。本机（`C:\Users\LH`，2026-11-11 实测）根本没装 PowerShell 7——`where pwsh` 零命中、`Get-AppxPackage '*PowerShell*'` 空、`winget list --name PowerShell` 无匹配、`C:\Program Files\PowerShell` 不存在、`%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe` 也不存在（全盘常见位置递归搜 `pwsh.exe` 零命中），机器上只有系统自带的 `powershell.exe` 5.1（`$PSVersionTable.PSVersion = 5.1.19041.6456`，PSEdition=Desktop）。探测链在 pwsh 全落空后就直接收工给了 `null`，**从来没退回去问 5.1 是几**。于是 `null` 这个值把"没装 pwsh"和"装了但解析失败"糊成一团，谁也分不出来。
+  - 顺带记一笔：1.5.28 头注释里写的"探 `powershell.exe` 永远不会失败，所以不探"是**错的设计前提**——正因为 5.1 几乎必然存在，才应该探它拿真实版本号。
+- 修法（改动全部落在 `lib/pwsh-check.js`，不涉其他模块）：
+  1. **探测链加一级（核心修复）**：`pwsh`（走 PATH）→ 已知绝对路径候选 → **`powershell.exe`**。拿到 5 就正常报"5 是旧版、该提示升级"，**不再算探测失败**；只有三级全落空才是真的没探到东西。
+  2. **绝对路径候选用 `lstat` 预筛**（派生自 dsh-ops 的 `isSpawnableFile`，MIT，文件头已注明出处）：`existsSync`/`statSync` 在 Windows Store 的 0 字节 app execution alias 上会因 EACCES 吞异常返回 false，把"已装好"误判成"没装"。`lstat` 认符号链接；且**只筛确认的 ENOENT/ENOTDIR**，EACCES 等一律放行交给 `spawn` 判——真正作数的永远是 spawn 的结果。
+  3. **候选清单补全**：`ProgramFiles\PowerShell\7` → `7-preview` → `ProgramFiles(x86)` 同路径 → `%LOCALAPPDATA%\Microsoft\WindowsApps` → scoop（`~\scoop\shims`、`~\scoop\apps\powershell\current`）→ chocolatey（`%ProgramData%\chocolatey\bin`）。
+  4. **失败不静默**：状态文件升到 `version: 2`，除 `major` 外新增 `status` / `source`（`pwsh` / `pwsh-path` / `windows-powershell` / `none`）/ `detail` 三个字段；解析不出来时 `detail` 带上输出原文前 120 字，不再只给一个 `unparsable`。
+  5. **编码兜底**：探针命令前置 `try{[Console]::OutputEncoding=[Text.Encoding]::UTF8}catch{}`；stdout 改成**保留原始字节**（原先 `String(chunk)` 先按 UTF-8 猜一遍就丢了信息），由新增的 `decodeOutput()` 按 BOM 判 UTF-8/UTF-16LE/UTF-16BE、无 BOM 走 UTF-8、解出替换字符再退 GBK。
+  6. **解析放宽**：整行匹配不上时，整串是个版本号（`7.4.1`）也认主版本；但噪音里的数字不认（`WARNING: 12 things` → `null`），宁可降级也不瞎猜出一个 ≥7 把提醒吞掉。
+  7. **向后兼容**：读到 1.5.30 及以前那种没有 `version` 字段的旧 `pwsh.json`（正是本 bug 留下的 `major: null` 旧账）时判为"没查过"重测，但把 `notifiedAt` 保住——升级后不会把已经说过的话再唠叨一遍。
+- 验证（2026-11-11 本机实跑，不是推演）：
+  - 全量单测 `node --test "test/*.test.mjs"`：**156 项全通过 / 0 失败**（`pwsh-check.test.mjs` 由 38 项扩到 44 项）。
+  - 真机端到端（import 真模块、起真子进程）：本机只有 5.1 的环境下 `detectPwshVersion()` 返回 `{status:'ok', major:5, via:'powershell.exe', source:'windows-powershell'}`，落盘 `major: 5`——**`major` 从 `null` 变成真实的 5**；`maybePwshNotice()` 680ms 内给出升级提示。
+  - 失败降级：pwsh 与 powershell.exe 都不存在时 `{status:'missing', major:null, source:'none', detail:'pwsh: ENOENT; …; powershell.exe: ENOENT'}`，不抛错、不崩；非零退出时 `detail` 带退出码。
+  - 编码怪异：UTF-8 BOM + 中文噪音行 → 7；UTF-16LE（带 BOM）→ 5；`7.4.1` → 7；纯噪音 → `null`（老实降级）。
+  - 向后兼容：读 1.5.30 旧格式缓存 → 判为需要重测、`notifiedAt` 保留；重测后拿到 `major: 5`。
+- 版本号三处对齐：`package.json` version、本条目、profile `cordis.patch.yml` 里 `aiyayi-feishu` 的 `config.reloadTag` 均为 `1.5.31`（reloadTag 语义同 1.5.29 条目：只要求值变了以触发 HMR，不参与部署值比对）。
+- 不含功能性改动的部分：微信通道（1.5.27 并入、1.5.28 收尾，默认关闭）本版**一行未动**。
 
 ## 1.5.30（2026-11-11 修复：create-bot 脚本注释里的实测出处改用 <记忆根> 占位）
 

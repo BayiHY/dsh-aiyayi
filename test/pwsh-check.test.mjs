@@ -162,8 +162,45 @@ test('解析：解析不出来给 null（不瞎猜成 0 或 7）', () => {
   assert.equal(parsePwshMajor(null), null)
   assert.equal(parsePwshMajor(undefined), null)
   assert.equal(parsePwshMajor('not a version'), null)
-  assert.equal(parsePwshMajor('7.4.1'), null, '带小版本号不是 Major 那一行，不硬认')
   assert.equal(parsePwshMajor('123'), null, '三位数不是主版本')
+  // 1.5.31 放宽：整串是个版本号（5.1 / 7.4.1）就认主版本，别再 null。
+  assert.equal(parsePwshMajor('7.4.1'), 7, '整串版本号能认（1.5.31）')
+  assert.equal(parsePwshMajor('5.1'), 5)
+  assert.equal(parsePwshMajor('10.0.0'), 10)
+  // 但噪音里的数字不认：宁可 null 走降级，也不要瞎猜出 ≥7 把提醒吞掉。
+  assert.equal(parsePwshMajor('WARNING: 12 things happened'), null, '噪音数字不认')
+})
+
+/* ------------------------------------------------------------------ *
+ * 2b. 编码 / BOM（1.5.31：major:null 的编码嫌疑，逐条钉死）
+ * ------------------------------------------------------------------ */
+
+test('编码：UTF-8 BOM / UTF-16LE BOM / UTF-16BE BOM 都能解析', () => {
+  const utf8Bom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('7\r\n', 'utf8')])
+  assert.equal(parsePwshMajor(utf8Bom), 7, 'UTF-8 BOM')
+
+  const utf16le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('5\r\n', 'utf16le')])
+  assert.equal(parsePwshMajor(utf16le), 5, 'UTF-16LE BOM')
+
+  const beBody = Buffer.from('7\r\n', 'utf16le')
+  for (let i = 0; i + 1 < beBody.length; i += 2) {
+    const t = beBody[i]
+    beBody[i] = beBody[i + 1]
+    beBody[i + 1] = t
+  }
+  const utf16be = Buffer.concat([Buffer.from([0xfe, 0xff]), beBody])
+  assert.equal(parsePwshMajor(utf16be), 7, 'UTF-16BE BOM')
+})
+
+test('编码：BOM 后面跟着中文噪音也不影响取版本号', () => {
+  const raw = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('警告：控制台编码已切换\r\n6\r\n', 'utf8')])
+  assert.equal(parsePwshMajor(raw), 6)
+})
+
+test('编码：Buffer 与字符串两种输入结果一致', () => {
+  assert.equal(parsePwshMajor(Buffer.from('7\r\n', 'utf8')), 7)
+  assert.equal(parsePwshMajor('7\r\n'), 7)
+  assert.equal(parsePwshMajor(Buffer.alloc(0)), null, '空 Buffer 不崩')
 })
 
 test('判旧：< 7 是旧，≥ 7 够用，null 一律当旧', () => {
@@ -180,15 +217,101 @@ test('判旧：< 7 是旧，≥ 7 够用，null 一律当旧', () => {
  * 3. 超时 / ENOENT / 其他失败的降级
  * ------------------------------------------------------------------ */
 
-test('降级：ENOENT = 机器上只有 5.1 → status:missing，major:null，不抛', async (t) => {
+test('降级：pwsh 和 5.1 都找不到 → status:missing，major:null，不抛', async (t) => {
   t.after(reset)
   reset()
-  // 用空 env 隔离：避免兜底候选扫到本机真实存在的 WindowsApps pwsh.exe
-  // （那是已经装好的 7.7.0，会让 detail 变成 fallback tried 而非裸 ENOENT）。
-  const result = await detectPwshVersion({ platform: 'win32', env: {}, spawnImpl: fakeSpawn({ errorCode: 'ENOENT' }) })
+  // 1.5.31 起探测链最后一级是 powershell.exe，这里连它一起模拟成找不到，
+  // 才是真正的"这台机器一个 PowerShell 都没有"。
+  const result = await detectPwshVersion({
+    platform: 'win32',
+    env: {},
+    spawnImpl: fakeSpawn({ errorCode: 'ENOENT' }),
+  })
   assert.equal(result.status, 'missing')
   assert.equal(result.major, null)
-  assert.equal(result.detail, 'ENOENT')
+  assert.equal(result.source, 'none')
+  assert.ok(result.detail.includes('pwsh'), `detail 应记下 pwsh 的失败原因，实际: ${result.detail}`)
+  assert.ok(result.detail.includes('powershell.exe'), 'detail 应记下 5.1 的失败原因')
+})
+
+test('**本机真实场景**：只有 5.1、没有 pwsh → major:5（不再 null，1.5.31 核心修复）', async (t) => {
+  t.after(reset)
+  reset()
+  // 复现本机：pwsh(PATH) ENOENT、所有绝对路径候选 ENOENT、powershell.exe 返回 5。
+  const calls = []
+  const spawnImpl = (command, args, options) => {
+    calls.push({ command, args, options })
+    const child = new EventEmitter()
+    child.stdout = new EventEmitter()
+    child.stderr = new EventEmitter()
+    child.kill = () => {
+      child.killed = true
+    }
+    child.killed = false
+    setImmediate(() => {
+      if (command === 'powershell.exe') {
+        child.stdout.emit('data', Buffer.from('5\r\n', 'utf8'))
+        child.emit('close', 0)
+        return
+      }
+      const error = new Error('spawn ENOENT')
+      error.code = 'ENOENT'
+      child.emit('error', error)
+    })
+    return child
+  }
+  spawnImpl.calls = calls
+
+  const result = await detectPwshVersion({ platform: 'win32', env: {}, candidates: [], spawnImpl })
+  assert.equal(result.status, 'ok', '拿到 5 是"探到了"，不是"探测失败"')
+  assert.equal(result.major, 5, '必须拿到真实主版本号 5，而不是 null')
+  assert.equal(result.source, 'windows-powershell')
+  assert.equal(result.via, 'powershell.exe')
+  assert.equal(isPwshTooOld(result.major), true, '5 < 7，要提示升级')
+
+  // 落盘后 major 必须是 5，且带上 status/source/detail 便于排障。
+  const text = await maybePwshNotice({ platform: 'win32', env: {}, candidates: [], spawnImpl: (c, a, o) => {
+    const child = new EventEmitter()
+    child.stdout = new EventEmitter()
+    child.stderr = new EventEmitter()
+    child.kill = () => {}
+    setImmediate(() => {
+      if (c === 'powershell.exe') {
+        child.stdout.emit('data', Buffer.from('5\r\n', 'utf8'))
+        child.emit('close', 0)
+        return
+      }
+      const error = new Error('spawn ENOENT')
+      error.code = 'ENOENT'
+      child.emit('error', error)
+    })
+    return child
+  } })
+  assert.equal(text, PWSH_TIP, '应给出升级提示，且文案说的是 5.1')
+  const state = readPwshState()
+  assert.equal(state.major, 5, '落盘的 major 必须是 5')
+  assert.equal(state.source, 'windows-powershell')
+  assert.ok(state.notifiedAt, '应记下提过了')
+})
+
+test('顺序：pwsh 在，就不必再问 powershell.exe', async (t) => {
+  t.after(reset)
+  reset()
+  const spawnImpl = fakeSpawn({ stdout: '7' })
+  const result = await detectPwshVersion({ platform: 'win32', spawnImpl })
+  assert.equal(result.major, 7)
+  assert.equal(result.source, 'pwsh')
+  assert.equal(spawnImpl.calls.length, 1, 'pwsh 一命中就收工，不多起进程')
+})
+
+test('顺序：noLegacy=true 关掉 5.1 那一级（单测对照）', async (t) => {
+  t.after(reset)
+  reset()
+  const spawnImpl = fakeSpawn({ errorCode: 'ENOENT' })
+  const result = await detectPwshVersion({ platform: 'win32', env: {}, noFallback: true, noLegacy: true, spawnImpl })
+  assert.equal(result.status, 'missing')
+  assert.equal(result.major, null)
+  assert.equal(spawnImpl.calls.length, 1, '关掉兜底和 5.1 后只该试 pwsh 一条')
 })
 
 test('降级：其他 error 也是 major:null，不抛', async (t) => {
@@ -266,12 +389,13 @@ test('兜底：PATH 里没有但 WindowsApps 绝对路径存在 → 视为已装
   assert.equal(calls[1].command, fakeExe, '第二个探测应是兜底绝对路径')
 })
 
-test('兜底：候选路径不存在也会被 probe（ENOENT 自然过滤，不用 existsSync 预筛）', async (t) => {
+test('兜底：候选路径明显不存在时用 lstat 预筛省掉进程（1.5.31）', async (t) => {
   t.after(reset)
   reset()
-  // 关键：**不存在的候选也要试**。坑 #75——WindowsApps 的 0 字节 alias 上
-  // statSync 抛 EACCES → existsSync 返回 false，但那其实是有用的 pwsh。若用
-  // existsSync 预筛会把真 alias 跳过，兜底失效。所以对每个候选都直接 probe。
+  // 关键：**可能是 alias 的候选必须试**。坑 #75——WindowsApps 的 0 字节 alias 上
+  // statSync 抛 EACCES → existsSync 返回 false，但那其实是有用的 pwsh。1.5.31 的
+  // isSpawnableFile 用 lstat 且"看不透就放行"，只有确认 ENOENT/ENOTDIR 才筛掉。
+  // 这里给的是一条确实不存在的路径 → 预筛掉，不必为它起进程等 ENOENT。
   const spawnImpl = fakeSpawn({ errorCode: 'ENOENT' })
   const result = await detectPwshVersion({
     platform: 'win32',
@@ -280,7 +404,10 @@ test('兜底：候选路径不存在也会被 probe（ENOENT 自然过滤，不�
     spawnImpl,
   })
   assert.equal(result.status, 'missing')
-  assert.equal(spawnImpl.calls.length, 2, 'pwsh + 候选都被 probe；候选 ENOENT 自然过滤')
+  assert.equal(spawnImpl.calls.length, 2, 'pwsh + powershell.exe；不存在的候选被 lstat 筛掉')
+  assert.equal(spawnImpl.calls[0].command, 'pwsh')
+  assert.equal(spawnImpl.calls[1].command, 'powershell.exe', '第二条应是 5.1 那一级')
+  assert.ok(result.detail.includes('no-such-dir'), 'detail 仍记录试过哪些候选')
 })
 
 test('兜底：全都没命中 → 仍保持 missing，detail 记录试过哪些', async (t) => {
@@ -300,7 +427,7 @@ test('兜底：全都没命中 → 仍保持 missing，detail 记录试过哪些
   assert.ok(result.detail.includes(exe))
 })
 
-test('兜底：noFallback=true 关掉兜底，命中也不认', async (t) => {
+test('兜底：noFallback=true 关掉绝对路径兜底，但 5.1 那级仍在（1.5.31）', async (t) => {
   t.after(reset)
   reset()
   const exe = join(home, 'real-exists.exe')
@@ -314,15 +441,16 @@ test('兜底：noFallback=true 关掉兜底，命中也不认', async (t) => {
     spawnImpl,
   })
   assert.equal(result.status, 'missing')
-  assert.equal(spawnImpl.calls.length, 1, 'noFallback 时不该碰候选')
+  assert.equal(spawnImpl.calls.length, 2, 'noFallback 不碰候选，但 pwsh + powershell.exe 两条照走')
+  assert.ok(!spawnImpl.calls.some((c) => c.command === exe), '不该 probe 候选')
 })
 
-test('兜底：只在 ENOENT 时触发，超时/报错不触发', async (t) => {
+test('兜底：只在 ENOENT 时触发候选，超时/报错不触发候选', async (t) => {
   t.after(reset)
   reset()
   const exe = join(home, 'exists-for-timeout.exe')
   writeFileSync(exe, 'placeholder', 'utf8')
-  // 超时场景：第一条命令卡住 → timeout，不该走兜底。
+  // 超时场景：第一条命令卡住 → 直接 timeout，不该走候选兜底，也不该再问 5.1。
   const timeoutImpl = fakeSpawn({ never: true })
   const timeoutResult = await detectPwshVersion({
     platform: 'win32', env: {}, candidates: [exe],
@@ -331,14 +459,16 @@ test('兜底：只在 ENOENT 时触发，超时/报错不触发', async (t) => {
   assert.equal(timeoutResult.status, 'timeout')
   assert.equal(timeoutImpl.calls.length, 1, 'timeout 不该去试兜底（否则每条候选都等满超时）')
 
-  // 非 ENOENT 的 error 场景：EACCES → error，不该走兜底。
+  // 非 ENOENT 的 error：EACCES → 不该试候选；但 5.1 那级仍会问
+  // （pwsh 存在却跑不通时，5.1 的版本号依然是有用信息）。
   const errImpl = fakeSpawn({ errorCode: 'EACCES' })
   const errResult = await detectPwshVersion({
     platform: 'win32', env: {}, candidates: [exe],
     spawnImpl: errImpl,
   })
   assert.equal(errResult.status, 'error')
-  assert.equal(errImpl.calls.length, 1, '非 ENOENT 的 error 不该去试兜底')
+  assert.equal(errImpl.calls.length, 2, 'pwsh + powershell.exe，不碰候选')
+  assert.ok(!errImpl.calls.some((c) => c.command === exe), '非 ENOENT 的 error 不该试候选')
 })
 
 test('降级：非零退出 = major:null', async (t) => {
