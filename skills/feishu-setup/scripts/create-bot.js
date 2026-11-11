@@ -10,7 +10,7 @@
  * 1) 权限清单集中成一处常量 DEFAULT_SCOPES（原先是 PERMS 内联默认值，散落且不好加）。
  * 2) 新增必需权限 im:resource（后台真实标识；「获取与上传图片或文件资源」）。
  *    背景：插件发图片/文件时飞书返回 400 code=99991672，缺的就是这条（CHANGELOG 坑 #70，
- *    实测报告 F:\阿依娅伊\记忆\feishu\workspaces\...\feishu-scope-grant\报告-权限申请.md）。
+ *    实测报告 <记忆根>/feishu/workspaces/.../feishu-scope-grant/报告-权限申请.md）。
  *    ⚠ 后台**不存在** im:resource:upload 这个独立 scope（搜 0 条），im:resource 就是它的等价形态；
  *    脚本用 SCOPE_ALIASES 把 im:resource:upload 归一化成 im:resource 并打日志，避免配权限时找不到 id 直接崩。
  * 3) 新增事件/回调常量：DEFAULT_EVENTS 与 DEFAULT_CALLBACKS，事件名做别名归一化
@@ -149,7 +149,7 @@ const EVENT_ALIASES = {
 /**
  * 默认回调（注意：回调 ≠ 事件，配在「事件与回调 → 回调配置」tab，订阅方式同样走长连接）。
  * card.action.trigger = 卡片回传交互：用户点卡片按钮时推送。
- * 实锤依据：F:\阿依娅伊\记忆\feishu\workspaces\...\feishu-card-callback\报告-回调配置实测.md
+ * 实锤依据：<记忆根>/feishu/workspaces/.../feishu-card-callback/报告-回调配置实测.md
  *   - 后台事件弹窗里搜 card / card.action / trigger 均为 0 条 → 它不是事件；
  *   - 回调 tab 里「添加回调」先灰，必须先配「订阅方式=使用长连接接收回调」并保存才点亮；
  *   - card.action.trigger_v1（旧版）勾选框禁用，只能选新版。
