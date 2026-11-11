@@ -17,9 +17,9 @@
 //   - 记忆根/指路文件全定向沙盘（AIYAYI_HOME + setOverride + setPointerPath），
 //     绝不碰真机；归属缓存（chat-owners.json）预写命中，回发不走真网络探测。
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = resolve(fileURLToPath(new URL('.', import.meta.url)))
@@ -31,8 +31,17 @@ process.env.AIYAYI_FEISHU_MARKDOWN = 'text'
 
 // ── stub 两个顶层依赖（落 repoRoot/node_modules，gitignored；已存在则不覆盖）──
 globalThis.__larkStubSends = []
+const stubDirs = [] // 收尾要删的桩目录（含空的父包域目录逐个往上收，只删空目录）
+/** 只删空目录：非空（他人包/残留文件）一律不动，返回是否已不存在。 */
+const removeDirIfEmpty = (dir) => {
+  try {
+    if (existsSync(dir) && readdirSync(dir).length === 0) rmdirSync(dir)
+  } catch {}
+  return !existsSync(dir)
+}
 const ensureStub = (dir, name, code) => {
   mkdirSync(dir, { recursive: true })
+  stubDirs.push(dir)
   const pkg = join(dir, 'package.json')
   const idx = join(dir, 'index.js')
   if (!existsSync(pkg)) {
@@ -203,6 +212,18 @@ try {
     try {
       if (existsSync(f)) rmSync(f, { force: true })
     } catch {}
+  }
+  // 坑（1.5.28）：只删桩文件会把造出来的空目录留在插件 node_modules 里
+  // （@deepseek-ai/dsh-llm、@larksuiteoapi/node-sdk 及其父包域目录），
+  // 遮蔽宿主供给的同名包 → 线上 feishu 入口 Cannot find package。
+  // 这里连目录一起删：自桩目录逐级向上，只删**空**目录，遇到非空立刻停（不碰别人的包）。
+  for (const dir of stubDirs) {
+    let cur = dir
+    while (cur.startsWith(join(repoRoot, 'node_modules')) && removeDirIfEmpty(cur)) {
+      const parent = dirname(cur)
+      if (parent === repoRoot) break // 不删插件自身的 node_modules 之上的任何东西
+      cur = parent
+    }
   }
   // 解除测试注入（进程即将退出，但保持整洁）。
   homeTesting.setOverride(undefined)

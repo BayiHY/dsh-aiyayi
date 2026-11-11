@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.5.28",
+  "version": "1.5.29",
   "license": "MIT",
   "author": "巴依浩爷 (bayihy)",
   "keywords": [
@@ -48,8 +48,9 @@
     "!skills/feishu-setup/scripts/logs",
     "cordis.patch.yml",
     "icon.svg",
+    "README.md",
     "CHANGELOG.md",
-    "test/"
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18"
