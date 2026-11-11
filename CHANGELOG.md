@@ -2,7 +2,7 @@
 
 > **维护约定**：新版本发布时在顶部加条目。本文件由 README 正文拆出（2026-11-09 重构）：版本条目与踩坑记录原文照录，数字、时间、日期一律不改（量化保真是本插件的规矩）。版本事实以 npm registry 为准。
 >
-> **npm 发布一览（2026-11-10 核对 registry）**：latest = **1.5.17**（2026-11-10 发布）。已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**；跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm（本地开发线：1.5.8–1.5.11 飞书桥接、1.5.12 思考纪律约束、1.5.13 内置技能同步+feishu-setup 骨架）；1.5.14 已发布（坑 #58–#67 修复）；1.5.15 已发布（扫码接入改造）；1.5.16 已发布（feishu-setup 技能脚本入包）；1.5.17 已发布（坑 #68 重入保护修复）。
+> **npm 发布一览（2026-11-11 核对 registry，`npm view dsh-aiyayi versions --json`）**：latest = **1.5.20**（2026-11-11 发布）。已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**；跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm（本地开发线：1.5.8–1.5.11 飞书桥接、1.5.12 思考纪律约束、1.5.13 内置技能同步+feishu-setup 骨架）；1.5.14 已发布（坑 #58–#67 修复）；1.5.15 已发布（扫码接入改造）；1.5.16 已发布（feishu-setup 技能脚本入包）；1.5.17 已发布（坑 #68 重入保护修复）；**1.5.18 / 1.5.19 也从未发布到 npm**（见下方 1.5.18 / 1.5.19 条目——它们的代码最终随 1.5.20 一起进 npm）；**1.5.20 已发布**（飞书正文改走 interactive 卡片 + lark_md，含 1.5.19 附件收发与问答卡片、1.5.20 markdown 渲染，以及 create-bot v6 权限集中化）。
 >
 > **环境标识约定（2026-11-10 新增）**：写版本条目/坑条目时，**顺手记录当时的 智能体工具-智能体模式-模型供应商-模型**（如 **DSH-创造模式-loomy讯飞-GLM5.3FLASH**），写在条目内（紧跟 git 记录行、或坑条目首行），方便回溯该条目是在哪套智能体/模型环境下产出与验证的。
 
@@ -53,10 +53,14 @@
   `CARD_CONTENT_LIMIT` 可调大，但飞书卡片 JSON 上限 30KB 且 CJK 转义后膨胀，建议不超过 6000；
   lark_md 实际渲染与预期不符（中）——加粗/链接/列表/代码块确定支持，`•` 作列表符是保险选择，最坏退化成普通行不会报错；
   占位符 `\u0000`（极低）——正常正文不会有 NUL，万一模型输出含 NUL 会还原成空串。
-- 测试（83 项断言全过）：`test-md.mjs`（50 项：转换规则逐条、代码块保护、表格对齐、CJK 宽度、边界空/null/纯文本、
-  分片上限/拼回/围栏成对/单行硬切、卡片结构、开关矩阵）；`test-send.mjs`（33 项：正常卡片发送、`replyTo` 只挂首片、
+- 测试（**83 项断言在 1.5.20 部署包内跑通，但这两个测试文件未进 git 仓，仓库里复现不了**）：
+  `test-md.mjs`（50 项：转换规则逐条、代码块保护、表格对齐、CJK 宽度、边界空/null/纯文本、
+  分片上限/拼回/围栏成对/单行硬切、卡片结构、开关矩阵）与 `test-send.mjs`（33 项：正常卡片发送、`replyTo` 只挂首片、
   卡片全失败降级、第 N 片失败只补剩余、双失败抛异常、空文本不发、`sendReplyWithAttachments` 端到端走卡片、开关回退、
-  附件+卡片组合、卡片失败不影响附件、超长正文端到端）。自测期间抓到并修掉一个真 bug：卡片降级文本后 `textSent` 仍为 false
+  附件+卡片组合、卡片失败不影响附件、超长正文端到端）——**这两个文件只存在于 1.5.20 部署包，未入 git**
+  （`git ls-tree -r HEAD -- test/` 只有 **16 个文件**，不含这两个）。
+  **仓库内可复现的只有这 16 个测试文件**，其中与本次改动直接相关的是 `test/feishu-attachment.test.mjs` 与
+  `test/feishu-image-download.test.mjs`（见下条「回填回归」）。自测期间抓到并修掉一个真 bug：卡片降级文本后 `textSent` 仍为 false
   （旧判断只看 `sent>0`），已改为 `r.fallback === 'text' || r.sent > 0`。
 - 回填回归（本次入仓后实测，16/16 测试文件全过）：`test/feishu-image-download.test.mjs` exit 0；
   `test/feishu-attachment.test.mjs` 在默认卡片模式 exit 0，**设 `AIYAYI_FEISHU_MARKDOWN=text` 后同样 exit 0 全通过**
@@ -68,12 +72,74 @@
 
 ---
 
+## create-bot v6（2026-11-11 技能脚本：权限集中化 + 回调直调 + publish 子命令）
+
+> **本条目不属于任何 npm 版本号**。create-bot.js 位于 `skills/feishu-setup/scripts/`，是**内置技能脚本**，不是插件本体代码；
+> 它随 npm 包一起分发（因此 1.5.20 的 tarball 里含 v6），但**没有自己的版本号**，也不随插件版本号发布——
+> 单独成 commit **2c16bee**（2026-11-11，阿依娅伊），与 1.5.20 的插件改动（commit `2de3f46`）**互不依赖、互不相干**。
+> 故本节不写成 `## 1.5.x` 形式，避免以后有人找「1.5.21 / 1.5.22」里的它。
+
+- 环境：DSH-执行智能体（娅伊派出的 DeepSeek Harness 子会话，模型名未确证）
+- git：独立 commit **`2c16bee`**（2026-11-11，阿依娅伊）create-bot v6：权限集中化 + 回调直调 + publish 子命令
+  ——修 im:resource 真名与 CDP 提前关连接
+- 涉及文件：`skills/feishu-setup/scripts/create-bot.js`（+1201 行 / -77 行，82219 字节，
+  SHA256 `9CD149A114DC7772780DBF4677A090EAEE8AA01A1AB8CCB305847129D5F1C2C8`，`node --check` 通过）、
+  `skills/feishu-setup/scripts/package.json`（新增，`{"type":"commonjs"}`）、
+  `.gitignore`（补 `*.bak-*`）
+- 背景：v5 在 2026-11-10 实跑打通「建应用 → 配权限 → 配事件 → 建版本 → 发布」全链路；v6 在 v5 基础上做
+  **「权限/事件/回调集中化 + 幂等 + 日志 + 增量补权限 + 对外动作加确认」**。改动**只碰技能脚本**，插件本体零改动。
+- 改动 1：**权限清单集中成一处常量 `DEFAULT_SCOPES`**（原先散在 `PERMS` 内联默认值里，好加不好审）。
+  新增必需权限 **`im:resource`**（后台真实标识「获取与上传图片或文件资源」，免审）——
+  背景是插件发图片/文件时飞书回 `400 code=99991672`，缺的就是这条（坑 #70 的实锤后续）。
+- 改动 2：**`SCOPE_ALIASES` 别名归一化**。实锤（2026-11-11 报告-权限申请.md）：后台搜 **`im:resource:upload` 为 0 条**，
+  唯一等价形态就是 **`im:resource`**（关联 API = 上传图片 + 上传文件）。保留别名 `im:resource:upload` → `im:resource`、
+  `im:resource:read` → `im:resource`，让「工单写法 / 旧文档写法」直接粘进来也能跑；
+  命中别名时打 WARN 日志（`权限别名归一化: im:resource:upload → im:resource（后台无 im:resource:upload 这个独立 scope）`），
+  **不至于在 scope 目录里找不到 id 直接崩**。详见坑 #71。
+- 改动 3：**新增事件/回调常量 `DEFAULT_EVENTS` / `DEFAULT_CALLBACKS`**，事件名做别名归一化
+  （`EVENT_ALIASES`：`im:message.receive_v1` → `im.message.receive_v1`；权限 scope 用**冒号**分隔、
+  事件用**点**分隔，混写是高频笔误，归一化后打 warn 避免静默变成「事件没配上」）。
+  `DEFAULT_EVENTS` = `im.message.receive_v1` + `im.chat.access_event.bot_p2p_chat_entered_v1`（新会话扫码接入自动绑定用）。
+- 改动 4：**`card.action.trigger` 是回调不是事件**（后台在「事件与回调 → 回调配置」tab，事件弹窗里搜 card 为 0 条），
+  故 `DEFAULT_CALLBACKS = ['card.action.trigger']`。新增 `ensureCardCallback()`：CDP 复用已登录 Edge 走
+  「订阅方式→长连接→保存→添加回调→勾选 card.action.trigger」，**已存在则跳过（幂等）**；
+  CDP 不可用时**不阻断主流程**，只记 warn 并在最终汇总里列为「待人工确认」。
+- 改动 5：**幂等三步**——配权限 / 配事件 / 配回调三段都**先读现状再算差集，只补缺的**（`missing = wanted − granted`），
+  重复跑不报错。降级成「整批 add」会丢掉幂等性、还会把「token 没就绪」这个真问题掩盖掉，故读现状失败时
+  明确 WARN 标注「幂等性降低」而非静默降级；加完**复核**一遍，仍缺失则 WARN（多半需要重新发布版本或等生效）。
+- 改动 6：**新增子命令 `configure`**——对**已存在的**应用补权限/事件/回调（**不动版本、不发布**），
+  即本次给 `cli_aa79b06a5638dcf4` 补 `im:resource` 的实际用法。
+- 改动 7：**新增子命令 `publish`**——给已有应用建版本并发布；**发布是对外动作，默认等同 dry-run，必须显式 `--yes` 才真发**，
+  未传 `--yes` 时打 WARN「未传 --yes —— 发布是对外动作，本次按 dry-run 处理，不会发任何请求」。
+- 改动 8：**新增 `--dry-run`**——只打印将要做的变更，不发任何写请求。读现状的请求在 dry-run 下失败也不炸
+  （无登录态、假 appId 等），按「待确认」跳过。
+- 改动 9：**日志落盘**——每次运行在**脚本同目录 `logs/`** 下写 `create-bot-YYYYMMDD-HHmmss.log`（毫秒时间戳 + 每步开始/结束/结果）；
+  控制台与文件**双写**；失败处打印 http 状态码 + 飞书原始 `code`/`msg` + 原始 body 片段（`--log-dir` 可改目录）。
+- 改动 10：**修 `cdpSession` 缺陷（性能）**——原版在读 `window.csrfToken` **之前**就 `ws.close()`，
+  导致 `Runtime.evaluate` **必然超时**、每次都退到 `httpsGet` 兜底（能用但**每次慢约 5 秒**）。
+  v6 把 `close` 挪到最后（`create-bot.js:376-390`）。这是**纯性能修复**，不影响功能正确性。
+- 附带：`skills/feishu-setup/scripts/package.json`（`{"type":"commonjs"}`）修本目录 CJS 脚本在根 `package.json`
+  声明 `"type":"module"` 下 `require()` 报 `ReferenceError` 的坑（该文件是**正式文件**，不是备份）；
+  `.gitignore` 补 `*.bak-*`（脚本迭代产生的备份件不入 git）。
+- 校验：`node --check` 通过；无对应自动化测试文件（脚本走真实飞书后台，无单测覆盖）。
+
+---
+
 ## 1.5.19（2026-11-11 修复：图片收/发接口 + 接入引导误触发 + 新增卡片问答）
 
 - 环境：DSH-执行智能体（娅伊派出的 DeepSeek Harness 子会话，模型名未确证）
 - git：并入本次 commit（2026-11-11，阿依娅伊）——源码仓此前停在 1.5.18，从未有 1.5.19 条目，本节为**事后补录**，
   内容依据 1.5.19 部署包（`deploy-1.5.19/payload`，带 `SHA256SUMS.txt`，已核对与线上安装逐字节一致）与
   `CHANGELOG-1.5.19.md` / `报告-合并1.5.19.md`。
+- **版本号与 commit 不对齐说明（2026-11-11 订正）**：**1.5.19 没有自己的 commit、也没有自己的 git tag**——
+  `git log --all | grep 1.5.19` 为空，它的代码是被**并入 1.5.20 的 commit `2de3f46`** 才进仓库的。
+  所以以后**别再去找「1.5.19 的 commit」**，那是不存在的；要看 1.5.19 的代码请看 `2de3f46` 里回填的那两个 lib 文件。
+  （1.5.18 有自己的 commit **`f115874`**，但同样**没有 tag**；另注：该 commit 的**提交信息**里写的是
+  「#70 上传需 im:resource:upload」，属旧笔误——git 历史不可改，真名订正见坑 #70 / #71：真名是 `im:resource`。）
+  **tag 现状**：
+  仓库 tag 只到 **v1.5.16**（v1.5.14 是 annotated tag 指向 commit `1aa4774`，v1.5.15 / v1.5.16 是 lightweight tag——
+  **三种 tag 语义混用**，历史遗留，不在本次改动范围）；**v1.5.17 / v1.5.18 / v1.5.19 / v1.5.20 均无 tag**。
+  **版本事实以 npm registry 为准**（1.5.18 / 1.5.19 从未发布到 npm，最终随 1.5.20 一起进 npm）。
 - 性质：四份已验修补丁的合并版（A + B + C + D），合并过程**零冲突**
 - 改动文件：`lib/feishu.js`、`lib/feishu-logic.js`、`package.json`、`test/feishu-image-download.test.mjs`（新增）
 - 修一（B）**图片收件接口用错**：1.5.18 加了附件收发，但收图片这条链路调错接口。原
@@ -110,11 +176,11 @@
 - 收件：`onIncomingMessage` 非 bind 分支收集下载附件（bind 只写映射不投递故不下载）。主路径用 SDK `mergedEvent.resources`（SDK dispatchConvert 已从 content 抽好 fileKey/fileName，@larksuiteoapi/node-sdk 1.76.0 lib/index.js:106835/106850）；resources 为空或 file 类缺文件名时兜底拉 `GET /im/v1/messages/{id}` 详情补齐。下载：file/video/audio 走 `/im/v1/messages/{id}/resources/{file_key}?type=file`，image 走 `/im/v1/images/{image_key}`；落盘 `<记忆根>\feishu\attachments\<chatId>\<yyyymmdd-HHmmss>_<文件名>`（同秒同名自动 -2 后缀，Windows 非法字符清洗，缺扩展名按 content-type 补）。投会话文本追加「（飞书附件已保存：<绝对路径>）」；单个失败追加「（飞书附件下载失败：<原因>，msg_id=<id>）」不阻断投递；空文本消息不再投空块（改投「（收到一条无文本内容的飞书消息，msg_id=…）」）。`lib/feishu.js` 收件分支 +13/-4 行；编排全在 `lib/feishu-logic.js`（channel/logger 依赖注入，fetch 用 Node 内建，「零外部依赖」约定不破坏）。
 - 发件：约定标记 `[附件: <绝对路径>]` / `[图片: <绝对路径>]`（全/半角冒号均容忍）——`sendReplyWithAttachments` 用 SDK OutboundSender 原生 `{file:{source,fileName}}`/`{image:{source}}`（MediaUploader 直接读本地路径，SDK lib/index.js:104623/105193/105206），先发文件后发剥离标记的正文；路径不存在或上传失败：剥离标记、正文照发、日志 warn；正文为空且附件全失败时补发一条失败说明避免静默。无标记的纯文本逐字节原样发（与 1.5.17 行为一致）。`lib/feishu.js` 回发点 flushReply 改一行接线；mappings/routeMessage/bind 逻辑未动。
 - 坑 #69（2026-11-10 实锤，真实消息 om_x100b60062bb868a0c1374152dac71e8）：post 消息的附件**不在正文元素里，而在 content JSON 顶层 `files` 数组**（`{"title":"","content":[[text 元素]],"content_v2":…,"files":[{"file_key":"file_v3_…","file_name":"最低单价股票.xlsx","is_folder":false}]}`）——SDK `convertPost` 只走 `body.content` 段落（lib/index.js:106450-106476）同样漏掉它，`mergedEvent.resources` 为空。修法：`parseAttachmentsFromContent` 收集顶层 `files` 数组（`is_folder:true` 的云文件夹引用跳过，资源接口不提供）并按 fileKey 去重；SDK resources 为空时详情接口兜底成为 post 附件的实际主路径。教训：解析器形状必须拿真实消息验证，SDK 的 normalize 也可能漏字段。
-- 坑 #70（2026-11-10 实锤，log_id=20261110224442B6D9C1C31C408776E4C0）：发件上传 `POST /im/v1/files` 需要应用开通 **im:resource:upload（或 im:resource）** scope，与收件下载的读权限是两回事；未开通时返回 99991672 并附申请链接。**发件功能的前置条件**：开发者后台给应用开通该权限并重新发布版本（或用 create-bot.js 的配权限流程补 scope）。收件链路不受影响（读权限已具备）。
+- 坑 #70（2026-11-10 实锤，log_id=20261110224442B6D9C1C31C408776E4C0）：发件上传 `POST /im/v1/files` 需要应用开通 **`im:resource`** scope（后台真实标识「获取与上传图片或文件资源」，免审），与收件下载的读权限是两回事；未开通时返回 99991672 并附申请链接。**发件功能的前置条件**：开发者后台给应用开通该权限并重新发布版本（或用 create-bot.js 的配权限流程补 scope，见 create-bot v6 条目）。收件链路不受影响（读权限已具备）。**⚠️ 权限真名订正（2026-11-11 实锤）**：后台**不存在 `im:resource:upload` 这个独立 scope**（开发者后台搜 `im:resource:upload` 为 0 条），它的等价形态就是 **`im:resource`**——别再去后台搜 `im:resource:upload` 搜不到、误判成「没这个权限」。本条早前写的「`im:resource:upload`（或 `im:resource`）」是笔误，已订正为真名 `im:resource`；create-bot v6 的 `SCOPE_ALIASES` 已把 `im:resource:upload` 自动归一化成 `im:resource` 并打 WARN（详见坑 #71）。
 - token：`POST /auth/v3/tenant_access_token/internal`，进程内缓存至过期前 60s（feishu-logic createTokenManager）。
 - 测试：`test/feishu-attachment.test.mjs`（resources 归一化 / post 双形状+顶层 files 解析 / 文件名清洗与防覆盖 / 投递文本合成 / 标记解析剥离 / mock sender 回发编排 / token 缓存 / 下载错误路径）；另真机自测下载链路通过（file_key `file_v3_0017a_e8079604-44f1-4f24-989d-0ca85b990fbg` → 47216 字节 xlsx → 文件头 `50 4b 03 04` PK zip 头）。
 - .gitignore 补 work/（工作产物不入 git）。
-- 待用户实测：①飞书给 bot 发文件/图片/含图图文 → 会话收到附件保存路径提示且文件可打开；②开通 im:resource:upload 后，会话内让 agent 带 `[附件: <路径>]` 回复 → 飞书收到文件。
+- 待用户实测：①飞书给 bot 发文件/图片/含图图文 → 会话收到附件保存路径提示且文件可打开；②开通 `im:resource` 后，会话内让 agent 带 `[附件: <路径>]` 回复 → 飞书收到文件。（原文写「开通 im:resource:upload」为笔误，真名见坑 #70 的权限真名订正。）
 
 ---
 
@@ -416,7 +482,11 @@ L571  agent_id: 7553531f-3345-45d1-a455-50a56e2c 5ca7  → message delivered
 
 ## 已知坑（装的时候踩过的）
 
-> 编号 #1–#56（#1–#55 顺序与措辞自历史 README 原文照录，#56 为 2026-11-10 新增）；README 正文与各版本条目引用的「坑 #N」即本清单编号。未标注版本的条目（#1–#12、#14–#16、#26、#37）为早期或通用记录，未归入具体版本条目。
+> 编号 #1–#71（#1–#55 顺序与措辞自历史 README 原文照录，#56 为 2026-11-10 新增；
+> **#57–#70 记在对应版本条目内**（#57 在 1.5.13、#58–#67 在 1.5.14、#68 在 1.5.17、#69/#70 在 1.5.18），
+> **#71 为 2026-11-11 新增**，已并入本清单末位）；README 正文与各版本条目引用的「坑 #N」即本清单编号。
+> 未标注版本的条目（#1–#12、#14–#16、#26、#37）为早期或通用记录，未归入具体版本条目。
+> **本清单的序号是全局坑号**，故 #71 接在 #56 之后——中间 #57–#70 不是漏号，是记在版本条目里。
 
 1. **工具 output.schema 必须是标准 JSON Schema**：`required` 只能出现在 object/array 上（顶层数组），属性里写 `required: true` 会激活失败（`JsonSchemaError`，日志在 `~\.dsh\logs\desktop-next-*.jsonl` 搜 `aiyayi`）。
 2. **preset 作用域挂 `agent-default-model` 必须 `isolate: {agentDefaultModel: true}`**，否则 `service "agentDefaultModel" has been registered` 冲突，激活失败。
@@ -499,3 +569,5 @@ L571  agent_id: 7553531f-3345-45d1-a455-50a56e2c 5ca7  → message delivered
 54. **"每轮都念"与"干脆不提"的两难，应该由代码定节拍（2026-11-08 娅伊提出；1.5.3 修）**：她把分寸问题摊得很实在——"每次你一开口我就念一遍该搬家了，也挺烦人"，提议"隔几天提一次"。但不能这么做：**模型数不准天**，让它自己掌握节奏必然时提时不提，而"该提却没提"正是用户抱怨的那件事。正确做法是按**会话**节拍：`locationTodoShownSessions` 记 sessionId，同会话只在首轮给一次待办（首轮 = 新的一次开口机会，提一次合适；同会话反复念才烦人）；要永久静默走 `memory_relocate` 的 `stay: true` 落盘——那是用户的明确决定，不是模型猜的节奏。注意两个实现细节：①**只有真的给出内容才 mark**（`locationLine !== ""` 才记），否则状态文件缺失时的空串会把待办永久吞掉；②**不可达警告不受"只首轮"限制**，那是故障不是待办，必须每轮都在。上限截断防长跑进程无限增长。
 55. **异步探测的副作用：首轮拿不到总线类型 → 排序又退回"空间最大者第一"（2026-11-08 自查；1.5.3 修）**：为了解决 `execFileSync` 阻塞事件循环 2.6 秒，1.5.3 把探测改成后台异步。副作用随即出现：首轮渲染时缓存是空的，候选排序拿不到 external 信息，于是 I:（173 GB）又回到第一位——**把我刚修好的坑原样还回去了**（实测 prompt 里又出现"推荐 I:"）。修法两层：①未知时写 `external: null` + reason「磁盘类型未知（探测未完成）」，**绝不冒充内置**；②排序改成 `已知内置 → 未知 → 已知外置`，组内才按空间——未知排中间，既不冒充也不让出头号位置。另外 `apply()` 里调 `prewarmDriveBusTypes()` 后台预热（用户重启后到真正开口常隔几十秒，够 PowerShell 跑完 2.6 秒），`memory_location` 用 `externalDriveInfoAwait()` 等最多 4 秒换准确标注。教训：**把一个阻塞调用改成异步时，要检查"依赖它的派生结果"会不会因此在首轮拿到空值并做出错误结论**。
 56. **宿主 patch 里「新增插件」必须用 `insert:` 包裹；从快照恢复 patch 文件前先验内容（2026-11-10 实测，aiyayi-feishu 桥接中断约半天）**：profile 根 patch（`C:\Users\lihaorj\.dsh\profiles\desktop\cordis.patch.yml`）里新增宿主插件的正确写法是 `- insert:` 块（根级 append）；裸 `- id: aiyayi-feishu / name: ...` 行是 **id-targeted 覆盖**——目标不存在时 loader（cordis-plugin-include `applyPatches`）只 warn `patch: entry "aiyayi-feishu" not found` 并跳过，插件静默不装。危险在于症状延迟：HMR 期间旧实例还在跑（unmanaged-plugin 保留旧代码），一切"看起来正常"；**DSH 重启重建插件树后裸行 no-op，插件直接消失**，飞书长连接断、新会话里 feishu_status 报未配置。本案成因：误把 bundle patch（gh_repo/cordis.patch.yml，只含三个 agent preset）覆盖到 profile 根 patch，再从 recovery 快照（`C:\Users\lihaorj\.dsh\recovery\<ms>-<uuid>\cordis.patch.yml`）恢复——扫全部 31 份快照，aiyayi-feishu 全是裸行（DSH 快照不保留手工编辑的 `insert:` 语法），照原样恢复＝把 bug 也恢复了。教训：①bundle patch 与 profile 根 patch 是职责不同的两个文件（前者只声明 agent preset、经 package.json `dsh.bundle.patch` 引用，装到 `node_modules\dsh-aiyayi\cordis.patch.yml`；后者做 id 覆盖/禁用/宿主插件 insert），覆盖前先比对 head 注释与 id 集合；②从快照/备份恢复后必须验证关键声明还在（id 清单 + 新增插件有无 `insert:` 包裹）；③判定插件是否真在跑：宿主日志搜插件 id 的「已就绪」/连接建立日志——`patch: entry "X" not found` 与正常加载**可共存**（desktop-shell、mnemon* 的 disable 覆盖行天天 warn 但功能正常），warn 本身不是故障证据，**缺少「已就绪」才是**。
+
+71. **飞书权限 scope 的真名只有一个，别自己拼后缀（2026-11-11 实锤，坑 #70 后续）**：发件上传图片/文件要的权限，开发者后台搜 **`im:resource:upload` 是 0 条**——**后台根本没有这个独立 scope**，真名就是 **`im:resource`**（后台中文名「获取与上传图片或文件资源」，免审）。文档/工单里常见的「`im:resource:upload`（或 `im:resource`）」是**笔误**，害人去后台搜一个不存在的名字、搜不到就以为「后台没有这个权限 / 是不是飞书改了」——实际权限申请入口和 scope 目录里只有 `im:resource` 这一条。修法：文档一律写真名 `im:resource`；脚本侧用别名表兜住旧写法（create-bot v6 的 `SCOPE_ALIASES`：`im:resource:upload` / `im:resource:read` → `im:resource`，命中时打 WARN 说明「后台无该独立 scope」）。教训：**权限名要以开发者后台 scope 目录的实际检索结果为准**，别照着 API 路径（`POST /im/v1/files`）或接口动作名（upload）反推 scope 名——它们不是一一对应的。

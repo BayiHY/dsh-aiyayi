@@ -11,6 +11,24 @@
 
 最近发布：2026-11-11，1.5.20（飞书正文改走 interactive 卡片 + lark_md——纯文本 `msg_type=text` 不渲染 markdown；含 1.5.19 附件收发与交互卡片、1.5.20 markdown 渲染，及 create-bot v6 权限集中化。npm 发布 2026-11-11T01:26:23Z，tarball sha1 `6f1df9fb81341d6e449ff0d303aa6c07e7f87c39`，39 个文件；lib/feishu-logic.js SHA256=47442E13…、lib/feishu.js=ADBA20BC…）。
 
+**create-bot v6 的版本口径（2026-11-11 补）**：create-bot v6（`skills/feishu-setup/scripts/create-bot.js`，+1201 行）**不属于任何 npm 版本号**——
+它是**内置技能脚本**，不是插件本体代码；随 npm 包一起分发（所以 1.5.20 的 tarball 里含 v6），但**没有自己的版本号**。
+它在源码仓**单独成 commit `2c16bee`**，与 1.5.20 的插件改动（commit `2de3f46`）互不依赖。
+故上表「1.5.20（2c16bee）」表示的是**四渠道推的都是仓库 HEAD `2c16bee`**，不是「create-bot v6 是 1.5.20 的一部分」。
+
+**npm 发布一览（2026-11-11 核对 registry，`npm view dsh-aiyayi versions --json`）**：latest = **1.5.20**（2026-11-11 发布）。
+已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**；
+跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm；
+**1.5.18 / 1.5.19 也从未发布到 npm**——它们的代码最终随 1.5.20 一起进 npm。
+**版本事实以 npm registry 为准**，本表与 CHANGELOG 顶部「npm 发布一览」保持同一口径。
+
+**git tag 现状（2026-11-11 核对）**：仓库 tag 只到 **v1.5.16**——`v1.5.14` 是 **annotated tag**（指向 commit `1aa4774`），
+`v1.5.15` / `v1.5.16` 是 **lightweight tag**（三种语义混用，历史遗留）；**v1.5.17 / v1.5.18 / v1.5.19 / v1.5.20 均无 tag**。
+另外 **1.5.19 没有独立 commit**（`git log --all | grep 1.5.19` 为空）——它的代码被**并入 1.5.20 的 commit `2de3f46`** 才进仓库，
+**别再去找「1.5.19 的 commit」**，那是不存在的。（1.5.18 有自己的 commit `f115874`，但同样**没有 tag**；
+另注：该 commit 的**提交信息**里写的是「#70 上传需 im:resource:upload」，属旧笔误——git 历史不可改，
+真名订正见 CHANGELOG 坑 #70 / #71：真名是 `im:resource`。）
+
 **版本对齐说明（2026-11-11）**：npm 1.5.20 与源码仓 `2c16bee` 逐字节一致（打包后校验 `lib/feishu-logic.js`/`lib/feishu.js` SHA256 与源码仓、线上运行副本三方相同）。线上运行目录此前因手工改文件停在 `package.json` 1.5.19（代码已等同 1.5.20），需按下方「本地生效」重装一次对齐版本号——**重装只改版本号，lib/ 字节不变**，可用 SHA256 复核。
 
 **GitHub 推送口径（2026-11-09 更正：原"未推/无密钥"记载已过时）**：`~/.ssh/github_ed25519` 密钥已配好可用，github 走 SSH 推送正常（remote `github` = git@github.com:BayiHY/dsh-aiyayi.git）。HTTPS 才是被 SNI 阻断的死路，别试。注意 SSH 只能推已有仓库，**建新仓要走网页或可达网络下的 API**。

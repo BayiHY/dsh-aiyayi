@@ -20,7 +20,7 @@
 | 自我状态（体检单） | 同上 `aiyayi-presence`（v1.2.0 起） | `session/event` 总线折叠真实运行数据：模型与思考档、上下文用量（provider 实测 usage 优先，tokenMeter 估算兜底并标"估算"）、缓存命中率、上轮输出 tok/s、本会话轮数、上轮异常。变化明显（≥2048 token / 模型切换 / 异常）才注入，不每轮白涨。用量过八成/九成（估算口径按中文偏差 ÷0.49 校准，见坑 #16）注入 `[上下文提醒]`：劝用户开新会话、并让用户走之前说一声好让她收尾（update_state/补记忆/把话说完）；每档只提醒一次 |
 | 主动开口 | `tool-schedule`（dsh 原生）+ persona 指引 | 到期提醒会把冷会话真唤醒、以 user 消息落进定闹钟的那个会话——她想主动说话就 `schedule_create` 定闹钟；DSH 没开着会存着、下次启动补投 |
 | 新版本提醒 | 自写插件 `aiyayi-updates`（本包 `lib/updates.js`） | 每个会话第一个回合查一次 npm（registry.npmjs.org，失败落 npmmirror；成功结果缓存 6h、失败 30min 后重试）：本地版本比 latest 旧时，往消息尾部追加 `[更新提示]` 快照，她会用自己的口吻顺口提一句。同一远端版本只提醒一次（updates.json 落盘去重，跨重启不重复念叨）；检查失败/离线一律静默。**判据：`~\\.dsh\\aiyayi\\updates.json` 不存在 = 从没发现过新版（本地已是最新）；她答不上"自己是什么版本"是设计边界（升级判断靠被动推送），已由 presence 的版本自述补上** |
-| 飞书桥接 | 自写插件 `aiyayi-feishu`（本包 `lib/feishu.js`，1.5.8 起）+ 纯逻辑 `lib/feishu-logic.js` | 长连接 WebSocket 接入飞书机器人（SDK `@larksuiteoapi/node-sdk`，无需公网）。**2026-11-10 扫码改造**：新会话说「接入飞书」→ 引导出待接入目标 → 手机飞书扫码进 bot 单聊 → `bot_p2p_chat_entered_v1` 事件自动绑定（30 分钟时效）；凭证 `feishu/config.json` 存记忆根（**不入 npm 包**） |
+| 飞书桥接 | 自写插件 `aiyayi-feishu`（本包 `lib/feishu.js`，1.5.8 起）+ 纯逻辑 `lib/feishu-logic.js` | 长连接 WebSocket 接入飞书机器人（SDK `@larksuiteoapi/node-sdk`，无需公网）。**2026-11-10 扫码改造**：新会话说「接入飞书」→ 引导出待接入目标 → 手机飞书扫码进 bot 单聊 → `bot_p2p_chat_entered_v1` 事件自动绑定（30 分钟时效）；凭证 `feishu/config.json` 存记忆根（**不入 npm 包**）。**发附件需权限 `im:resource`**（后台真实标识「获取与上传图片或文件资源」，免审）——开发者后台搜 **`im:resource:upload` 为 0 条，后台不存在这个独立 scope**，真名就是 `im:resource`（详见坑 #70 / #71） |
 | 其他 | time-context、compaction 组（提前压缩，见坑 #14/#16）、tool-ask-user | 她没有 bash/文件/技能/搜索/网络工具，想动手只能派活；纯查资料走 `retriever` 检索员，不惊动小伙伴 |
 
 ## 安装与启用
@@ -93,9 +93,24 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
 
 完整说明（搬迁顺序、回滚、红线、回归测试）：[记忆迁移完整说明](./MEMORY-MIGRATION.md)。
 
+## 已知限制与飞书权限
+
+- **发附件/图片需要 `im:resource` scope**：飞书开发者后台给应用开通 **`im:resource`**（后台真实标识「获取与上传图片或文件资源」，免审），
+  然后**重新发布版本**才生效；未开通时上传接口回 `400 code=99991672`（坑 #70）。
+  **权限真名只有一个，就是 `im:resource`**——后台**不存在 `im:resource:upload` 这个独立 scope**（后台搜索 0 条），
+  别照着 API 路径 `POST /im/v1/files` 或动作名 "upload" 去拼 scope 名（坑 #71）。
+  收件（下载）用的读权限与发件的上传权限是两回事，收件链路不受这条影响。
+- **配置权限用内置技能脚本**：`skills/feishu-setup/scripts/create-bot.js` v6 提供 `configure` 子命令
+  （给已有应用补权限/事件/回调，不动版本、不发布）、`publish` 子命令（对外动作，必须显式 `--yes`）和 `--dry-run`（只演练不发写请求）。
+  脚本用 `SCOPE_ALIASES` 把旧写法 `im:resource:upload` 自动归一化成 `im:resource` 并打 WARN；
+  每次运行日志落在脚本同目录 `logs/create-bot-YYYYMMDD-HHmmss.log`。
+- **回发正文默认走飞书卡片**：正文用 `interactive` 卡片 + `lark_md` 渲染（1.5.20 起），
+  设环境变量 `AIYAYI_FEISHU_MARKDOWN=text` 可一键回退纯文本。
+- **CHANGELOG 里 1.5.18 / 1.5.19 从未发布到 npm**：它们的代码最终随 **1.5.20** 一起进 npm（npm latest = 1.5.20）。
+
 ## 更新日志
 
-[更新日志](./CHANGELOG.md) —— 版本条目（新 → 旧）、npm 发布状态与完整踩坑记录（坑 #1–#67）。版本事实以 npm registry 为准，正文不再逐版本罗列。
+[更新日志](./CHANGELOG.md) —— 版本条目（新 → 旧）、npm 发布状态与完整踩坑记录（坑 #1–#71）。版本事实以 npm registry 为准，正文不再逐版本罗列。
 
 ## 署名与许可
 
