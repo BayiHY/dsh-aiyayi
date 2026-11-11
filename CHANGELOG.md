@@ -8,6 +8,47 @@
 
 ---
 
+## 1.5.21（2026-11-11 修复：飞书回复正文首尾空白行）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- git：本次 commit（2026-11-11，阿依娅伊）1.5.21：修飞书回复正文的首尾空白行（**无附件标记**路径）
+- 现象：飞书里收到的回复，正文**上下多出空行**——lark_md 卡片头部带 `\n\n`、尾部带 `\n\n\n`。
+  **带附件标记的路径反而没事**（它走了 `.trim()` 分支），所以表现为「有的消息有空白行、有的没有」。
+- 根因（两处漏点，链路实测确认）：
+  1. **主因** `lib/feishu.js:313` `const text = extractText(message)`——`extractText`（`lib/feishu-logic.js:68-74`）
+     把 content 里所有 `type==='text'` 的片段 `.join('')`，**不 trim**；模型分段输出时首尾片段常带 `\n`，
+     拼出来就是首行/尾行空行。
+  2. **兜底漏点** `lib/feishu-logic.js:685` `if (stripped === original) return original`——
+     `stripAttachmentMarkers` 的「**无标记早退分支**」原样返回未清理文本，**根本走不到**它下面的 `.trim()`。
+     出口再往下 `splitMarkdownForCard`（`:1080` `if (src.length <= max) return [src]`）与
+     `markdownToLarkMd`（`:1031` `const src = String(md ?? '')`）也都不 trim，
+     于是空白一路透传进卡片正文。
+- 修法（主修 + 兜底，两处）：
+  - **主修** `lib/feishu.js:313`：`const text = extractText(message)` → `const text = extractText(message).trim()`
+    （语义最贴题「模型输出首尾空白」）。
+  - **兜底** `lib/feishu-logic.js:748`：`const cleanText = stripAttachmentMarkers(text)` →
+    `const cleanText = stripAttachmentMarkers(text).trim()`——**一处覆盖「回发 + 卡片 + 纯文本降级」全部正文出口**，
+    对有标记/无标记两条分支都生效（未来新增发送入口也有保护）。
+  - **不动** `lib/feishu.js:1095` 的 `extractText`（那是**入站**意图检测 `maybeOnboardIntent`，与正文出口无关）。
+- 行为边界（本次只修首尾，**不扩大范围**）：
+  - ✅ 只动**首尾**空白（`\n` / 空格 / 制表符）。
+  - ✅ 带附件标记的路径行为**逐字节不变**（它原本就 trim 过，修复后结果与 1.5.20 一致）。
+  - ✅ **中间**空行保持原样——「中间三连空行折叠」（`.replace(/\n{3,}/g,'\n\n')`）是**另一个需求**，
+    那条规则目前只在**有附件标记**时生效；要不要扩大范围要李浩点头，本次**不顺手改**。
+- 测试：新增 `test/feishu-trim.test.mjs`（跑真实链路 `extractText → stripAttachmentMarkers →
+  markdownToLarkMd / splitMarkdownForCard` 的可导出函数，只 mock SDK 的 `channel.sender.send` 以观察最终 payload），覆盖：
+  (a) 无附件标记的纯文本回复 → 首尾无空白；
+  (b) 带附件标记的回复 → 行为不变（仍正常，首尾干净，且与 1.5.20 结果逐字节一致）；
+  (c) 中间空行不被误折叠（`\n\n\n\n` 原样保留）；
+  (d) 空字符串 / 全空白输入不炸（不抛错、不发任何 payload）。
+  另附超长正文分片时每片首尾也不带空白的断言。
+  **仓库测试基线不变**：16 个 `.test.mjs` 文件（本次新增第 17 个 `feishu-trim.test.mjs`），
+  修复前后均为 **13 过 / 3 挂**；3 挂的是已知失败（`alarm-inject` / `home-relocate` / `tools-surface`，
+  硬编码 `G:\阿依娅伊\` 旧路径导致 `ERR_MODULE_NOT_FOUND`，与本次改动无关）。
+- 坑：**#72**（见下方「已知坑清单」末位）。
+
+---
+
 ## 1.5.20（2026-11-11 修复：飞书 markdown 正文渲染）
 
 - 环境：DSH-执行智能体（娅伊派出的 DeepSeek Harness 子会话，模型名未确证）
@@ -482,11 +523,12 @@ L571  agent_id: 7553531f-3345-45d1-a455-50a56e2c 5ca7  → message delivered
 
 ## 已知坑（装的时候踩过的）
 
-> 编号 #1–#71（#1–#55 顺序与措辞自历史 README 原文照录，#56 为 2026-11-10 新增；
+> 编号 #1–#72（#1–#55 顺序与措辞自历史 README 原文照录，#56 为 2026-11-10 新增；
 > **#57–#70 记在对应版本条目内**（#57 在 1.5.13、#58–#67 在 1.5.14、#68 在 1.5.17、#69/#70 在 1.5.18），
-> **#71 为 2026-11-11 新增**，已并入本清单末位）；README 正文与各版本条目引用的「坑 #N」即本清单编号。
+> **#71 为 2026-11-11 新增**（飞书权限 scope 真名），**#72 为 2026-11-11 新增**（飞书正文首尾空白行），
+> 均已并入本清单末位）；README 正文与各版本条目引用的「坑 #N」即本清单编号。
 > 未标注版本的条目（#1–#12、#14–#16、#26、#37）为早期或通用记录，未归入具体版本条目。
-> **本清单的序号是全局坑号**，故 #71 接在 #56 之后——中间 #57–#70 不是漏号，是记在版本条目里。
+> **本清单的序号是全局坑号**，故 #71 / #72 接在 #56 之后——中间 #57–#70 不是漏号，是记在版本条目里。
 
 1. **工具 output.schema 必须是标准 JSON Schema**：`required` 只能出现在 object/array 上（顶层数组），属性里写 `required: true` 会激活失败（`JsonSchemaError`，日志在 `~\.dsh\logs\desktop-next-*.jsonl` 搜 `aiyayi`）。
 2. **preset 作用域挂 `agent-default-model` 必须 `isolate: {agentDefaultModel: true}`**，否则 `service "agentDefaultModel" has been registered` 冲突，激活失败。
@@ -571,3 +613,18 @@ L571  agent_id: 7553531f-3345-45d1-a455-50a56e2c 5ca7  → message delivered
 56. **宿主 patch 里「新增插件」必须用 `insert:` 包裹；从快照恢复 patch 文件前先验内容（2026-11-10 实测，aiyayi-feishu 桥接中断约半天）**：profile 根 patch（`C:\Users\lihaorj\.dsh\profiles\desktop\cordis.patch.yml`）里新增宿主插件的正确写法是 `- insert:` 块（根级 append）；裸 `- id: aiyayi-feishu / name: ...` 行是 **id-targeted 覆盖**——目标不存在时 loader（cordis-plugin-include `applyPatches`）只 warn `patch: entry "aiyayi-feishu" not found` 并跳过，插件静默不装。危险在于症状延迟：HMR 期间旧实例还在跑（unmanaged-plugin 保留旧代码），一切"看起来正常"；**DSH 重启重建插件树后裸行 no-op，插件直接消失**，飞书长连接断、新会话里 feishu_status 报未配置。本案成因：误把 bundle patch（gh_repo/cordis.patch.yml，只含三个 agent preset）覆盖到 profile 根 patch，再从 recovery 快照（`C:\Users\lihaorj\.dsh\recovery\<ms>-<uuid>\cordis.patch.yml`）恢复——扫全部 31 份快照，aiyayi-feishu 全是裸行（DSH 快照不保留手工编辑的 `insert:` 语法），照原样恢复＝把 bug 也恢复了。教训：①bundle patch 与 profile 根 patch 是职责不同的两个文件（前者只声明 agent preset、经 package.json `dsh.bundle.patch` 引用，装到 `node_modules\dsh-aiyayi\cordis.patch.yml`；后者做 id 覆盖/禁用/宿主插件 insert），覆盖前先比对 head 注释与 id 集合；②从快照/备份恢复后必须验证关键声明还在（id 清单 + 新增插件有无 `insert:` 包裹）；③判定插件是否真在跑：宿主日志搜插件 id 的「已就绪」/连接建立日志——`patch: entry "X" not found` 与正常加载**可共存**（desktop-shell、mnemon* 的 disable 覆盖行天天 warn 但功能正常），warn 本身不是故障证据，**缺少「已就绪」才是**。
 
 71. **飞书权限 scope 的真名只有一个，别自己拼后缀（2026-11-11 实锤，坑 #70 后续）**：发件上传图片/文件要的权限，开发者后台搜 **`im:resource:upload` 是 0 条**——**后台根本没有这个独立 scope**，真名就是 **`im:resource`**（后台中文名「获取与上传图片或文件资源」，免审）。文档/工单里常见的「`im:resource:upload`（或 `im:resource`）」是**笔误**，害人去后台搜一个不存在的名字、搜不到就以为「后台没有这个权限 / 是不是飞书改了」——实际权限申请入口和 scope 目录里只有 `im:resource` 这一条。修法：文档一律写真名 `im:resource`；脚本侧用别名表兜住旧写法（create-bot v6 的 `SCOPE_ALIASES`：`im:resource:upload` / `im:resource:read` → `im:resource`，命中时打 WARN 说明「后台无该独立 scope」）。教训：**权限名要以开发者后台 scope 目录的实际检索结果为准**，别照着 API 路径（`POST /im/v1/files`）或接口动作名（upload）反推 scope 名——它们不是一一对应的。
+
+72. **飞书回复正文的首尾空白行：只有「无附件标记」那条路径会漏（2026-11-11 实锤；1.5.21 修）**：飞书里收到的回复正文**上下多出空行**（lark_md 卡片头部带 `\n\n`、尾部带 `\n\n\n`），
+    但**带附件标记的回复反而干净**——因为它走的是 `stripAttachmentMarkers` 里 `.trim()` 那个分支，**没标记的路径走不到**。
+    两处漏点叠加所致：①**主因** `lib/feishu.js:313` `const text = extractText(message)`——`extractText` 把 content 里
+    所有 `type==='text'` 的片段 `.join('')`，**不 trim**，而模型分段输出时首尾片段常带 `\n`，拼出来就是首行/尾行空行；
+    ②`lib/feishu-logic.js:685` `if (stripped === original) return original`——「无标记早退分支」原样返回，
+    **根本走不到**它下面的 `.trim()`；再往下 `splitMarkdownForCard`（`:1080`）与 `markdownToLarkMd`（`:1031`）也都不 trim，
+    空白一路透传进卡片正文。
+    修法：**主修 + 兜底**——主修 `feishu.js:313` 加 `.trim()`（语义贴题「模型输出首尾空白」），
+    兜底 `feishu-logic.js:748` 改 `stripAttachmentMarkers(text).trim()`（一处覆盖「回发 + 卡片 + 纯文本降级」全部出口，
+    未来新增发送入口也有保护）；**不动** `feishu.js:1095` 的 `extractText`（那是入站意图检测，与正文出口无关）。
+    教训：①**「有标记的分支干净」不等于「全体干净」**——早退分支是清理逻辑的盲区，兜底要落在**出口**而不是**每个分支**；
+    ②**trim 只解决首尾**，中间三连空行折叠（`.replace(/\n{3,}/g,'\n\n')`）是**另一个需求**，
+    那条规则目前只在有附件标记时生效，**要扩大范围得先点头**，别顺手改。
+    回归测试 `test/feishu-trim.test.mjs` 锁死：无标记路径首尾干净、有标记路径逐字节不变、中间空行不折叠、空/全空白输入不炸。

@@ -106,11 +106,14 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
   每次运行日志落在脚本同目录 `logs/create-bot-YYYYMMDD-HHmmss.log`。
 - **回发正文默认走飞书卡片**：正文用 `interactive` 卡片 + `lark_md` 渲染（1.5.20 起），
   设环境变量 `AIYAYI_FEISHU_MARKDOWN=text` 可一键回退纯文本。
+- **正文首尾空白行已修**：飞书回复正文上下多出空行（无附件标记路径）的缺陷**已在 1.5.21 修**（坑 #72）——
+  主修 `extractText(message).trim()` + 兜底 `stripAttachmentMarkers(text).trim()`。
+  **只修首尾**；正文中**中间**的多余空行保持原样（那是另一个需求，尚未做）。
 - **CHANGELOG 里 1.5.18 / 1.5.19 从未发布到 npm**：它们的代码最终随 **1.5.20** 一起进 npm（npm latest = 1.5.20）。
 
 ## 更新日志
 
-[更新日志](./CHANGELOG.md) —— 版本条目（新 → 旧）、npm 发布状态与完整踩坑记录（坑 #1–#71）。版本事实以 npm registry 为准，正文不再逐版本罗列。
+[更新日志](./CHANGELOG.md) —— 版本条目（新 → 旧）、npm 发布状态与完整踩坑记录（坑 #1–#72）。版本事实以 npm registry 为准，正文不再逐版本罗列。
 
 ## 署名与许可
 
