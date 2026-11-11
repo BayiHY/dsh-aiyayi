@@ -10,10 +10,18 @@
 
 ---
 
+## 1.5.30（2026-11-11 修复：create-bot 脚本注释里的实测出处改用 <记忆根> 占位）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- git：本版首个改动是源码仓 commit `bbaf4f1`（2026-11-11，阿依娅伊）：`skills/feishu-setup/scripts/create-bot.js` 里两处注释的实测出处——默认权限清单 `DEFAULT_SCOPES` 里 `im:resource` 的依据、默认回调 `DEFAULT_CALLBACKS` 里 `card.action.trigger` 的依据——原先写的是本机盘符绝对路径（…\记忆\feishu\workspaces\…），改用 `<记忆根>/feishu/workspaces/.../` 占位，别人装包后不会再看到一条只对某台机器成立的路径。
+- 为什么单独发一版：1.5.29 已发布到 npm，但发布点早于 `bbaf4f1`，包里仍是写死本机路径的注释；本版就是把这处修正带进发布包。除该注释外不含功能性代码改动。
+- 版本号三处对齐：`package.json` version、本条目、profile patch 里 `aiyayi-feishu` 的 `config.reloadTag` 均为 `1.5.30`（reloadTag 语义同 1.5.29 条目：只要求值变了以触发 HMR，不参与部署值比对）。
+- 打包与 npm 发布不在本次范围内：本版只做版本号对齐 + 推 git（gitcode / gitee / github 三个远端），打包与 npm 发布留作下一步单独执行，故本条目不记包体积等实测数字。
+
 ## 1.5.29（2026-11-11 修复：发布包排除 test/、测试收尾清理残留空目录）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
-- git：本版改动就地落在开发/安装目录 `%USERPROFILE%\.dsh\profiles\desktop\node_modules\dsh-aiyayi`（该目录**无 .git**，故本版没有自己的 commit）；源码仓 `G:\阿依娅伊\源码\dsh-aiyayi` 本次未纳入。
+- git：本版改动就地落在开发/安装目录 `%USERPROFILE%\.dsh\profiles\desktop\node_modules\dsh-aiyayi`（该目录**无 .git**，故本版没有自己的 commit）；源码仓 `…\源码\dsh-aiyayi` 本次未纳入。
 - 修一（根因修复，坑 #76）：**1.5.28 的测试会在插件目录里造桩包空目录，遮蔽宿主的模块解析。** `test/feishu-accumulate.test.mjs` 为了能 import `lib/feishu.js`，会在插件自己的 `node_modules/` 下 `mkdirSync` 造两个桩包——`@deepseek-ai/dsh-llm`（宿主供给）与 `@larksuiteoapi/node-sdk`；收尾只 `rmSync` 删桩**文件**，**不删造出来的目录**，于是插件目录里留下 `node_modules/@deepseek-ai/dsh-llm/`、`node_modules/@larksuiteoapi/node-sdk/` 以及父包域空目录。线上跑过测试后，宿主对这些包的解析会先撞上插件的空目录 → `aiyayi-feishu` 入口 import 直接 `Cannot find package`（1.5.28 装版后实测）。
   修法：删完桩文件后**逐级向上删空目录**——只删空目录（`removeDirIfEmpty`），遇到非空立刻停（不碰别人的包），且不越过插件自身的 `node_modules`（不删到 profile 之上）。
 - 修二（发布包排除开发文件）：`package.json` 的 `files` 白名单**去掉 `test/`**，并补上 `README.md` / `LICENSE`（此前靠 npm 默认规则入包，加白名单后必须显式列出）。1.5.28 的包把整个 `test/` 发了出去：28 个测试文件、占包内 75 个文件的三分之一以上。
@@ -53,7 +61,7 @@
 - **实现期新坑（坑 #74，本版实测）**：
   - **坑 #74：测试里只设 `AIYAYI_HOME` 并不能隔离记忆根——真机上的 `location.json` 优先于环境变量。**
     `lib/home.js` 的解析优先级是 **指路文件 > AIYAYI_HOME > 默认路径**（`resolveRoot()`，home.js:160-218）。一旦用户搬过家，`~/.dsh/aiyayi/location.json` 就存在，它会**直接压掉** `process.env.AIYAYI_HOME`——测试里写文件的路径函数（`pwshFile()` / `updatesFile()` / `presenceFile()` / `stateFile()`）于是全部指向**用户真实的记忆根**。
-    本版实测经过：先按 `presence-clock.test.mjs` 的老写法（只设 `AIYAYI_HOME`）跑单测，跑完发现真机 `D:\阿依娅伊\记忆\pwsh.json` 被创建，里面 `notifiedAt` 已被写成"提过了"——**等于把用户本该在首次对话看到的那唯一一次提示提前吃掉了**。污染源逐个排查（对 24 个测试文件挨个删掉状态文件后单跑、检查是否重建）只命中 `presence-clock.test.mjs` 一个。
+    本版实测经过：先按 `presence-clock.test.mjs` 的老写法（只设 `AIYAYI_HOME`）跑单测，跑完发现真机 `…\记忆\pwsh.json` 被创建，里面 `notifiedAt` 已被写成"提过了"——**等于把用户本该在首次对话看到的那唯一一次提示提前吃掉了**。污染源逐个排查（对 24 个测试文件挨个删掉状态文件后单跑、检查是否重建）只命中 `presence-clock.test.mjs` 一个。
     正确写法（`home-relocate` / `tools-surface` / `feishu-accumulate` 早就在用）：**环境变量 + 指路文件双定向**
     ```js
     const home = mkdtempSync(join(tmpdir(), 'aiyayi-xxx-'))
@@ -66,7 +74,7 @@
     **新增任何会读/写记忆根的测试，都必须上这两道。**（`test/pwsh-check.test.mjs` 与已补修的 `test/presence-clock.test.mjs` 都已按此改。）
   - **坑 #75（追加 commit，本版实测）：PATH 里找不到 `pwsh` ≠ 没装——DSH 宿主进程继承的是旧环境变量。**
     场景：用户刚用 winget 装好 PowerShell 7.7.0（msstore 源，入口 `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`，一个 0 字节的 app execution alias）。winget 同时修了 HKCU `Path`（原来丢了 `%LOCALAPPDATA%\Microsoft\WindowsApps` 这一项），但 **DSH 宿主进程是装之前启动的**，继承的是修复前的旧环境变量 → 进程里 `spawn('pwsh')` 必然 ENOENT。只看 PATH 就会把"已装好"误判成"没装"，给用户弹一条**错误的**升级提示。
-    修复：ENOENT 时补「绝对路径兜底探测」——挨个试 `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`、`%ProgramFiles%\PowerShell\7(或 7-preview)\pwsh.exe`、`%ProgramFiles(x86)%\PowerShell\7\pwsh.exe`、以及 `%ProgramFiles%\WindowsApps\Microsoft.PowerShell_*` 包目录，命中即视为已装。真机实测兜底后返回 `{status:'ok', major:7, via:'C:\Users\lihaorj\AppData\Local\Microsoft\WindowsApps\pwsh.exe'}`，不再误报。
+    修复：ENOENT 时补「绝对路径兜底探测」——挨个试 `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`、`%ProgramFiles%\PowerShell\7(或 7-preview)\pwsh.exe`、`%ProgramFiles(x86)%\PowerShell\7\pwsh.exe`、以及 `%ProgramFiles%\WindowsApps\Microsoft.PowerShell_*` 包目录，命中即视为已装。真机实测兜底后返回 `{status:'ok', major:7, via:'%USERPROFILE%\AppData\Local\Microsoft\WindowsApps\pwsh.exe'}`，不再误报。
     **派生坑（必须记住）：WindowsApps 的 0 字节 app execution alias 上，`node:fs` 的 `statSync` 抛 `EACCES`、`existsSync` 返回 `false`，但 `accessSync` 通过、`spawn` 能正常跑起来。** 所以兜底候选**绝不能用 `existsSync` 预过滤**（会把真 alias 当不存在跳过）；直接对每条候选 spawn，不存在那条自然 ENOENT（毫秒级）过滤掉。
     **排查过程**：父级（另一会话）18:26-18:28 装了 pwsh 7.7.0，反馈我的第一版会误报；我实测确认绝对路径存在（Size=0）、`& 它 -NoProfile -Command '$PSVersionTable.PSVersion.Major'` 返回 7、自己进程 `$env:PATH` 无 WindowsApps、`Get-Command pwsh` 空 → 坐实是 PATH 未刷新的 ENOENT 误报。真机 sanity 脚本（临时文件，跑完即删）验证兜底命中。
 
@@ -112,7 +120,7 @@
   - `weixin-poll.test.mjs`：**abort 能在 1s 量级打断在飞的长轮询**；`-14` 进暂停且暂停期可被 abort 打断（不死睡 1h）；客户端超时不算失败；`longpolling_timeout_ms` 采纳；游标落盘与续传；`message_id` 二级幂等；3 连败退避 30s 且可被 abort 打断。
   - `weixin-send.test.mjs`：带/不带 context_token 两条路径与 `withContextToken` 记录；`ret=-3` 不重试且后续分片停发；`ret=0` 不自动重试；分片逐条发；**token/context_token 明文不进日志与流水**。
   - `weixin-isolation.test.mjs`（**炸启动防护的真实回归**）：在临时包里把实现换成 7 种坏法（语法错误/顶层 throw/缺导出/同步抛/异步 reject/依赖解析失败/空文件）+ 整个文件缺失，逐一验证「壳仍可 import、`apply` 不抛、只 warn、dispose 不抛、工具仍注册」；并断言壳与协议层不 import feishu、不 import 任何外部包。
-  - 仓库全量基线不变：24 个测试文件里仍是 3 个已知失败（`alarm-inject` 硬编码不存在的旧路径 `G:\阿依娅依\output\...`；`home-relocate`/`tools-surface` 磁盘类型探测断言），与本次改动无关，1.5.21/1.5.22 条目已记录同一基线。
+  - 仓库全量基线不变：24 个测试文件里仍是 3 个已知失败（`alarm-inject` 硬编码不存在的旧路径 `…\output\...`；`home-relocate`/`tools-surface` 磁盘类型探测断言），与本次改动无关，1.5.21/1.5.22 条目已记录同一基线。
 - **实现期新坑（本版实测，已同步进 docs/经验-微信通道自研.md 第五节）**：
   - **坑 9：`setTimeout` 被 `unref()` 会让轮询循环静默停摆。** 退避 sleep 里的定时器一旦 unref，事件循环没有其它 ref 工作时定时器被丢弃，`await sleep()` 永不返回、循环永久挂起，**且没有任何日志**。是单测（业务错误退避那条）抓出来的。结论：轮询循环里的 sleep **一律不 unref**，退出靠 abort 打断。
   - **坑 10：`ctx.get('tools')` 在部分宿主上对未提供的服务直接抛，不是返回 null。** 只写 `if (!tools?.register)` 会漏掉抛错分支。两路都要接。同理，`ctx.effect` 的回调不是 `apply` 里同步执行的——单测里必须显式触发 effect 才能验证异步启动路径（否则会误以为"没日志"是实现问题）。
@@ -209,7 +217,7 @@
   另附超长正文分片时每片首尾也不带空白的断言。
   **仓库测试基线不变**：16 个 `.test.mjs` 文件（本次新增第 17 个 `feishu-trim.test.mjs`），
   修复前后均为 **13 过 / 3 挂**；3 挂的是已知失败（`alarm-inject` / `home-relocate` / `tools-surface`，
-  硬编码 `G:\阿依娅伊\` 旧路径导致 `ERR_MODULE_NOT_FOUND`，与本次改动无关）。
+  硬编码旧路径（本机盘符前缀，已脱敏）导致 `ERR_MODULE_NOT_FOUND`，与本次改动无关）。
 - 坑：**#72**（见下方「已知坑清单」末位）。
 
 ---
@@ -753,7 +761,7 @@ L571  agent_id: 7553531f-3345-45d1-a455-50a56e2c 5ca7  → message delivered
    ②**只认 `target.sessionId`，别用 `involvedSessionIds`**：实测我在当前会话对 `schedule-b5145c0e` 调了一次 `schedule_view`，宿主就把**当前会话**也追加进了 `involvedSessionIds`（变成 `[bf6364ea, 5dbce224]`）。若按 involved 匹配，每个"看过它"的会话都会冒出一行"你名下有闹钟"，而到点根本不会在那里响。改成 `if (target.sessionId !== sessionId) continue` 后，当前会话正确显示为空。
    ③**陈迹必须整行不注入**：初版只按 `all.length` 报总数，结果只剩一条过点 5 小时的任务时会输出"[闹钟] 你名下 1 个还挂着："后面空无一物——空壳行比不注入更误导。改为：`due` 只取过点 1 小时内、`shown` 为空则整行返回空串、计数用 `due+upcoming`（不用 `all`）。这条是单测抓出来的，不是想出来的。
    测试：`test/alarm-render.test.mjs`（造 store 验五种情形：本会话 active / 已 ended / 别会话 / 只在 involved 里 / 过旧陈迹 / 空 store / 坏 JSON）与 `test/alarm-live.test.mjs`（拿真实 `schedule.json` + 真实 session id 跑）。`presence.js` 末尾导出 `__testing = { renderAlarms, readOwnAlarms, renderAlarmTime }` 供它们调用。
-37. **改插件后用 `install_bundle` 重装是空操作，junction 已让源码即时生效（2026-11-07 实测）**：`C:\Users\LH\.dsh\profiles\desktop\node_modules\dsh-aiyayi` 是 **Junction**（目标 `G:\阿依娅伊\output\dsh-aiyayi-fix`），所以改完源码文件立刻落盘可见、`package.json` 的 version 也是新的；此时 `plugin_manager install_bundle` 返回 `{"application":"failed","error":{"code":"already-installed"}}`。**真正要拦住的是进程**：日志会给 `changed modules keep running their previous code until a restart`，即运行中的模块还是旧代码，必须重启 DSH 才生效。所以"装好了"与"生效了"是两件事——验证时先看日志那句 warn，别拿 install_bundle 的成功与否当判据。
+37. **改插件后用 `install_bundle` 重装是空操作，junction 已让源码即时生效（2026-11-07 实测）**：`%USERPROFILE%\.dsh\profiles\desktop\node_modules\dsh-aiyayi` 是 **Junction**（目标 `…\output\dsh-aiyayi-fix`），所以改完源码文件立刻落盘可见、`package.json` 的 version 也是新的；此时 `plugin_manager install_bundle` 返回 `{"application":"failed","error":{"code":"already-installed"}}`。**真正要拦住的是进程**：日志会给 `changed modules keep running their previous code until a restart`，即运行中的模块还是旧代码，必须重启 DSH 才生效。所以"装好了"与"生效了"是两件事——验证时先看日志那句 warn，别拿 install_bundle 的成功与否当判据。
 
 38. **`[闹钟]` 的"已到点"分支是错假设：一次性任务投递成功即 ended（2026-11-07 翻源码订正；1.4.3 修）**：1.4.2 里我写了"刚到点（过点 1 小时内）→ 催她'现在就该动手办'"，并当成主要情形。翻 `@deepseek-ai/dsh-schedule/lib/index.js` 后发现这个窗口其实极窄且含义完全不同——`deliverDue` 在 `this.send(...)` 之后立刻 `commit(this.advanced(...))`，而 `advanced()`（`schedule-service.js:1435-1444`）写的是 `status: occurrence.nextScheduledAt === void 0 ? "ended" : "active"`。也就是说**一次性任务投递成功的同一瞬间状态就变 ended**，`[SCHEDULE REMINDER]` 正是那一次投递。所以"active 且 scheduledAt 已过"的真实含义是**投递失败、尚未 commit 的残留**（`deliverDue` 的 catch 分支保留 pending 并返回失败 id），不是"到点了你快办"。1.4.2 那句"现在就该动手办"等于对着一条根本没送达的提醒催她干活，还会让她以为自己错过了。修法：文案改为"已过点…**提醒还没送达**"，并给真实可行动作（用 `schedule_edit` 改期重投 / 确认目标会话是否还在），同时把 persona 里引用旧文案的那句一起改掉——**改实现语义时务必同步 grep persona 的引用，否则提示词和代码会对不上**。回归测试 `test/alarm-due-window.test.mjs` 锁死：投递失败残留报"已过点+没送达"、已 ended 的绝不出现、不再出现"现在就该动手办"。
 39. **`[闹钟]` 只报标题不够用：她到点前不知道要查什么（2026-11-07；1.4.3 加）**：1.4.2 只渲染 `标题（时刻，还有多久）`。但真正要办的事全在 prompt 里（"查补天 QTVA-2026-11332391"这种单号），而宿主投递 prompt 要到点才发生——中间的这段时间她无法判断这个闹钟还该不该留、要不要改。1.4.3 增加一行"「标题」到点要做：<prompt 截断 60 字>"。两个坑：①**挑哪条 prompt**——不能取 `shown[0]`（`shown` 已被截到 3 条）也不能无脑海最早那条，否则会拿一条占位/极短的 prompt 冒充"要做的事"，把真正有内容的挤掉；正确做法是从 `due+upcoming` **全部**里挑第一条 `prompt.trim().length >= 60` 的，没有再退回第一条非空的。②**截断安全**——按码点切（`[...text]`）而不是 `slice`，否则会把 emoji 的代理对切一半、渲染成乱码/替换符。
@@ -776,7 +784,7 @@ L571  agent_id: 7553531f-3345-45d1-a455-50a56e2c 5ca7  → message delivered
 53. **写"正常"她就当"不用管"：状态词会被模型当成行动指令（2026-11-08 用户实测；1.5.3 修）**：注入行原来是 `[记忆] 默认路径未搬家（**正常**）· 候选 6 个`。娅伊事后自己的解释很准确："我看着「正常」两个字，就把它当成日常状态，没主动提。" 结果用户新建会话说"哈喽"，她不提搬家；用户追问"记忆在哪"，她只报路径。根因不是注入缺失（实测她每回合都收到这行），而是**语义错位**：这行想表达"没坏"，她的行为读的是"该不该做点什么"。修法：改成待办口吻 `【该跟他说一句】…**这次开口先主动提一句**："要不要把记忆搬到非系统盘…"`。并补一条人格纪律："他问你「记忆在哪」而你从没主动提过搬家，就等于这条待办漏了——先照实回答，再把建议补上"。教训：**给人格插件写状态提示时，别用"正常/OK"这种评价词**，它会被当成"无需动作"；要写成"有没有待办"。
 54. **"每轮都念"与"干脆不提"的两难，应该由代码定节拍（2026-11-08 娅伊提出；1.5.3 修）**：她把分寸问题摊得很实在——"每次你一开口我就念一遍该搬家了，也挺烦人"，提议"隔几天提一次"。但不能这么做：**模型数不准天**，让它自己掌握节奏必然时提时不提，而"该提却没提"正是用户抱怨的那件事。正确做法是按**会话**节拍：`locationTodoShownSessions` 记 sessionId，同会话只在首轮给一次待办（首轮 = 新的一次开口机会，提一次合适；同会话反复念才烦人）；要永久静默走 `memory_relocate` 的 `stay: true` 落盘——那是用户的明确决定，不是模型猜的节奏。注意两个实现细节：①**只有真的给出内容才 mark**（`locationLine !== ""` 才记），否则状态文件缺失时的空串会把待办永久吞掉；②**不可达警告不受"只首轮"限制**，那是故障不是待办，必须每轮都在。上限截断防长跑进程无限增长。
 55. **异步探测的副作用：首轮拿不到总线类型 → 排序又退回"空间最大者第一"（2026-11-08 自查；1.5.3 修）**：为了解决 `execFileSync` 阻塞事件循环 2.6 秒，1.5.3 把探测改成后台异步。副作用随即出现：首轮渲染时缓存是空的，候选排序拿不到 external 信息，于是 I:（173 GB）又回到第一位——**把我刚修好的坑原样还回去了**（实测 prompt 里又出现"推荐 I:"）。修法两层：①未知时写 `external: null` + reason「磁盘类型未知（探测未完成）」，**绝不冒充内置**；②排序改成 `已知内置 → 未知 → 已知外置`，组内才按空间——未知排中间，既不冒充也不让出头号位置。另外 `apply()` 里调 `prewarmDriveBusTypes()` 后台预热（用户重启后到真正开口常隔几十秒，够 PowerShell 跑完 2.6 秒），`memory_location` 用 `externalDriveInfoAwait()` 等最多 4 秒换准确标注。教训：**把一个阻塞调用改成异步时，要检查"依赖它的派生结果"会不会因此在首轮拿到空值并做出错误结论**。
-56. **宿主 patch 里「新增插件」必须用 `insert:` 包裹；从快照恢复 patch 文件前先验内容（2026-11-10 实测，aiyayi-feishu 桥接中断约半天）**：profile 根 patch（`C:\Users\lihaorj\.dsh\profiles\desktop\cordis.patch.yml`）里新增宿主插件的正确写法是 `- insert:` 块（根级 append）；裸 `- id: aiyayi-feishu / name: ...` 行是 **id-targeted 覆盖**——目标不存在时 loader（cordis-plugin-include `applyPatches`）只 warn `patch: entry "aiyayi-feishu" not found` 并跳过，插件静默不装。危险在于症状延迟：HMR 期间旧实例还在跑（unmanaged-plugin 保留旧代码），一切"看起来正常"；**DSH 重启重建插件树后裸行 no-op，插件直接消失**，飞书长连接断、新会话里 feishu_status 报未配置。本案成因：误把 bundle patch（gh_repo/cordis.patch.yml，只含三个 agent preset）覆盖到 profile 根 patch，再从 recovery 快照（`C:\Users\lihaorj\.dsh\recovery\<ms>-<uuid>\cordis.patch.yml`）恢复——扫全部 31 份快照，aiyayi-feishu 全是裸行（DSH 快照不保留手工编辑的 `insert:` 语法），照原样恢复＝把 bug 也恢复了。教训：①bundle patch 与 profile 根 patch 是职责不同的两个文件（前者只声明 agent preset、经 package.json `dsh.bundle.patch` 引用，装到 `node_modules\dsh-aiyayi\cordis.patch.yml`；后者做 id 覆盖/禁用/宿主插件 insert），覆盖前先比对 head 注释与 id 集合；②从快照/备份恢复后必须验证关键声明还在（id 清单 + 新增插件有无 `insert:` 包裹）；③判定插件是否真在跑：宿主日志搜插件 id 的「已就绪」/连接建立日志——`patch: entry "X" not found` 与正常加载**可共存**（desktop-shell、mnemon* 的 disable 覆盖行天天 warn 但功能正常），warn 本身不是故障证据，**缺少「已就绪」才是**。
+56. **宿主 patch 里「新增插件」必须用 `insert:` 包裹；从快照恢复 patch 文件前先验内容（2026-11-10 实测，aiyayi-feishu 桥接中断约半天）**：profile 根 patch（`%USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml`）里新增宿主插件的正确写法是 `- insert:` 块（根级 append）；裸 `- id: aiyayi-feishu / name: ...` 行是 **id-targeted 覆盖**——目标不存在时 loader（cordis-plugin-include `applyPatches`）只 warn `patch: entry "aiyayi-feishu" not found` 并跳过，插件静默不装。危险在于症状延迟：HMR 期间旧实例还在跑（unmanaged-plugin 保留旧代码），一切"看起来正常"；**DSH 重启重建插件树后裸行 no-op，插件直接消失**，飞书长连接断、新会话里 feishu_status 报未配置。本案成因：误把 bundle patch（gh_repo/cordis.patch.yml，只含三个 agent preset）覆盖到 profile 根 patch，再从 recovery 快照（`%USERPROFILE%\.dsh\recovery\<ms>-<uuid>\cordis.patch.yml`）恢复——扫全部 31 份快照，aiyayi-feishu 全是裸行（DSH 快照不保留手工编辑的 `insert:` 语法），照原样恢复＝把 bug 也恢复了。教训：①bundle patch 与 profile 根 patch 是职责不同的两个文件（前者只声明 agent preset、经 package.json `dsh.bundle.patch` 引用，装到 `node_modules\dsh-aiyayi\cordis.patch.yml`；后者做 id 覆盖/禁用/宿主插件 insert），覆盖前先比对 head 注释与 id 集合；②从快照/备份恢复后必须验证关键声明还在（id 清单 + 新增插件有无 `insert:` 包裹）；③判定插件是否真在跑：宿主日志搜插件 id 的「已就绪」/连接建立日志——`patch: entry "X" not found` 与正常加载**可共存**（desktop-shell、mnemon* 的 disable 覆盖行天天 warn 但功能正常），warn 本身不是故障证据，**缺少「已就绪」才是**。
 
 71. **飞书权限 scope 的真名只有一个，别自己拼后缀（2026-11-11 实锤，坑 #70 后续）**：发件上传图片/文件要的权限，开发者后台搜 **`im:resource:upload` 是 0 条**——**后台根本没有这个独立 scope**，真名就是 **`im:resource`**（后台中文名「获取与上传图片或文件资源」，免审）。文档/工单里常见的「`im:resource:upload`（或 `im:resource`）」是**笔误**，害人去后台搜一个不存在的名字、搜不到就以为「后台没有这个权限 / 是不是飞书改了」——实际权限申请入口和 scope 目录里只有 `im:resource` 这一条。修法：文档一律写真名 `im:resource`；脚本侧用别名表兜住旧写法（create-bot v6 的 `SCOPE_ALIASES`：`im:resource:upload` / `im:resource:read` → `im:resource`，命中时打 WARN 说明「后台无该独立 scope」）。教训：**权限名要以开发者后台 scope 目录的实际检索结果为准**，别照着 API 路径（`POST /im/v1/files`）或接口动作名（upload）反推 scope 名——它们不是一一对应的。
 
