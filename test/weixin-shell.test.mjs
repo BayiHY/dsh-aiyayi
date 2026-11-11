@@ -83,7 +83,7 @@ test('enabled=true：apply 同步返回且注册一个生命周期 effect（不 
   assert.ok(elapsed < 100, `apply 必须同步快速返回，实测 ${elapsed}ms`)
   // enabled=true 时两个自查工具应已注册
   const names = registeredTools.map((t) => t.name).sort()
-  assert.deepEqual(names, ['weixin_login', 'weixin_status'])
+  assert.deepEqual(names, ['weixin_bind', 'weixin_login', 'weixin_status', 'weixin_unbind'])
 })
 
 test('enabled=true 且 tools 服务缺失：只 warn，不抛（不影响插件激活）', () => {

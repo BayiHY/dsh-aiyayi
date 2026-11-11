@@ -166,7 +166,7 @@ test('实现模块坏掉时工具仍注册（能自查，不会连"为什么没�
   await runEffectAndSettle(effects)
   assert.deepEqual(
     registeredTools.map((tool) => tool.name).sort(),
-    ['weixin_login', 'weixin_status'],
+    ['weixin_bind', 'weixin_login', 'weixin_status', 'weixin_unbind'],
   )
   // 未就绪时 status 工具仍能给出可执行答复
   const status = await registeredTools.find((tool) => tool.name === 'weixin_status').execute({}, {})
