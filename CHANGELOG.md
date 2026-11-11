@@ -8,6 +8,25 @@
 
 ---
 
+## 1.5.22（2026-11-11 多应用多长连接：双机器人各自收发，根因消灭 230002 错绑发送）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- git：本次 commit（2026-11-11，阿依娅伊）1.5.22：多应用多长连接改造（背景：2026-11-11 诊断实锤——单飞书应用时代，运行版 config 换成新应用后，旧应用的 p2p 单聊收不到事件、新应用回发必报 230002「Bot/User can NOT be out of the chat」，因为 p2p chat 归属是 app 维度的）。
+- **config 多应用格式**（`lib/feishu-logic.js`）：
+  - 新格式 `{"apps":[{"appId","appSecret","domain"?},...]}`，每个应用一条独立长连接；旧顶层 `{appId,appSecret}` 单应用格式**继续兼容**（`normalizeApps` 自动包一层，`apps` 数组优先）。
+  - `mergeConfig` 仍是浅合并不变；appId 去重首个赢；per-app `domain` 可覆盖全局 `domain`（缺省回落 `null`，`feishu.js` 里 `appDomain = app.domain || merged.domain` 补全局域）。
+  - **自动迁移** `migrateConfigFile(root)`：读到旧格式→先备份 `config.json.bak-<yyyymmdd-HHmmss>`→原地改写为 apps 数组（其余顶层键保留、顶层不再留凭证副本）；幂等（已是新格式返回 `already-multi`，文件缺失 `missing`，坏 JSON `parse:*` 不动文件）。apply() 每次启动自动调用。
+- **每应用独立基础设施**（`lib/feishu.js`）：逐 app 建 `createTokenManager` + `createLarkChannel({transport:'websocket'})` + `connect()`；WS 断连重连是 SDK `WSClient` 自带（autoReconnect:true, reconnectInterval=120s），各 channel 互不干扰。入站 `messageId` 去重（`SEEN_MESSAGE_LIMIT=2000` 环形缓存）防同群多 bot 重复投递。
+- **归属机制（本次根因修复的核心）**：
+  - 落盘 `chat-owners.json`：{chatId→appId}。入站事件（消息/进单聊卡片事件）到达即记录 `recordChatOwner(chatId, 该channel的appId)`——事件从哪条 WS 来，归属就是谁，权威自愈。
+  - 发送前归属解析 `resolveChannelForChat(chatId)`：缓存命中直接用；未命中逐 app 探测 `GET /open-apis/im/v1/messages?container_id_type=chat&container_id=…&page_size=1`（code=0→成员，230002→非成员；判据为 2026-11-11 双 app 实锤，`GET /im/v1/chats/{id}` 两类 app 都返回 code=0 不能当判据）→命中写入缓存。
+  - 发送一律走 `sendViaOwner(chatId, payload)`：先归属解析，再从**该 app 自己的 channel** 发；发送报 230002→清缓存重探重试一次（会话回复/卡片兜底文本路径）。确定性归属，不盲试。
+  - 卡片就地刷新（`patchQuestionCard`）优先用 `record.appId` 对应的 channel——卡片是谁发的就必须用谁的凭证 patch。
+- **工具升级**：`feishu_status` 增报 `apps:[{appId,connected,chatsOwned,error?}]`（逐应用长连接状态）、`chatOwners`、`boundChatAppId`、`singleApp`，旧字段全保留；`feishu_bind` 绑定前先探测归属：全部 app 非成员→`ok:false` 确定拒绝（绑了也收不到事件），探测基建故障→`ok:true + warning` 保持可用性，成功→回 `appId`。
+- **既有机制理顺（改动最小化）**：`绑定会话` 指令、pending-bind 30 分钟时效、`bot_p2p_chat_entered_v1` 自动绑定逻辑不变，只是每条 WS 各自处理自己的事件并先记归属；问答卡片/文字兜底/附件下载的 domain 按 app 取。
+- 测试：新增 `test/feishu-multiapp.test.mjs`（normalizeApps 双形态/去重/domain 覆盖、migrateConfigFile 备份+幂等+BOM、chat-owners 读写+损坏容错、isOutOfChatError 各层挖码）；`node --test "test/*.test.mjs"` 18 文件 15 过 3 挂——挂的 `alarm-inject` / `home-relocate` / `tools-surface` 与 1.5.21 干净基线一致（磁盘类型探测断言，环境相关，非本次引入）。
+- 部署顺序注意：**先装 1.5.22 再迁移运行版 config.json**（1.5.21 读不懂 apps 格式）；迁移脚本自带备份。
+
 ## 1.5.21（2026-11-11 修复：飞书回复正文首尾空白行）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）

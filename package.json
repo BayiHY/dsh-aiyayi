@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.5.21",
+  "version": "1.5.22",
   "license": "MIT",
   "author": "阿依娅伊 <aiyayi@local>",
   "keywords": [
@@ -40,6 +40,7 @@
     "lib/feishu.js",
     "lib/feishu-logic.js",
     "skills",
+    "!skills/feishu-setup/scripts/logs",
     "cordis.patch.yml",
     "icon.svg",
     "CHANGELOG.md",
