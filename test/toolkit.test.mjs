@@ -6,7 +6,8 @@
  *   2) toolkit_read 存在 / 不存在 / 目录 / maxBytes 截断；
  *   3) toolkit_write 白名单内成功+覆盖自动备份、白名单外拒绝、路径穿越拒绝、超 64KB 拒绝；
  *   4) 调用留痕：JSONL 追加、环形截断（超 500→留最新）、损坏行不抛、写留痕失败不抛；
- *   5) 工具注册/schema/own-tools 放行 + 工具目录 add/remove/list。
+ *   5) 工具注册/schema/own-tools 放行 + 工具目录 add/remove/list；
+ *   6b) 回归：宿主 schema 校验只接受单 type 字符串（1.5.39，type 数组 = 注册必败）。
  *
  * 全程在临时沙盘里造记忆根（AIYAYI_HOME 定向 + 指路文件隔离），绝不碰真实记忆目录。
  */
@@ -300,6 +301,63 @@ const cmdDef = registered.find((d) => d.name === 'toolkit_cmd')
 check('schema：toolkit_cmd 必填 cmd', JSON.stringify(cmdDef.parameters.required) === JSON.stringify(['cmd']))
 const writeDef = registered.find((d) => d.name === 'toolkit_write')
 check('schema：toolkit_write 必填 path+content', JSON.stringify(writeDef.parameters.required) === JSON.stringify(['path', 'content']))
+
+/* ------------------------------------------------------------------ *
+ * 6b. 回归（1.5.39）：宿主 schema 校验——type 只接受单字符串
+ *
+ * 宿主 tools.register() 的 JSON Schema 校验不接受 type 数组（报错
+ * "must be a single type string (type arrays are not supported)"，
+ * 错误类 UNSUPPORTED_SCHEMA）。1.5.38 的三处 type:['integer','null']
+ * 写法导致 toolkit 三件套注册全部失败，又被 apply() 的逐工具 try/catch
+ * 吞成 warn——表面看不出来。这里把宿主那条规则复刻成守门员：apply()
+ * （= 插件激活）注册出来的每个 schema 逐层扫描，任何 type 不是字符串
+ * 即 FAIL；并反向验证「type 数组必被拒」，防守门员本身失明。
+ * ------------------------------------------------------------------ */
+function collectSchemaTypeNodes(node, path, hits) {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) return hits
+  if ('type' in node && node.type !== undefined) hits.push({ path: `${path}.type`, value: node.type })
+  for (const [key, child] of Object.entries(node.properties ?? {})) {
+    collectSchemaTypeNodes(child, `${path}.properties.${key}`, hits)
+  }
+  if (node.items) collectSchemaTypeNodes(node.items, `${path}.items`, hits)
+  for (const combinator of ['anyOf', 'oneOf', 'allOf']) {
+    for (const [i, child] of (node[combinator] ?? []).entries()) {
+      collectSchemaTypeNodes(child, `${path}.${combinator}[${i}]`, hits)
+    }
+  }
+  return hits
+}
+function hostValidateSchema(def) {
+  const violations = []
+  for (const [scope, schema] of [['parameters', def.parameters], ['output.schema', def.output?.schema]]) {
+    if (!schema) continue
+    for (const hit of collectSchemaTypeNodes(schema, scope, [])) {
+      if (typeof hit.value !== 'string') {
+        violations.push(`${hit.path} = ${JSON.stringify(hit.value)}（宿主会报 UNSUPPORTED_SCHEMA，注册必失败）`)
+      }
+    }
+  }
+  return violations
+}
+for (const def of registered) {
+  const violations = hostValidateSchema(def)
+  check(`回归：${def.name} schema 通过宿主校验（所有 type 都是单字符串）`, violations.length === 0, violations.join('；'))
+}
+const cmdSchema = cmdDef.output.schema
+const readDef = registered.find((d) => d.name === 'toolkit_read')
+check('回归：toolkit_cmd.exitCode 是单类型 integer 且不在 required（1.5.39 修复点）',
+  cmdSchema.properties.exitCode.type === 'integer' && !cmdSchema.required.includes('exitCode'),
+  JSON.stringify(cmdSchema.properties.exitCode))
+check('回归：toolkit_read.mtime 是单类型 string 且不在 required（1.5.39 修复点）',
+  readDef.output.schema.properties.mtime.type === 'string' && !readDef.output.schema.required.includes('mtime'),
+  JSON.stringify(readDef.output.schema.properties.mtime))
+check('回归：toolkit_write.backupPath 是单类型 string 且不在 required（1.5.39 修复点）',
+  writeDef.output.schema.properties.backupPath.type === 'string' && !writeDef.output.schema.required.includes('backupPath'),
+  JSON.stringify(writeDef.output.schema.properties.backupPath))
+const probeDef = { name: 'probe', parameters: { type: 'object', properties: { x: { type: ['string', 'null'] } } } }
+check('回归：守门员能抓出 type 数组写法（防校验器失明）',
+  hostValidateSchema(probeDef).length === 1 && hostValidateSchema(probeDef)[0].includes('UNSUPPORTED_SCHEMA'),
+  JSON.stringify(hostValidateSchema(probeDef)))
 
 const { isOwnTool, OWN_TOOLS } = await import(libUrl('own-tools.js'))
 check('own-tools：三个工具名被放行', isOwnTool('toolkit_cmd') && isOwnTool('toolkit_read') && isOwnTool('toolkit_write'))
