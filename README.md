@@ -58,16 +58,22 @@ GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她
 
 ## 工具箱（本体直调，不派子代）
 
-宿主 agent loop **同步 await 一批工具**——一批没跑完，下一次模型请求就发不出去（坑 #79）。所以工具箱按"耗时"分两档：
+宿主 agent loop **同步 await 一批工具**——一批没跑完，下一次模型请求就发不出去（坑 #79）。所以工具箱按"耗时"分两档。
+
+**1.5.43 起（破坏性变更）工具面只留三个通用工具**：`toolkit_cmd` / `toolkit_read` / `toolkit_write`。
+`watch_read` / `mem_sync` / `pkg_stats` 三个**已从注册表移除**（不再注册、不再进 own-tools 白名单）——
+它们是发版方自己的特殊能力（要手表脚本目录 / 会真提交记忆仓库 / 要联网查下载量），不该进通用安装包，
+而且无条件注册时它们约占每轮 690 token、拉长工具面、抬高误调率。**实现文件全部保留**，
+1.5.44 的本地清单机制（`<记忆根>/toolbox.json` → 按需注册）直接复用。
 
 | 工具 | 类型 | 干什么 | 返回 |
 | --- | --- | --- | --- |
 | `toolkit_cmd` | 同步 | 只读命令（白名单前缀整词 + 禁 shell 元字符） | `{ok, cmd, stdout, stderr, exitCode, ...}` |
 | `toolkit_read` | 同步 | 文件探测 + 小文件读（前 8KB，上限 64KB） | `{ok, exists, size, mtime, content, ...}` |
 | `toolkit_write` | 同步 | 受限写入（记忆根白名单，64KB，原子写 + .bak） | `{ok, path, bytes, backupPath, ...}` |
-| `watch_read` | **异步** | 手表取数（电量/步数/睡眠/血氧/心率，入 SQLite） | 立刻 `{status:'started', taskId, hint}`；25-100 秒后结果作为一条**消息推回会话** |
-| `mem_sync` | 同步 | 记忆仓库提交 + 推 gitee/gitcode master（提交前扫敏感内容） | `{status, commit, pushed:[{remote,ok,error}], hits, hint}` |
-| `pkg_stats` | 同步 | npm 下载量（昨/7 天/30 天）+ latest 版本 + GitHub/Gitee/GitCode 热度 | `{ok, package, version, repo, npm:{lastDay,lastWeek,lastMonth,...}, github, gitee, gitcode, fetchedAt}` |
+| ~~`watch_read`~~ | 异步 | **1.5.43 移出工具面**：手表取数（电量/步数/睡眠/血氧/心率，入 SQLite） | 立刻 `{status:'started', taskId, hint}`；25-100 秒后结果作为一条**消息推回会话** |
+| ~~`mem_sync`~~ | 同步 | **1.5.43 移出工具面**：记忆仓库提交 + 推配置里的远端（默认不推） | `{status, commit, pushed:[{remote,ok,error}], hits, hint}` |
+| ~~`pkg_stats`~~ | 同步 | **1.5.43 移出工具面**：npm 下载量（昨/7 天/30 天）+ latest 版本 + GitHub/Gitee/GitCode 热度 | `{ok, package, version, repo, npm:{lastDay,lastWeek,lastMonth,...}, github, gitee, gitcode, fetchedAt}` |
 
 异步工具的范式（以后加长任务工具照这个写，细节见 `docs/经验-工具真异步与宿主同步await.md`）：
 
@@ -81,7 +87,7 @@ startDetachedTask({ exec, kind: 'watch_read', hint: '已开始取数…', run: a
 
 调用留痕统一落 `<记忆根>/toolkit/usage.jsonl`（同步工具按次记，异步工具记 `started` + 完成两条）。
 
-`pkg_stats` 的三个实测注意点（1.5.42，写死在工具行为里）：
+`pkg_stats` 的三个实测注意点（1.5.42 记录；该工具在 1.5.43 已移出工具面，实现保留，1.5.44 由本地清单按需注册）：
 
 - **npm 统计的 `end` 日期滞后约 2 天**——`last-day` 不是"今天"。所以三个窗口都把 `start`/`end` 原样带回，别把这数当当日实况。
 - **GitHub 直连在本机不通**（`Recv failure: Connection was reset`），兜底走第三方代理 **gh-proxy.com**——该代理会看到你查询的仓库路径（`owner/repo` 会进它的访问日志）；`github.source` 会标 `direct` / `gh-proxy`，不放心就把 `pkgStatsAllowGithubProxy` 设 `false`。

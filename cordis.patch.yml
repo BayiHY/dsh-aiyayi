@@ -274,6 +274,10 @@
                 - D:\AI\TRAE_PRO\阿依娅依\docs
               usageEnabled: true
               usageMaxLines: 500
+              # ── 1.5.43 破坏性变更：以下三个工具已从工具面移除（不再注册、不再进白名单）──
+              # watch_read / mem_sync / pkg_stats 是发版方的私有能力，不进通用安装包。
+              # 实现文件仍在包里，1.5.44 由本地清单（<记忆根>/toolbox.json）按需注册。
+              # 下面的配置项**当前不再有任何效果**，留作 1.5.44 接口参考，先别照抄启用。
               # ── 1.5.41 新增项（这里只写"本机需要显式给"的；其余用代码默认值）──
               # watch_read：手表脚本目录。不设 = 按插件自身位置推导
               #   <包目录>/../../skg_probe/ble_direct（本机即 D:\AI\TRAE_PRO\阿依娅依\skg_probe\ble_direct）。
@@ -283,10 +287,13 @@
               # watchTimeoutMs: 180000
               # watchDefaultRounds: 6
               # watchDefaultListenSec: 0
-              # mem_sync：提交后推哪些远端、推哪个分支（顺序即汇报顺序）。
+              # mem_sync（1.5.43 起默认值已改）：提交后推哪些远端、推哪个分支（顺序即汇报顺序）。
+              #   ⚠ memPushRemotes **默认空 = 不推也不提交**（status:"noop"，零副作用）。
+              #   要云端同步必须显式列出**本仓库真实存在**的远端名（如 origin）；
+              #   gitee/gitcode 是发版方的镜像名，不是通用约定。
+              #   ⚠ memBranch **默认空 = 跟随仓库当前分支**；detached HEAD 时明确报错。
               # memPushRemotes:
-              #   - gitee
-              #   - gitcode
+              #   - origin
               # memBranch: master
               # ── 1.5.42 新增项（同上：这里只写"本机需要显式给"的；以下全是代码默认值，
               #    取消注释即生效，不改默认行为）──

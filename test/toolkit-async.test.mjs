@@ -400,8 +400,10 @@ runGit(['add', '-A'])
 runGit(['commit', '-m', '初始提交'])
 check('mem_sync 临时仓库：初始化成功且在 master', runGit(['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim() === 'master')
 
-// 无改动 → noop
-const noop = tx.executeMemSync({}, { cfg: {}, logUsage: () => {}, warn: () => {} })
+// 无改动 → noop（1.5.43 起：**先用 dummy 远端配置**把"配了远端但没改动"这条路径单独测，
+//   不配远端时的 noop 在新版测试文件 test/mem-sync-1543.test.mjs 里另测）
+const CFG_PUSH = { memPushRemotes: ['gitee'], memBranch: 'master' }
+const noop = tx.executeMemSync({}, { cfg: CFG_PUSH, logUsage: () => {}, warn: () => {} })
 check('mem_sync：无改动 → status=noop / ok:true / hint 说没有待提交的改动',
   noop.status === 'noop' && noop.ok === true && noop.hint.includes('没有待提交的改动'), JSON.stringify(noop))
 check('mem_sync：noop 时 commit 是空串、pushed/hits 是空数组',
@@ -409,8 +411,9 @@ check('mem_sync：noop 时 commit 是空串、pushed/hits 是空数组',
 checkOutput('mem_sync：noop 路径的输出过宿主校验', tx.MEM_SYNC_SCHEMA.output.schema, noop)
 
 // 敏感内容 → 拒绝（已跟踪文件的改动 + 未跟踪文件两条路都要扫到）
+// 1.5.43 起必须给远端配置才会走到扫描（没配远端直接 noop 零副作用），故这里用 CFG_PUSH。
 writeFileSync(join(root, 'memory.md'), '# 记忆\n- [2026-11-12] 测试条目\n+ sk-abcdefghijklmnop1234567890\n', 'utf8')
-const denied = tx.executeMemSync({}, { cfg: {}, logUsage: () => {}, warn: () => {} })
+const denied = tx.executeMemSync({}, { cfg: CFG_PUSH, logUsage: () => {}, warn: () => {} })
 check('mem_sync：已跟踪文件里的 sk- → status=denied',
   denied.status === 'denied' && denied.ok === false && denied.error === '命中敏感内容', JSON.stringify(denied))
 check('mem_sync：拒绝时给出脱敏后的位置（含行号、不含原文）',
@@ -425,7 +428,7 @@ checkOutput('mem_sync：拒绝路径的输出过宿主校验', tx.MEM_SYNC_SCHEM
 // 未跟踪文件里的密钥 → 同样拒绝（git diff 看不到它，必须单独扫）
 writeFileSync(join(root, 'memory.md'), '# 记忆\n- [2026-11-12] 测试条目\n', 'utf8')
 writeFileSync(join(root, '新笔记.md'), 'token = abcdef1234567890\n', 'utf8')
-const denyUntracked = tx.executeMemSync({}, { cfg: {}, logUsage: () => {}, warn: () => {} })
+const denyUntracked = tx.executeMemSync({}, { cfg: CFG_PUSH, logUsage: () => {}, warn: () => {} })
 check('mem_sync：未跟踪文件里的 token= 也拒绝（并指到文件名）',
   denyUntracked.status === 'denied' && denyUntracked.hits.some((h) => h.includes('新笔记.md')), JSON.stringify(denyUntracked.hits))
 rmSync(join(root, '新笔记.md'), { force: true })
@@ -456,8 +459,12 @@ runGit(['remote', 'add', 'gitee', bareRemote])
 runGit(['remote', 'add', 'gitcode', join(sandbox, 'no-such-remote.git')])
 writeFileSync(join(root, 'memory.md'), '# 记忆\n- [2026-11-12] 再新增一条\n', 'utf8')
 const mixed = tx.executeMemSync({}, { cfg: { memPushRemotes: ['gitee', 'gitcode'], memBranch: 'master' }, logUsage: () => {}, warn: () => {} })
-check('mem_sync：一个远端成功一个失败 → status=partial、ok:true（提交本身成了）',
-  mixed.status === 'partial' && mixed.ok === true, JSON.stringify(mixed))
+check('mem_sync：一个远端成功一个失败 → status=partial、ok:false（1.5.43：部分失败不再假报成功）',
+  mixed.status === 'partial' && mixed.ok === false, JSON.stringify(mixed))
+check('mem_sync：partial 的 hint 附上本仓库真实存在的远端名（1.5.43）',
+  mixed.hint.includes('本仓库现有远端') && mixed.hint.includes('gitcode') && mixed.hint.includes('gitee'), mixed.hint)
+check('mem_sync：partial 的 error 是机器可读的「推送未全部成功」',
+  mixed.error === '推送未全部成功', JSON.stringify(mixed.error))
 check('mem_sync：成功的远端 ok:true（真的推进 bare 仓库了）',
   mixed.pushed.find((p) => p.remote === 'gitee')?.ok === true, JSON.stringify(mixed.pushed))
 check('mem_sync：失败的远端 ok:false 且带 error，没拖累另一个',
@@ -509,14 +516,16 @@ const makeCtx = () => ({
   logger: { info: () => {}, warn: () => {} },
 })
 const api = tk.apply(makeCtx(), { usageEnabled: false })
-check('注册：六个工具全注册上（1.5.39 的教训——注册失败会被 try/catch 吞成 warn）',
-  registered.map((d) => d.name).join(',') === 'toolkit_cmd,toolkit_read,toolkit_write,watch_read,mem_sync,pkg_stats',
+check('注册：1.5.43 起工具面只留三件套（watch_read / mem_sync / pkg_stats 已移出）',
+  registered.map((d) => d.name).join(',') === 'toolkit_cmd,toolkit_read,toolkit_write',
   registered.map((d) => d.name).join(','))
-check('注册：目录 list 与之一致（6 个）', api.list().length === 6, api.list())
-check('注册：watch_read / mem_sync 都在 own-tools 放行名单里', tk.TOOL_NAMES.includes('watch_read') && tk.TOOL_NAMES.includes('mem_sync'))
+check('注册：目录 list 与之一致（3 个）', api.list().length === 3, api.list())
+check('注册：watch_read / mem_sync 已不在 TOOL_NAMES（实现保留、不注册）',
+  !tk.TOOL_NAMES.includes('watch_read') && !tk.TOOL_NAMES.includes('mem_sync'), JSON.stringify(tk.TOOL_NAMES))
 
-for (const name of ['watch_read', 'mem_sync']) {
-  const def = registered.find((d) => d.name === name)
+// schema 结构仍然逐条校验**导出物**（实现文件保留，1.5.44 的清单加载器要复用，
+// 所以 schema 合规性必须继续被钉住，只是不再经 apply() 注册）。
+for (const [name, def] of [['watch_read', tx.WATCH_SCHEMA], ['mem_sync', tx.MEM_SYNC_SCHEMA]]) {
   check(`schema：${name} 存在`, Boolean(def))
   check(`schema：${name} parameters.type 是单字符串 object`, def?.parameters?.type === 'object', JSON.stringify(def?.parameters))
   check(`schema：${name} output.schema.type 是单字符串 object`, def?.output?.schema?.type === 'object', JSON.stringify(def?.output?.schema))
@@ -536,19 +545,24 @@ checkOutput('归一：mem_sync 对空对象产出合规形状', tx.MEM_SYNC_SCHE
 checkOutput('归一：mem_sync 对脏 pushed/hits 产出合规形状', tx.MEM_SYNC_SCHEMA.output.schema,
   tx.shapeMemSyncOutput({ status: null, ok: 'yes', commit: null, pushed: [{ remote: null, ok: 'true', error: undefined }, null], hits: [null, 3], hint: null, error: undefined }))
 
-// 通过注册出来的 execute 壳真实调用（不是只测底层函数），并逐字段过宿主校验。
-const watchViaShell = await registered.find((d) => d.name === 'watch_read').execute({}, { agent: { id: 'sess-shell', followup: () => {} } })
-checkOutput('转发：watch_read 经 execute 壳调用也过宿主校验', tx.WATCH_SCHEMA.output.schema, watchViaShell)
-check('转发：watch_read 经 execute 壳调用返回 started 或明确的 error（二选一，绝不抛）',
+// 直接调导出的 execute（1.5.43 起它们不再经 apply() 注册，但实现与签名必须保持可用——
+// 1.5.44 的本地清单加载器就靠这个入口把它们挂进工具面）。
+const watchViaShell = await tx.executeWatchRead({}, { cfg: {}, logUsage: () => {}, warn: () => {}, exec: { agent: { id: 'sess-shell', followup: () => {} } } })
+checkOutput('转发：watch_read 的 execute 直调也过宿主校验', tx.WATCH_SCHEMA.output.schema, watchViaShell)
+check('转发：watch_read 直调返回 started 或明确的 error（二选一，绝不抛）',
   (watchViaShell.status === 'started' && watchViaShell.taskId.length > 0)
   || (watchViaShell.status === 'error' && watchViaShell.ok === false && watchViaShell.error.length > 0),
   JSON.stringify(watchViaShell))
-const memViaShell = await registered.find((d) => d.name === 'mem_sync').execute({})
-checkOutput('转发：mem_sync 经 execute 壳调用也过宿主校验', tx.MEM_SYNC_SCHEMA.output.schema, memViaShell)
+const memViaShell = await tx.executeMemSync({}, { cfg: { memPushRemotes: [] }, logUsage: () => {}, warn: () => {} })
+checkOutput('转发：mem_sync 的 execute 直调也过宿主校验', tx.MEM_SYNC_SCHEMA.output.schema, memViaShell)
+check('转发：mem_sync 直调在空远端配置下是 noop（零副作用，1.5.43 语义）',
+  memViaShell.status === 'noop' && memViaShell.ok === true, JSON.stringify(memViaShell))
 
-/* 4b. exec 透传证据：走注册出来的壳起一个真任务，断言**后台完成时 followup 真的被调到**
+/* 4b. exec 透传证据：起一个真任务，断言**后台完成时 followup 真的被调到**
  *     （这是 1.5.41 的命门——签名从 `(args)=>` 改成 `(args, exec)=>` 就是为了这个）。
- *     用一个假 watchDir + node 当 python：脚本立刻失败退出 → 走 error 分支 → 仍必须投递。 */
+ *     用一个假 watchDir + node 当 python：脚本立刻失败退出 → 走 error 分支 → 仍必须投递。
+ *     1.5.43 起 watch_read 不再经 apply() 注册，这里直接调它的 execute（签名与透传行为不变，
+ *     1.5.44 的清单加载器复用同一个入口）。 */
 const shellRegistered = []
 const shellCtx = {
   effect(fn) { fn(); return () => {} },
@@ -562,9 +576,13 @@ tk.apply(shellCtx, {
   watchTimeoutMs: 8000,
 })
 const shellFollowups = []
-const shellStarted = await shellRegistered.find((d) => d.name === 'watch_read')
-  .execute({ rounds: 1, listenSec: 0 }, { agent: { id: 'sess-shell2', followup: (m) => shellFollowups.push(m) } })
-check('透传：经注册壳起的任务 status=started', shellStarted.status === 'started', JSON.stringify(shellStarted))
+const shellStarted = await tx.executeWatchRead({ rounds: 1, listenSec: 0 }, {
+  cfg: { usageEnabled: false, watchDir: fakeWatchDir, watchPython: process.execPath, watchTimeoutMs: 8000 },
+  logUsage: () => {},
+  warn: () => {},
+  exec: { agent: { id: 'sess-shell2', followup: (m) => shellFollowups.push(m) } },
+})
+check('透传：直调 execute 起的任务 status=started', shellStarted.status === 'started', JSON.stringify(shellStarted))
 const shellRecord = await ta.waitForTask(shellStarted.taskId)
 check('透传：exec.agent.followup 被真的调到（异步结果能回注会话）', shellFollowups.length === 1, JSON.stringify(shellFollowups))
 check('透传：投递的消息结构合法且 source 无 undefined',

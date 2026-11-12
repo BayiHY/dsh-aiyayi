@@ -501,8 +501,8 @@ check('归一：NaN/Infinity 归 0',
 /* ------------------------------------------------------------------ *
  * 10. 注册 / own-tools / 经 execute 壳（真跑一次，用 mock 换掉全局 fetch）
  * ------------------------------------------------------------------ */
-check('注册：TOOL_NAMES 含 pkg_stats 且共 6 个',
-  tk.TOOL_NAMES.includes('pkg_stats') && tk.TOOL_NAMES.length === 6, JSON.stringify(tk.TOOL_NAMES))
+check('注册：1.5.43 起 pkg_stats 已不在 TOOL_NAMES（实现保留、不注册）',
+  !tk.TOOL_NAMES.includes('pkg_stats') && tk.TOOL_NAMES.length === 3, JSON.stringify(tk.TOOL_NAMES))
 check('注册：DEFAULT_CONFIG 有 1.5.42 的配置项',
   tk.DEFAULT_CONFIG.pkgStatsDefaultPackage === 'dsh-aiyayi'
   && tk.DEFAULT_CONFIG.pkgStatsDefaultRepo === 'BayiHY/dsh-aiyayi'
@@ -516,8 +516,10 @@ check('注册：DEFAULT_CONFIG 有 1.5.42 的配置项',
   }))
 
 const { isOwnTool, OWN_TOOLS } = await import(libUrl('own-tools.js'))
-check('own-tools：pkg_stats 被放行', isOwnTool('pkg_stats') === true)
-check('own-tools：静态兜底表含 pkg_stats', OWN_TOOLS.includes('pkg_stats'))
+check('own-tools：1.5.43 起 pkg_stats 不在静态兜底表（移出工具面，不注册也不放行）',
+  isOwnTool('pkg_stats') === false && !OWN_TOOLS.includes('pkg_stats'),
+  JSON.stringify({ isOwn: isOwnTool('pkg_stats'), inList: OWN_TOOLS.includes('pkg_stats') }))
+check('own-tools：三件套仍被放行', ['toolkit_cmd', 'toolkit_read', 'toolkit_write'].every((n) => isOwnTool(n)))
 
 const registered = []
 const ctx = {
@@ -526,12 +528,13 @@ const ctx = {
   logger: { info: () => {}, warn: () => {} },
 }
 tk.apply(ctx, { usageEnabled: false })
-check('注册：经 apply() 注册出 6 个工具（含 pkg_stats）',
-  registered.map((d) => d.name).join(',') === 'toolkit_cmd,toolkit_read,toolkit_write,watch_read,mem_sync,pkg_stats',
+check('注册：经 apply() 只注册三件套（pkg_stats 已在 1.5.43 移出工具面）',
+  registered.map((d) => d.name).join(',') === 'toolkit_cmd,toolkit_read,toolkit_write',
   registered.map((d) => d.name).join(','))
-const pkgDef = registered.find((d) => d.name === 'pkg_stats')
-check('注册：pkg_stats 的 output.schema 就是本模块那份', pkgDef?.output?.schema === SCHEMA.output.schema)
-check('注册：pkg_stats 的 required 列全（注册面再核一次）', requiredCoversAll(pkgDef.output.schema))
+// 1.5.43 起不再经 apply() 注册；直接调导出的 execute 入口（1.5.44 的清单加载器复用同一个）。
+const pkgDef = { execute: (args) => ps.executePkgStats(args, { cfg: tk.mergeConfig({}), logUsage: () => {}, warn: () => {} }) }
+check('注册：pkg_stats 的 output.schema 就是本模块那份', ps.PKG_STATS_SCHEMA.output.schema === SCHEMA.output.schema)
+check('注册：pkg_stats 的 required 列全（导出面再核一次）', requiredCoversAll(SCHEMA.output.schema))
 
 // 经 execute 壳真调一次：临时替换 globalThis.fetch（壳只认全局 fetch）。
 const originalFetch = globalThis.fetch
