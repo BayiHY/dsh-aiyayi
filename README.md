@@ -73,7 +73,7 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
 - `lib/doc.js` — aiyayi-doc 文档解析插件（1.4.0，挂检索员 preset；ZIP/XML 最小解析零依赖 + 动态加载 shipped libreoffice-kit 做 pdf 页图与旧版转换）
 - `lib/own-tools.js` — 她的工具名单单一真源（注册处登记、放行处判定，防手写白名单漂移）
 - `lib/precompact.js` — aiyayi-precompact 压缩前沉淀检查插件（1.5.37；在 dsh-compaction-basic 动手压缩前，把值得沉淀的任务闭环/结论/新经验先落盘为经验文档+记忆+索引，失败不阻塞主流程；`precompact_run` 显式工具入口 + 接近阈值自动触发）
-- `lib/toolkit.js` — aiyayi-toolkit 工具包中间层插件（1.5.38；首批 3 工具：`toolkit_cmd` 只读命令白名单执行 / `toolkit_read` 文件探测 + 小文件读取 / `toolkit_write` 受限写入；调用留痕落 `<记忆根>/toolkit/usage.jsonl`；简单状态型查询本体直调、不派小伙伴。1.5.39 修复 type 数组 schema 导致三件套注册全败的问题，坑 #77）
+- `lib/toolkit.js` — aiyayi-toolkit 工具包中间层插件（1.5.38；首批 3 工具：`toolkit_cmd` 只读命令白名单执行 / `toolkit_read` 文件探测 + 小文件读取 / `toolkit_write` 受限写入；调用留痕落 `<记忆根>/toolkit/usage.jsonl`；简单状态型查询本体直调、不派小伙伴。1.5.39 修复 type 数组 schema 导致三件套注册全败的问题，坑 #77；1.5.40 修执行输出对齐 output.schema——宿主对工具输出也做 schema 校验，条件性返回字段一律用约定值，坑 #78）
 - `lib/feishu.js` — aiyayi-feishu 飞书桥接宿主插件（1.5.8 起；跨会话服务，长连接收消息、按指令路由到 aiyayi 会话、回发；凭读取记忆根 `feishu/config.json`）
 - `lib/feishu-logic.js` — 飞书纯逻辑（路由/映射/文本抽取/三档复用决策/**长连接状态机**，无外部依赖，可单测；test/feishu-route.test.mjs、test/feishu-reuse-session.test.mjs、test/feishu-status.test.mjs 覆盖）
 - `skills/feishu-setup/` — 内置技能（1.5.13 起随包自动同步到 DSH 技能根）：飞书机器人安装/验证/排障全流程（含 2026-11-10 扫码接入改造说明；脚本 `scripts/create-bot.js` v5 等由技能同步维护）

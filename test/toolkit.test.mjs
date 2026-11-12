@@ -106,7 +106,8 @@ check('cmd：截断后长度 = 2048 + 标记', big.stdout.length === 2048 + '\n[
 
 const slow = await tk.runCmd({ cmd: 'node -e "setTimeout(function(){}, 8000)"', timeoutMs: 500 }, cfgCmd)
 check('cmd：超时返回 timedOut:true 且 ok:false', slow.timedOut === true && slow.ok === false, JSON.stringify(slow))
-check('cmd：超时 exitCode null', slow.exitCode === null)
+check('cmd：超时 exitCode 是约定值 -1（1.5.40 起恒 integer，不再是 null）', slow.exitCode === -1, JSON.stringify({ exitCode: slow.exitCode }))
+check('cmd：超时 truncated 仍是 boolean', slow.truncated === false)
 check('cmd：超时耗时接近超时值（<3s 而非等满 8s）', slow.durationMs < 3000, slow.durationMs)
 
 const badCwd = await tk.runCmd({ cmd: 'node -v', cwd: join(sandbox, 'no-such-dir') }, cfgCmd)
@@ -146,7 +147,7 @@ const cfgWrite = tk.mergeConfig({ usageEnabled: false })
 const w1 = tk.doWrite({ path: join(root, 'notes', 'w-探针.md'), content: '# 第一版内容\n' }, cfgWrite)
 check('write：记忆根内子目录成功（目录自建）', w1.ok === true && w1.bytes > 0, JSON.stringify(w1))
 check('write：文件真实落盘且内容一致', existsSync(w1.path) && readFileSync(w1.path, 'utf8') === '# 第一版内容\n', w1.path)
-check('write：新建无备份', w1.backupPath === null, w1.backupPath)
+check('write：新建无备份（backupPath 是空字符串，1.5.40 起恒 string，不再是 null）', w1.backupPath === '', w1.backupPath)
 
 const w2 = tk.doWrite({ path: join(root, 'notes', 'w-探针.md'), content: '# 第二版内容\n' }, cfgWrite)
 check('write：覆盖成功', w2.ok === true && readFileSync(w2.path, 'utf8') === '# 第二版内容\n', JSON.stringify(w2))
@@ -345,14 +346,16 @@ for (const def of registered) {
 }
 const cmdSchema = cmdDef.output.schema
 const readDef = registered.find((d) => d.name === 'toolkit_read')
-check('回归：toolkit_cmd.exitCode 是单类型 integer 且不在 required（1.5.39 修复点）',
-  cmdSchema.properties.exitCode.type === 'integer' && !cmdSchema.required.includes('exitCode'),
+// 1.5.39 的修法是「单类型 + 移出 required 表达可空」；1.5.40 发现宿主对输出也校验（坑 #78）后
+// 升级为「单类型 + 恒有值 + 进 required」：可空语义改由约定值承担（-1 / 空串），不再靠缺省。
+check('回归：toolkit_cmd.exitCode 是单类型 integer 且在 required（1.5.40 起恒有值）',
+  cmdSchema.properties.exitCode.type === 'integer' && cmdSchema.required.includes('exitCode'),
   JSON.stringify(cmdSchema.properties.exitCode))
-check('回归：toolkit_read.mtime 是单类型 string 且不在 required（1.5.39 修复点）',
-  readDef.output.schema.properties.mtime.type === 'string' && !readDef.output.schema.required.includes('mtime'),
+check('回归：toolkit_read.mtime 是单类型 string 且在 required（1.5.40 起恒有值，探测不到给空串）',
+  readDef.output.schema.properties.mtime.type === 'string' && readDef.output.schema.required.includes('mtime'),
   JSON.stringify(readDef.output.schema.properties.mtime))
-check('回归：toolkit_write.backupPath 是单类型 string 且不在 required（1.5.39 修复点）',
-  writeDef.output.schema.properties.backupPath.type === 'string' && !writeDef.output.schema.required.includes('backupPath'),
+check('回归：toolkit_write.backupPath 是单类型 string 且在 required（1.5.40 起恒有值，未备份给空串）',
+  writeDef.output.schema.properties.backupPath.type === 'string' && writeDef.output.schema.required.includes('backupPath'),
   JSON.stringify(writeDef.output.schema.properties.backupPath))
 const probeDef = { name: 'probe', parameters: { type: 'object', properties: { x: { type: ['string', 'null'] } } } }
 check('回归：守门员能抓出 type 数组写法（防校验器失明）',
@@ -380,6 +383,154 @@ check('目录：卸载兜底真的反注册了内置工具', disposedFlags.get('
 // 工具执行转发：走注册出来的 execute 壳，结果与直调底层一致。
 const viaShell = await cmdDef.execute({ cmd: 'node -e "console.log(\'via-execute-9527\')"' })
 check('转发：execute 壳把调用交给底层实现', viaShell.ok === true && viaShell.stdout.includes('via-execute-9527'), JSON.stringify(viaShell))
+
+/* ------------------------------------------------------------------ *
+ * 6c. 回归（1.5.40）：宿主对**执行输出**也做 schema 校验——真实跑 execute，逐字段过校验
+ *
+ * 背景（坑 #78）：1.5.39 修完注册端 type 数组后，实测 toolkit_cmd / toolkit_write
+ * 的执行输出被宿主在**输出端**拒掉：
+ *   toolkit_cmd   → missing required property 'value.truncated'; 'value.exitCode' must be an integer
+ *   toolkit_write → 'value.backupPath' must be a string
+ * 报错发生在校验环节，但**底层操作已经真跑了**（write 的目标文件确实写入了 63 字节）。
+ * 根因：实现层是"条件性返回"——truncated 部分路径不出现、exitCode 超时给 null、
+ * backupPath 新建给 null。而宿主 `validateJsonSchemaValue(output.schema, value)` 的语义是：
+ * null 算"存在但类型错"（≠ 缺省），required 缺一个即违例，additionalProperties:false 多一个键也违例。
+ *
+ * 本节把宿主校验器复刻成守门员（只实现宿主支持的子集：type 单字符串 / properties /
+ * required / additionalProperties / items / enum / const / oneOf），然后**真实调用注册出来的
+ * execute**（mock 底层命令与文件系统边界：cmd 用白名单内的 node -e 真跑三路；write 用沙盘
+ * 真写新建/覆盖两路），断言返回值逐字段过校验。6b 只证明注册端 schema 合法，不够——
+ * 今天的翻车证明宿主在输出端也校验。
+ * ------------------------------------------------------------------ */
+const hostTypes = ['string', 'number', 'integer', 'boolean', 'null', 'object', 'array']
+const isPlainRecord = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
+/** 复刻宿主 validateJsonSchemaValue（只覆盖本包 schema 用到的子集，够用即止）。 */
+function hostValidateValue(schema, value, path = 'value') {
+  const out = []
+  if (schema?.oneOf) {
+    const matched = schema.oneOf.filter((branch) => hostValidateValue(branch, value, path).length === 0).length
+    if (matched !== 1) out.push(`"${path}" must match exactly one oneOf branch (matched ${matched})`)
+    return out
+  }
+  const type = schema?.type
+  if (type === undefined) return isJsonLossless(value) ? [] : [`"${path}" must be a lossless JSON value`]
+  if (typeof type !== 'string' || !hostTypes.includes(type)) {
+    out.push(Array.isArray(type)
+      ? `${path}.type must be a single type string (type arrays are not supported)`
+      : `${path}.type must be one of ${hostTypes.join('/')}`)
+    return out
+  }
+  if (type === 'object') {
+    if (!isPlainRecord(value)) return [`"${path}" must be an object`]
+    for (const key of schema.required ?? []) {
+      if (!Object.hasOwn(value, key) || value[key] === undefined) out.push(`missing required property "${path === '' ? key : `${path}.${key}`}"`)
+    }
+    for (const [key, child] of Object.entries(schema.properties ?? {})) {
+      if (!Object.hasOwn(value, key) || value[key] === undefined) continue
+      out.push(...hostValidateValue(child, value[key], path === '' ? key : `${path}.${key}`))
+    }
+    if (schema.additionalProperties === false) {
+      for (const key of Object.keys(value)) {
+        if (!Object.hasOwn(schema.properties ?? {}, key)) out.push(`"${path}.${key}" is not a declared property (additionalProperties: false)`)
+      }
+    }
+    return out
+  }
+  if (type === 'array') {
+    if (!Array.isArray(value)) return [`"${path}" must be an array`]
+    if (schema.items) value.forEach((entry, i) => out.push(...hostValidateValue(schema.items, entry, `${path}[${i}]`)))
+    return out
+  }
+  if (type === 'string') return typeof value === 'string' ? [] : [`"${path}" must be a string`]
+  if (type === 'boolean') return typeof value === 'boolean' ? [] : [`"${path}" must be a boolean`]
+  if (type === 'integer') {
+    // 注意：宿主对 integer 的判据是 isJsonNumber + Number.isInteger —— null 不是 integer。
+    return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value)
+      ? []
+      : [`"${path}" must be an integer`]
+  }
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value) ? [] : [`"${path}" must be a finite JSON number`]
+  if (type === 'null') return value === null ? [] : [`"${path}" must be null`]
+  return out
+}
+function isJsonLossless(value) {
+  try {
+    return JSON.parse(JSON.stringify(value)) !== undefined
+  } catch {
+    return false
+  }
+}
+/** 断言某次 execute 输出过宿主输出校验；失败时把违例拼进 extra。 */
+function checkOutput(label, def, value) {
+  const violations = hostValidateValue(def.output.schema, value)
+  check(label, violations.length === 0, `${violations.join('；')}\n        实际输出: ${JSON.stringify(value)}`)
+  return value
+}
+// 守门员自检：必须能抓出今天这三种真实失败形态（防校验器失明）。
+const guardCmd = registered.find((d) => d.name === 'toolkit_cmd').output.schema
+check('回归：守门员能抓出 missing required（缺 truncated）',
+  hostValidateValue(guardCmd, { ok: true, cmd: 'x', stdout: '', stderr: '', exitCode: 0, durationMs: 1, denied: false, timedOut: false, reason: '', whitelisted: '' }, 'value')
+    .some((v) => v.includes('missing required property "value.truncated"')),
+  JSON.stringify(hostValidateValue(guardCmd, { ok: true }, 'value')))
+check('回归：守门员能抓出 exitCode:null（present 但类型错，≠ 缺省）',
+  hostValidateValue(guardCmd, { ok: true, cmd: 'x', stdout: '', stderr: '', exitCode: null, durationMs: 1, truncated: false, denied: false, timedOut: false, reason: '', whitelisted: '', error: '' }, 'value')
+    .some((v) => v === '"value.exitCode" must be an integer'),
+  JSON.stringify(hostValidateValue(guardCmd, { exitCode: null }, 'value')))
+const guardWrite = writeDef.output.schema
+check('回归：守门员能抓出 backupPath:null（1.5.39 实测报错原文）',
+  hostValidateValue(guardWrite, { ok: true, path: 'x', bytes: 1, backupPath: null, denied: false, reason: '', error: '' }, 'value')
+    .some((v) => v === '"value.backupPath" must be a string'),
+  JSON.stringify(hostValidateValue(guardWrite, { backupPath: null }, 'value')))
+
+// --- toolkit_cmd：真实 execute 跑 成功 / 失败 / 超时 / 拒绝 四路 ---
+const byName = (n) => registered.find((d) => d.name === n)
+
+const execGood = await byName('toolkit_cmd').execute({ cmd: 'node -e "console.log(\'exec-ok-5400\')"' })
+checkOutput('输出校验：cmd 成功路径过宿主校验（exitCode 真实 integer、truncated boolean）', byName('toolkit_cmd'), execGood)
+check('输出校验：cmd 成功路径 exitCode 是真实 0（不是约定值 -1）', execGood.exitCode === 0, execGood.exitCode)
+
+const execFail = await byName('toolkit_cmd').execute({ cmd: 'node -e "process.exit(3)"' })
+checkOutput('输出校验：cmd 失败路径（退出码 3）过宿主校验', byName('toolkit_cmd'), execFail)
+check('输出校验：cmd 失败路径 exitCode=3 透传真实退出码', execFail.exitCode === 3 && execFail.ok === false, JSON.stringify(execFail))
+
+const execTimeout = await byName('toolkit_cmd').execute({ cmd: 'node -e "setTimeout(function(){}, 8000)"', timeoutMs: 300 })
+checkOutput('输出校验：cmd 超时路径过宿主校验（exitCode 恒 integer）', byName('toolkit_cmd'), execTimeout)
+check('输出校验：cmd 超时路径 exitCode=-1 且 timedOut:true、truncated 仍是 boolean',
+  execTimeout.exitCode === -1 && execTimeout.timedOut === true && typeof execTimeout.truncated === 'boolean', JSON.stringify(execTimeout))
+
+const execDenied = await byName('toolkit_cmd').execute({ cmd: 'npm publish' })
+checkOutput('输出校验：cmd 拒绝路径过宿主校验（1.5.39 就挂在这条：缺 truncated + exitCode null）', byName('toolkit_cmd'), execDenied)
+check('输出校验：cmd 拒绝路径 denied:true、exitCode=-1、truncated:false',
+  execDenied.denied === true && execDenied.exitCode === -1 && execDenied.truncated === false, JSON.stringify(execDenied))
+
+// --- toolkit_write：真实 execute 跑 新建 / 覆盖 两路 ---
+const execWriteNew = await byName('toolkit_write').execute({ path: join(root, 'exec-新建.md'), content: '# 新建内容\n' })
+checkOutput('输出校验：write 新建路径过宿主校验（backupPath 恒 string，空串）', writeDef, execWriteNew)
+check('输出校验：write 新建路径 backupPath 是空字符串', execWriteNew.backupPath === '', JSON.stringify(execWriteNew.backupPath))
+check('输出校验：write 新建路径文件真实落盘', existsSync(execWriteNew.path) && readFileSync(execWriteNew.path, 'utf8') === '# 新建内容\n')
+
+const execWriteOver = await byName('toolkit_write').execute({ path: join(root, 'exec-新建.md'), content: '# 覆盖内容\n' })
+checkOutput('输出校验：write 覆盖路径过宿主校验（backupPath 恒 string，非空）', writeDef, execWriteOver)
+check('输出校验：write 覆盖路径 backupPath 非空且 .bak 存在',
+  execWriteOver.backupPath.length > 0 && existsSync(execWriteOver.backupPath), JSON.stringify(execWriteOver.backupPath))
+
+const execWriteDenied = await byName('toolkit_write').execute({ path: join(sandbox, 'outside', 'exec-evil.txt'), content: 'x' })
+checkOutput('输出校验：write 拒绝路径过宿主校验（1.5.39 也挂在这条：backupPath null）', writeDef, execWriteDenied)
+check('输出校验：write 拒绝路径 denied:true、backupPath 空串',
+  execWriteDenied.denied === true && execWriteDenied.backupPath === '', JSON.stringify(execWriteDenied))
+
+// --- toolkit_read：不存在路径（mtime 曾为 null 的同类隐患）也过校验 ---
+const execReadMiss = byName('toolkit_read').execute({ path: join(root, 'no-such-exec-5400.txt') })
+checkOutput('输出校验：read 不存在路径过宿主校验（mtime 恒 string）', byName('toolkit_read'), execReadMiss)
+check('输出校验：read 不存在路径 mtime 是空字符串', execReadMiss.mtime === '', JSON.stringify(execReadMiss.mtime))
+
+// --- 归一函数的兜底：任何脏输入都不得产出违例（含内部异常路径） ---
+for (const def of registered.filter((d) => ['toolkit_cmd', 'toolkit_read', 'toolkit_write'].includes(d.name))) {
+  const shaper = def.name === 'toolkit_cmd' ? tk.shapeCmdOutput : def.name === 'toolkit_read' ? tk.shapeReadOutput : tk.shapeWriteOutput
+  const dirty = shaper({ exitCode: null, durationMs: null, bytes: null, size: null, mtime: null, backupPath: null, truncated: 'yes' })
+  checkOutput(`输出校验：${def.name} 归一函数对脏输入（全 null）也产出合规形状`, def, dirty)
+  checkOutput(`输出校验：${def.name} 归一函数对空对象产出合规形状`, def, shaper({}))
+}
 
 /* ------------------------------------------------------------------ *
  * 收尾清理
