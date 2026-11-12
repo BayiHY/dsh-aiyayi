@@ -214,10 +214,17 @@
               memoryPath: 事情/经验
               # docsDir 不设 → 默认落记忆根下 docs/（可改成工作区 docs 目录）。
               updateIndex: true
-          # 工具包中间层（首批 3 工具）：toolkit_cmd（只读命令，白名单收敛）/ toolkit_read
+          # 工具包中间层：toolkit_cmd（只读命令，白名单收敛）/ toolkit_read
           # （文件探测+小文件读取）/ toolkit_write（受限写入：记忆根+白名单目录，64KB，
           # 原子写+自动 .bak）。简单状态型查询本体直接调，不用派小伙伴；留痕落
           # <记忆根>/toolkit/usage.jsonl（环形 500 行）。数组一律整体替换（不是叠加）。
+          # 1.5.41 起工具箱加「真异步」能力（坑 #79：宿主同步 await 工具，长任务会堵死
+          # 整轮且无超时兜底），并新增两个具体工具：
+          #   · watch_read（异步，手表取数）——立刻返回 taskId，25-100 秒后结果经
+          #     exec.agent.followup 作为一条消息推回会话；任务级总超时 180 秒杀进程树。
+          #   · mem_sync（同步，记忆仓库提交推双远端）——git status/diff 扫描敏感内容
+          #     → add/commit（阿依娅伊 <aiyayi@local>）→ 依次 push gitee/gitcode master；
+          #     越界或命中密钥一律拒绝并回脱敏行号。
           - id: aiyayi-toolkit
             name: 'dsh-aiyayi/toolkit'
             config:
@@ -252,6 +259,20 @@
                 - D:\AI\TRAE_PRO\阿依娅依\docs
               usageEnabled: true
               usageMaxLines: 500
+              # ── 1.5.41 新增项（这里只写"本机需要显式给"的；其余用代码默认值）──
+              # watch_read：手表脚本目录。不设 = 按插件自身位置推导
+              #   <包目录>/../../skg_probe/ble_direct（本机即 D:\AI\TRAE_PRO\阿依娅依\skg_probe\ble_direct）。
+              #   目录搬家时在这里给绝对路径。watchPython 默认 'python'（需能 import bleak）。
+              # watchDir: D:\AI\TRAE_PRO\阿依娅依\skg_probe\ble_direct
+              # watchPython: python
+              # watchTimeoutMs: 180000
+              # watchDefaultRounds: 6
+              # watchDefaultListenSec: 0
+              # mem_sync：提交后推哪些远端、推哪个分支（顺序即汇报顺序）。
+              # memPushRemotes:
+              #   - gitee
+              #   - gitcode
+              # memBranch: master
           - id: aiyayi-restrict
             name: 'dsh-aiyayi/restrict'
           - id: time-context

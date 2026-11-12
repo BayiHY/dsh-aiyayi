@@ -55,6 +55,31 @@ GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她
 - **检索员**（`aiyayi-retriever` 预设）：只读叶子，摘文件/Office/PDF/网页、带路径/页码交回；文档解析走 `aiyayi-doc`。
 - **模型跟随**：子代 spawn 时跟随用户会话模型；本体切模型经 `aiyayi-presence` / `aiyayi-presence-worker` 层层传导到小伙伴与检索员。
 - **断因透传**：子代失败时真实断因注入上级下一步消息（`⚠ [小伙伴]` / `⚠ [检索员]`），上级自己判断续接还是重派。
+
+## 工具箱（本体直调，不派子代）
+
+宿主 agent loop **同步 await 一批工具**——一批没跑完，下一次模型请求就发不出去（坑 #79）。所以工具箱按"耗时"分两档：
+
+| 工具 | 类型 | 干什么 | 返回 |
+| --- | --- | --- | --- |
+| `toolkit_cmd` | 同步 | 只读命令（白名单前缀整词 + 禁 shell 元字符） | `{ok, cmd, stdout, stderr, exitCode, ...}` |
+| `toolkit_read` | 同步 | 文件探测 + 小文件读（前 8KB，上限 64KB） | `{ok, exists, size, mtime, content, ...}` |
+| `toolkit_write` | 同步 | 受限写入（记忆根白名单，64KB，原子写 + .bak） | `{ok, path, bytes, backupPath, ...}` |
+| `watch_read` | **异步** | 手表取数（电量/步数/睡眠/血氧/心率，入 SQLite） | 立刻 `{status:'started', taskId, hint}`；25-100 秒后结果作为一条**消息推回会话** |
+| `mem_sync` | 同步 | 记忆仓库提交 + 推 gitee/gitcode master（提交前扫敏感内容） | `{status, commit, pushed:[{remote,ok,error}], hits, hint}` |
+
+异步工具的范式（以后加长任务工具照这个写，细节见 `docs/经验-工具真异步与宿主同步await.md`）：
+
+```js
+// execute 签名必须是 (args, exec) —— exec.agent 才能 followup
+[WATCH_SCHEMA, (args, exec) => executeWatchRead(args, { cfg, logUsage, warn, exec })]
+
+// 立刻返回，run() 甩到下一轮宏任务；完成/失败/超时都投一条消息
+startDetachedTask({ exec, kind: 'watch_read', hint: '已开始取数…', run: async () => ({ status, text }) })
+```
+
+调用留痕统一落 `<记忆根>/toolkit/usage.jsonl`（同步工具按次记，异步工具记 `started` + 完成两条）。
+
 - **续接（continuable）**：本体、小伙伴、检索员都是 continuable——DSH 重启后 `send_message` 一条消息即可冷唤醒续接；续接前 `list_agents` 现查 ID，别凭记忆敲（详见[更新日志](./CHANGELOG.md) 1.4.4 条目）。
 
 ## 文件
@@ -74,6 +99,8 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
 - `lib/own-tools.js` — 她的工具名单单一真源（注册处登记、放行处判定，防手写白名单漂移）
 - `lib/precompact.js` — aiyayi-precompact 压缩前沉淀检查插件（1.5.37；在 dsh-compaction-basic 动手压缩前，把值得沉淀的任务闭环/结论/新经验先落盘为经验文档+记忆+索引，失败不阻塞主流程；`precompact_run` 显式工具入口 + 接近阈值自动触发）
 - `lib/toolkit.js` — aiyayi-toolkit 工具包中间层插件（1.5.38；首批 3 工具：`toolkit_cmd` 只读命令白名单执行 / `toolkit_read` 文件探测 + 小文件读取 / `toolkit_write` 受限写入；调用留痕落 `<记忆根>/toolkit/usage.jsonl`；简单状态型查询本体直调、不派小伙伴。1.5.39 修复 type 数组 schema 导致三件套注册全败的问题，坑 #77；1.5.40 修执行输出对齐 output.schema——宿主对工具输出也做 schema 校验，条件性返回字段一律用约定值，坑 #78）
+- `lib/toolkit-async.js` — aiyayi-toolkit 的**真异步能力**（1.5.41）：`startDetachedTask()` 立刻返回 `{status:'started', taskId}`、把 `run()` 甩到下一轮宏任务；跑完（含失败/超时）经 `exec.agent.followup(createUserMessage(...))` 把结果作为一条消息注入会话，并有进程内 task 表可查。为什么走 followup 而不是 `ctx.jobs`：后者是 producer 侧能力，`preset-aiyayi` 本体没挂 `tool-jobs`。坑 #65（source 禁 undefined）/ #68（投递前让出宿主 publish 宏任务）/ #79（宿主同步 await 工具）的规避写法都收在这一个文件里
+- `lib/toolkit-extra.js` — 1.5.41 新增的两个具体工具：`watch_read`（**异步**，手表取数，立刻返回 taskId，后台跑 `skg_probe/ble_direct/watch_read.py`，任务级总超时 180s，结果/超时/失败都推回会话）+ `mem_sync`（**同步**，记忆仓库 `git status --porcelain -z` → `git diff HEAD` 全文 + 未跟踪文件敏感内容扫描 → add/commit → 依次 push gitee/gitcode master；越界一律拒绝，坑 #80 的 quotepath 陷阱也在这里修）
 - `lib/feishu.js` — aiyayi-feishu 飞书桥接宿主插件（1.5.8 起；跨会话服务，长连接收消息、按指令路由到 aiyayi 会话、回发；凭读取记忆根 `feishu/config.json`）
 - `lib/feishu-logic.js` — 飞书纯逻辑（路由/映射/文本抽取/三档复用决策/**长连接状态机**，无外部依赖，可单测；test/feishu-route.test.mjs、test/feishu-reuse-session.test.mjs、test/feishu-status.test.mjs 覆盖）
 - `skills/feishu-setup/` — 内置技能（1.5.13 起随包自动同步到 DSH 技能根）：飞书机器人安装/验证/排障全流程（含 2026-11-10 扫码接入改造说明；脚本 `scripts/create-bot.js` v5 等由技能同步维护）

@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.5.40",
+  "version": "1.5.41",
   "license": "MIT",
   "author": "巴依浩爷 (bayihy)",
   "keywords": [
@@ -29,6 +29,8 @@
     "./weixin": "./lib/weixin.js",
     "./precompact": "./lib/precompact.js",
     "./toolkit": "./lib/toolkit.js",
+    "./toolkit-async": "./lib/toolkit-async.js",
+    "./toolkit-extra": "./lib/toolkit-extra.js",
     "./icon": "./icon.svg"
   },
   "files": [
@@ -46,6 +48,8 @@
     "lib/feishu-logic.js",
     "lib/precompact.js",
     "lib/toolkit.js",
+    "lib/toolkit-async.js",
+    "lib/toolkit-extra.js",
     "lib/weixin.js",
     "lib/weixin/",
     "skills",
