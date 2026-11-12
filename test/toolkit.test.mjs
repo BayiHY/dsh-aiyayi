@@ -288,9 +288,10 @@ const api = tk.apply(makeCtx(), {
   cmdWhitelist: ['node -e', ...tk.mergeConfig({}).cmdWhitelist],
 })
 // 1.5.41 起 toolkit 还挂了两个具体工具（watch_read 异步 / mem_sync 同步），
-// 这里断言全部 5 个都注册上，再单独盯住首批三件套的行为。
-const ALL_TOOL_NAMES = 'toolkit_cmd,toolkit_read,toolkit_write,watch_read,mem_sync'
-check('注册：五个工具已注册', registered.length === 5 && registered.map((d) => d.name).join(',') === ALL_TOOL_NAMES, registered.map((d) => d.name).join(','))
+// 1.5.42 再加 pkg_stats（同步查 npm 下载量与代码仓热度），这里断言全部 6 个都注册上，
+// 再单独盯住首批三件套的行为。
+const ALL_TOOL_NAMES = 'toolkit_cmd,toolkit_read,toolkit_write,watch_read,mem_sync,pkg_stats'
+check('注册：六个工具已注册', registered.length === 6 && registered.map((d) => d.name).join(',') === ALL_TOOL_NAMES, registered.map((d) => d.name).join(','))
 check('注册：目录 list 与之一致', api.list().join(',') === ALL_TOOL_NAMES, api.list())
 for (const def of registered) {
   check(`schema：${def.name} parameters 是 object 且有 properties`, def.parameters?.type === 'object' && Object.keys(def.parameters?.properties ?? {}).length > 0, JSON.stringify(def.parameters))
@@ -372,10 +373,10 @@ check('own-tools：陌生名不放行', isOwnTool('rm_rf_del_everything') === fa
 // 工具目录：add / remove / 卸载兜底。
 const extraDef = { name: 'toolkit_extra', description: '测试自定义工具', parameters: { type: 'object', properties: {} }, output: { schema: { type: 'object' } } }
 api.add('toolkit_extra', extraDef, async () => ({ ok: true }))
-check('目录：add 注册新工具（list 变 6）', api.list().length === 6 && registered.length === 6, api.list())
+check('目录：add 注册新工具（list 变 7）', api.list().length === 7 && registered.length === 7, api.list())
 check('目录：add 后尚未反注册', disposedFlags.get('toolkit_extra')() === false)
 api.remove('toolkit_extra')
-check('目录：remove 反注册并移出目录', api.list().length === 5 && registered.length === 6, api.list())
+check('目录：remove 反注册并移出目录', api.list().length === 6 && registered.length === 7, api.list())
 check('目录：remove 真的调了 disposer', disposedFlags.get('toolkit_extra')() === true)
 check('目录：重复 remove 返回 false', api.remove('toolkit_extra') === false)
 for (const cleanup of cleanups) cleanup()

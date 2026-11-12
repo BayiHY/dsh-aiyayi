@@ -509,10 +509,10 @@ const makeCtx = () => ({
   logger: { info: () => {}, warn: () => {} },
 })
 const api = tk.apply(makeCtx(), { usageEnabled: false })
-check('注册：五个工具全注册上（1.5.39 的教训——注册失败会被 try/catch 吞成 warn）',
-  registered.map((d) => d.name).join(',') === 'toolkit_cmd,toolkit_read,toolkit_write,watch_read,mem_sync',
+check('注册：六个工具全注册上（1.5.39 的教训——注册失败会被 try/catch 吞成 warn）',
+  registered.map((d) => d.name).join(',') === 'toolkit_cmd,toolkit_read,toolkit_write,watch_read,mem_sync,pkg_stats',
   registered.map((d) => d.name).join(','))
-check('注册：目录 list 与之一致（5 个）', api.list().length === 5, api.list())
+check('注册：目录 list 与之一致（6 个）', api.list().length === 6, api.list())
 check('注册：watch_read / mem_sync 都在 own-tools 放行名单里', tk.TOOL_NAMES.includes('watch_read') && tk.TOOL_NAMES.includes('mem_sync'))
 
 for (const name of ['watch_read', 'mem_sync']) {

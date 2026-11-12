@@ -225,6 +225,21 @@
           #   · mem_sync（同步，记忆仓库提交推双远端）——git status/diff 扫描敏感内容
           #     → add/commit（阿依娅伊 <aiyayi@local>）→ 依次 push gitee/gitcode master；
           #     越界或命中密钥一律拒绝并回脱敏行号。
+          # 1.5.42 起再加一个同步工具（同样"几秒内完成"这一档）：
+          #   · pkg_stats（同步，查 npm 下载量与代码仓热度）——npm 三个下载窗口
+          #     （last-day/week/month，**start/end 原样带回**：npm 的 end 滞后约 2 天，
+          #     "last-day" 不是今天）+ registry 的 latest 版本与发布时间 + GitHub /
+          #     Gitee / GitCode 的 star / fork / watcher / open issues。
+          #     只允许 https GET 到白名单域名（精确主机名）：api.npmjs.org /
+          #     registry.npmjs.org / api.github.com / gh-proxy.com / gitee.com / gitcode.com；
+          #     repo/package 参数逐段字符校验 + 编码；整次调用 15 秒总预算。
+          #     某平台挂了只写进它自己那段的 unavailable，其余照常返回，绝不抛。
+          #     ⚠ **gh-proxy.com 是第三方代理**（GitHub 直连在本机不通时的兜底）：它会
+          #     看到你查询的仓库路径（owner/repo 进它的访问日志），不放心就设
+          #     pkgStatsAllowGithubProxy: false 关掉这条兜底。
+          #     ⚠ GitCode 无匿名 API（private-token 必需），stars/forks 恒为 0 且
+          #     unavailable 写明原因；页面上的 star 数是 UI 数字，不作接口确证。
+          #     ⚠ Gitee 的 watchers_count 是"关注数"，语义与 GitHub watchers 不同。
           - id: aiyayi-toolkit
             name: 'dsh-aiyayi/toolkit'
             config:
@@ -273,6 +288,19 @@
               #   - gitee
               #   - gitcode
               # memBranch: master
+              # ── 1.5.42 新增项（同上：这里只写"本机需要显式给"的；以下全是代码默认值，
+              #    取消注释即生效，不改默认行为）──
+              # pkg_stats：默认查询目标（本体一般不用传参）。
+              # pkgStatsDefaultPackage: dsh-aiyayi
+              # pkgStatsDefaultRepo: BayiHY/dsh-aiyayi
+              # pkg_stats：整次调用总预算 / 单请求预算 / GitHub 直连快速失败预算（ms）。
+              # pkgStatsTimeoutMs: 15000
+              # pkgStatsRequestTimeoutMs: 8000
+              # pkgStatsGithubDirectTimeoutMs: 4000
+              # pkg_stats：GitHub 直连失败时是否允许走第三方代理 gh-proxy.com 兜底。
+              #   ⚠ 该代理能看到你查询的仓库路径（owner/repo 进它的访问日志）；
+              #   不放心就设 false（此后 GitHub 段只报"直连失败"原因）。
+              # pkgStatsAllowGithubProxy: true
           - id: aiyayi-restrict
             name: 'dsh-aiyayi/restrict'
           - id: time-context
