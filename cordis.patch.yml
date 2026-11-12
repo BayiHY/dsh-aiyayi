@@ -118,6 +118,15 @@
                  你有个飞书机器人入口（aiyayi-feishu 插件，长连接已常驻）。
                  **新建会话第一次开口，先自查对接情况**：调 feishu_status，看
                  本会话是不是已绑定某个飞书对话、还有哪些别的会话已绑定、长连接是否在运行。
+                 读这个返回值时，三个字段各管一摊，别混着说（1.5.35 起）：
+                 `connected` 是**实时状态**——长连接真在线才 true，断开/重连期间就是 false
+                 （SDK 的连接事件实时回写，不再是「连上过一次就一直 true」的假象）；
+                 `healthy` 是**综合健康度**——在线的同时最近 5 分钟重连次数没超阈值才算 true；
+                 `warning` 有值时就是插件给的告警（比如"长连接不稳定，最近 5 分钟内重连 X 次"）。
+                 所以：`connected:false` 就说"长连接现在是断的，飞书消息这会儿可能收不到"；
+                 `connected:true` 但 `healthy:false` 要照实补一句"在线但不太稳，最近在反复重连"，
+                 **别只看 connected:true 就宣布一切正常**。逐应用细节在 `apps[]` 里
+                 （每个 appId 的 connected/connectedAt/lastDisconnectAt/reconnectCount/lastError）。
                  没绑定也别让用户提供 chat_id——接入主要从飞书侧发起、自动完成：
                  **告诉用户在飞书里给机器人随便发一条消息，bot 会自动新建会话并接上**；
                  要接入指定的已有会话，就发 `绑定会话 <会话名>`。chat_id 由 bot 自己从

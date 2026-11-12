@@ -10,15 +10,50 @@
 
 ---
 
-## 1.5.35（2026-11-12 新增：`feishu_status` 最近入站路由回看 `inboundRouting` 字段）
+## 1.5.35（2026-11-12 两笔改动：`feishu_status` 新增最近入站路由回看 `inboundRouting`；修连接状态失真——`connected` 改为事件驱动实时值）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- 本版由两次独立改动合并而来（同一天先后落在 1.5.35 上），两条内容都保留如下。
+
+### 改动一：`feishu_status` 新增最近入站路由回看 `inboundRouting`
+
 - **改了什么（只动 `lib/` 与新增测试，无对外行为变更）**：
   - `lib/feishu-logic.js`：新增 `INBOUND_ROUTING_FILE='inbound-routing.json'`、`INBOUND_ROUTING_LIMIT=20`、`readInboundRouting(root)`、`appendInboundRouting(root,{at,chatId,appId,action,sessionId})`（空 chatId 忽略；环形缓冲 新→旧 超 20 丢最旧；写入 feishu 子目录）。
   - `lib/feishu.js`：`onIncomingMessage()` 各路由分支（select/route/auto-new/bind/new/reuse/choose/new-fallback）调用 `recordRouting(action,sessionId)`；`feishu_status` 返回新增 `inboundRouting` 字段（读 `readInboundRouting(root)`）。
 - **为什么**：`feishu_status` 此前只报当前绑定/应用状态，看不到最近入站消息被路由到哪个会话、怎么路由的，排查"消息去哪了"要翻日志；回看字段让最近的入站路由一目了然（新→旧，上限 20 条）。
 - **测试**：新增 `test/feishu-inbound-routing.test.mjs`（本文件单跑全过）；全量 159 项 3 挂 = 既有环境基线（`alarm-inject`/`home-relocate`/`tools-surface` 磁盘探测，非本次引入，与 1.5.21/1.5.22/1.5.27 条目同基线）。
 - 打包与 npm publish **不在本次范围**：本版只做版本号对齐 + 推 git（gitcode / gitee / github 三远端），打包与 npm 发布留作下一步单独执行。
+
+### 改动二：修飞书连接状态失真——`connected` 在断开/重连期间从不回写
+
+- 症状：`feishu_status` 的 `connected` 自首次建连成功后恒为 `true`，即使长连接早已断开、SDK 正在重连也照报在线。2026-11-11 日志里 `[ws] reconnect` 出现 **326 次**（平均 124.5 秒一次，与 SDK 的 120s + 0~30s 抖动重连定时器吻合），期间 `feishu_status` 一直报 `connected: true`，用户被误导成"飞书一切正常"。
+- **根因（源码定位，不是推测）**：`lib/feishu.js` 旧 441-448 行只在 `channel.connect().then()` 里写 `state.connected = true`，**之后没有任何回写**。全仓 grep `onReconnecting|onReconnected|onError` → **0 处命中**。而 `feishu_status`（旧 1447/1453 行）读的就是这个粘性值：`connected: state ? state.connected === true : false`。SDK 的自动重连是在 WS 内部循环里完成的，插件从未被告知。
+- **SDK 取证（@larksuiteoapi/node-sdk 1.76.0，`lib/index.js` 实读行号）**：
+  - `WSClient` 构造参数收 `onReady / onError / onReconnecting / onReconnected`（102422），存成实例字段（102446-102449）。
+  - `reConnect()`：打 `[ws] reconnect` 日志后 `if (this.hasEverConnected) safeInvoke('onReconnecting', ...)`（102759-102762）；重连循环成功 → `safeInvoke('onReconnected', ...)`（102787-102792）；重试耗尽/不可恢复错误 → `safeInvoke('onError', ...)`（102735-102741、102800-102815）。
+  - `createLarkChannel` 建 WSClient 时把 `onReconnecting/onReconnected` 转成 `handlers.reconnecting/reconnected`（106988-106989），即公开 API `channel.on('reconnecting'|'reconnected', fn)`（107021-107032）。
+  - **`onError` 没有转发**（106981-106986）——它只在首次握手前用于 reject `connect()`，之后重连耗尽的 `onError` 无处可去。所以错误改从 `channel.rawWsClient.onError`（实例字段，106961 建）上再包一层拿。
+  - 兜底：`channel.getConnectionStatus()`（107017-107020 → WSClient 102982）返回 `{state: 'connected'|'reconnecting'|'connecting'|'idle'|'failed', lastConnectTime, nextConnectTime, reconnectAttempts}`。
+  - 注意：SDK 的 `safeInvoke` 会吞回调异常（102543-102552），所以插件侧回调必须自己 try/catch + 日志，否则出错无声。
+- 修法（分两层，纯逻辑与接线分离）：
+  1. **新增纯状态机**（`lib/feishu-logic.js`，零外部依赖、可单测）：`createConnectState()` / `noteConnectEstablished()` / `noteDisconnect()` / `noteConnectError()` / `reconnectsWithinWindow()` / `evaluateConnectHealth()` / `describeConnectState()` / `reconcileConnectState()`。状态字段：`connected / connectedAt / lastDisconnectAt / lastDisconnectReason / reconnectCount / reconnectTimestamps / error / lastError / lastErrorAt / everConnected`。
+  2. **接线**（`lib/feishu.js`）：`wireConnectEvents()` 在 `connect()` 成功后挂 `channel.handlers.reconnecting`（断连 → `connected=false` + `lastDisconnectAt` + 原因 `ws-reconnecting`）、`channel.handlers.reconnected`（重连成功 → `connected=true`、更新 `connectedAt`、`reconnectCount++` + 窗口计数，并打一行"累计 N 次 / 5 分钟内 M 次"），并包 `channel.rawWsClient.onError`（错误 → `lastError` + 日志，同时仍调用 SDK 原 `onError` 不破坏其行为）。插件卸载时把状态落成 `connected=false / plugin-dispose`，热重启窗口里不再报假在线。
+- `feishu_status` 返回扩展（**旧字段一个不少，只新增**）：
+  - 顶层新增 `healthy`、`connectedAt`、`lastDisconnectAt`、`reconnectCount`、`lastError`、`reconnectsInLast5m`、`unhealthyApps`，以及不健康时的可读 `warning`（"长连接不稳定，最近 5 分钟内重连 X 次——飞书消息可能延迟或漏收。"）；未配置凭证时 `warning` 给"长连接未启动"。
+  - `apps[]` 每条新增 `connectedAt / lastDisconnectAt / lastDisconnectReason / reconnectCount / reconnectsInLastWindow / lastError / lastErrorAt / healthy / healthHint`；旧 `appId / connected / chatsOwned / error` 原样保留。
+  - **`connected` 语义改为实时**（事件驱动 + 读时用 `getConnectionStatus()` 快照对账纠偏；对账只纠布尔字段，不动 `reconnectCount`，避免与事件重复计数）。全仓 grep `connected` 确认无其它模块依赖"粘性 true"这一行为——只有 `feishu.js` 自己写、自己读，另加文档与测试描述，故改语义不破坏调用方。
+- 健康判据：`healthy = connected && 最近 5 分钟内重连次数 ≤ 3`。**阈值取"超过 3 次"**（正好 3 次仍健康）。窗口靠时间戳数组滚动裁剪，读时裁（不污染累计 `reconnectCount`）。
+- persona 同步（`cordis.patch.yml` 的【飞书】段）：写明 `connected` 是**实时状态**、`healthy` 是**综合健康度**、`warning` 是插件告警；明确要求 `connected:false` 就说"长连接现在是断的"，`connected:true` 但 `healthy:false` 要补一句"在线但不太稳"，**别只看 `connected:true` 就宣布一切正常**。
+- 测试：新增 `test/feishu-status.test.mjs`（单文件 9 组断言段、A–I），覆盖任务要求的六项并加码：
+  - A 初始未连接（`connected=false`、`connectedAt=null`、`healthy=false`）；B 建连成功 → `connected=true`；C 断连 → `connected=false` + `lastDisconnectAt`/原因有值；D 重连成功 → `connected=true` + `reconnectCount` 递增 + `connectedAt` 更新（并断言不停留在首次建连）；E 5 分钟内重连超 3 次 → `healthy=false` + 提示文案，且阈值边界（正好 3 次）仍健康、窗口滑过后恢复健康、累计计数不因窗口滑动回退；F 错误 → `lastError` 有值（Error / 字符串 / LarkChannelError 形态均可），且"连上清 `error` 但保留 `lastError`"；G 快照对账正反向纠偏 + 未知快照不猜；H 接线静态核对（**反向断言**：`.then(() => { state.connected = true` 的旧写法必须已消失）。
+  - **I 段走真实 `apply()` + 假 WS 事件序列**：`channel.handlers.reconnecting()` → `feishu_status` 必须立刻报 `connected:false`（即本 bug 的核心回归断言），`handlers.reconnected()` → 回 true 且计数递增，4 次抖动 → `healthy:false` + 顶层 `warning`、`unhealthyApps`，`rawWsClient.onError` → `lastError`，卸载 → 不再报在线；另断言 1.5.34 的 10 个旧字段一个不少。
+  - **测试隔离方式（重要，避免重踩坑 #76）**：本测试用 `node:module` 的 `registerHooks()` **进程内 loader 钩子**替换 `@larksuiteoapi/node-sdk` / `@deepseek-ai/dsh-llm`，**不落任何文件到 `node_modules`**。`test/feishu-accumulate.test.mjs` 用的是"落盘桩、已存在不覆盖"，两文件并发跑会互抢同一批桩目录（本次开发中实锤触发过：accumulate 挂 `Cannot read properties of undefined (reading 'push')`）。进程内钩子从根上避开这一类并发污染。
+  - 全量单测 `node --test "test/*.test.mjs"`：**159 项全通过 / 0 失败**（1.5.34 基线 158，本版新增 `test/feishu-status.test.mjs` 一项）。连跑 3 遍均 159/0，且跑完 `node_modules` 目录不存在（无桩残留）。
+  - 另有独立取证脚本 `test/feishu-status-proof.mjs`（文件名不带 `.test.mjs`，**不进全量通配**）：按 SDK 真实时序喂一串假 WS 事件（首次建连 → 抖动断连 → 重连成功 → 4 轮抖动风暴 → 重试耗尽 → 恢复），逐步打印 feishu_status 可见字段并断言。实跑输出 `exit 0`：`connected=true/healthy=true → false/false（断连）→ true/true 且 reconnectCount=1 → true/false 且 5min=5 → false/false + lastError → 窗口滑过后 healthy=true`，`PROVEN`。
+  - 取证脚本开发中自身纠正一次：最初「5 分钟窗口」把断连也推进了 120s，导致 4 轮抖动摊到 10 分钟外、`healthHint` 为 null——说明窗口裁剪逻辑正常工作，抖动必须真的密集才判不健康（把每轮压到 20s 内后如期触发）。
+- 新文件均无 BOM。
+- 版本号三处对齐：`package.json` version、本条目、profile `cordis.patch.yml` 里 `aiyayi-feishu` 的 `config.reloadTag` 均为 `1.5.35`（profile 已先备份为 `cordis.patch.yml.bak-1.5.35-20261112-102041`）。
+- 未包含：SDK 事件里拿不到 close code / reason（`wsInstance.on('close', ...)` 在 SDK 内部只打 debug 日志、不回传参数，102873-102877），所以 `lastDisconnectReason` 记的是插件侧归因（`ws-reconnecting` / `sdk-state:<state>` / `plugin-dispose`），不是飞书的原始关闭码。
 
 ## 1.5.34（2026-11-12 修复：`presence-clock.test.mjs` 跨午夜偶发失败——**只改测试，无运行时行为变化**）
 
