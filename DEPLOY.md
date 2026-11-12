@@ -4,17 +4,15 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.5.40**（已发布，latest；2026-11-12T06:24:42Z） | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.5.40**（commit `68ae1c6`，已推） | https://gitcode.com/BayiHY/dsh-aiyayi |
-| Gitee | **1.5.40**（commit `68ae1c6`，已推） | https://gitee.com/BayiHY/dsh-aiyayi |
-| GitHub | **1.5.40**（commit `68ae1c6`，SSH 路，已推） | https://github.com/BayiHY/dsh-aiyayi |
+| npm | **1.5.41**（已发布，latest；2026-11-12T07:17:11Z） | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.5.41**（commit `6d5448a`，已推） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.5.41**（commit `6d5448a`，已推） | https://gitee.com/BayiHY/dsh-aiyayi |
+| GitHub | **1.5.41**（commit `6d5448a`，SSH 路，已推） | https://github.com/BayiHY/dsh-aiyayi |
 
-本次发版：**1.5.40**（toolkit_cmd / toolkit_write 执行输出对齐 output.schema——宿主对工具输出也做 schema 校验，条件性返回字段改约定值，坑 #78）。四渠道（npm/gitcode/gitee/github）齐在 `68ae1c6`；desktop profile 已装 1.5.40 并逐文件 SHA256 三路核对一致（12/12 MATCH），**等李浩重启 DSH 生效**。
-
-> **1.5.41 开发版（2026-11-12，未发布）**：Toolbox 真异步能力 + `watch_read`（异步手表取数）+ `mem_sync`（同步记忆仓库提交推双远端）。只做版本号 + 本地提交，**不 push、不 publish、不动 profile**；npm/gitcode/gitee/github 四渠道仍停在 **1.5.40 / `68ae1c6`**（上表口径不变）。本版新增 `lib/toolkit-async.js` / `lib/toolkit-extra.js`，两工具挂同一 `aiyayi-toolkit` 插件（`cordis.patch.yml` 无需新增挂载项）。坑 #79（宿主同步 await 工具）/ #80（`git status --porcelain` 对非 ASCII 路径的 quotepath 转义会漏扫未跟踪文件）见 CHANGELOG 1.5.41 条目。
+本次发版：**1.5.41**（Toolbox 真异步能力 + `watch_read` 异步手表取数 + `mem_sync` 同步记忆仓库提交推双远端，坑 #79/#80）。四渠道（npm/gitcode/gitee/github）齐在 `6d5448a`；desktop profile 已装 1.5.41，51 个包内文件与 tarball **逐个 SHA256 全部一致（51/51 MATCH，0 diff）**，**等李浩重启 DSH 生效**。
 
 **逐版台账（2026-11-12 补录，1.5.41）**：
-- **1.5.41**（本地提交，未 push）：`lib/toolkit-async.js` 新增 `startDetachedTask()`——立刻返回 `{status:'started', taskId}`、`setImmediate` 跑后台、完成后 `exec.agent.followup(createUserMessage({content:[{type:'text',text}], source:{kind:'user'}}))` 注入会话（投递前 `yieldHostPublication()` 让出宿主 publish 宏任务，坑 #68；source 无 undefined，坑 #65）；失败/超时/异常一律投递，task 表可查。`lib/toolkit-extra.js` 新增 `watch_read`（异步，180s 任务级超时杀进程树，关键指标 + 输出末尾推回会话）与 `mem_sync`（同步，`git status --porcelain -z` → `git diff HEAD` + 未跟踪文件敏感扫描 → add/commit → 逐个 push gitee/gitcode master；越界与命中敏感内容一律拒绝）。测试：`test/toolkit-async.test.mjs` 128 条断言；全量 **164 项 161 过 3 挂**（环境基线同前）。
+- **1.5.41**（commit `6d5448a`）：**Toolbox 真异步能力**。`lib/toolkit-async.js` 新增 `startDetachedTask()`——立刻返回 `{status:'started', taskId}`、`setImmediate` 跑后台、完成后 `exec.agent.followup(createUserMessage({content:[{type:'text',text}], source:{kind:'user'}}))` 注入会话（投递前 `yieldHostPublication()` 让出宿主 publish 宏任务，坑 #68；source 无 undefined，坑 #65）；失败/超时/异常一律投递，task 表可查（不落盘）。`lib/toolkit-extra.js` 新增 `watch_read`（异步，180s 任务级超时杀进程树，关键指标 + 输出末尾推回会话）与 `mem_sync`（同步，`git status --porcelain -z` → `git diff HEAD` + 未跟踪文件敏感扫描 → add/commit → 逐个 push gitee/gitcode master；越界与命中敏感内容一律拒绝）。坑 #79 = 宿主 `await tool.execute(...)` 同步等，长任务必堵且无超时兜底；坑 #80 = `git status --porcelain` 默认 `core.quotepath=true` 把非 ASCII 路径转成八进制转义 → 读不到 → 静默跳过 → 漏扫未跟踪文件（已用 `-c core.quotepath=false` + `--porcelain -z` 修，单测抓住的）。测试：`test/toolkit-async.test.mjs` 128 条断言；全量 **164 项 161 过 3 挂**（环境基线同前）。npm 发布 2026-11-12T07:17:11Z，tarball sha1 `d8c96ead92d69568cac564dcea4cb2e10feea4d4`，integrity `sha512-7ih7JTMf2CXN63VTCZwUKh6RukDBuK3x1nrhJQarVRWaiG623l6911Lzz6S4URdf/JnSRAWMIJ3vrr786S8rLg==`，**51 个文件**（比 1.5.40 的 49 个多 2 个，正是 `lib/toolkit-async.js` + `lib/toolkit-extra.js`；`test/` 排除、`docs/` 不入包），registry `gitHead=6d5448ad53391b8d5c194afec35dd431ec0d2b14`。profile 装版后 `lib/toolkit-async.js` SHA256=`0A583FD2C0C5F5C5AA61416FA814856E249A86DE1556BCA4CF329A4D17322886`、`lib/toolkit-extra.js`=`9A3F44CFB7DE1E1438BB2E40C8FEDEF58495C07563015B887743F5576E7AE3C0`、`lib/toolkit.js`=`A6F0D48FCD071E9F5EE6639BDBE90BFC95046D17576398FCE916B20851B511D5`（tar/prof/源码**三路一致**；51 个文件全量比对 0 diff）。**实测提醒**：publish 成功后 registry 同步约 2.5 分钟才可见（本次轮询第 17 次、约 160 秒才 `latest=1.5.41`），期间 `dist-tags` 仍是 1.5.40 且 `dist.shasum` 查询为空——不要当失败重发。
 
 **逐版台账（2026-11-12 补录，1.5.39 / 1.5.40）**：
 - **1.5.39**（commit `eb09344`）：toolkit 三件套注册失败修复（`output.schema` 里 `type` 数组写法被宿主 UNSUPPORTED_SCHEMA 拒，改单类型；坑 #77）+ `feishu_bind` 自动绑定一步接入（不传 chatId 时挑最近活跃 chat 直接绑，旧绑定覆盖不追问；降级仅两种）。npm 发布 2026-11-12T05:08:39Z，tarball sha1 `3ace4af7f26f0263e48b24f8689a22753f7e7d22`，49 个文件（`test/` 排除、`docs/` 不入包）。
