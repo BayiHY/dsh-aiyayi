@@ -4,12 +4,14 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.5.44**（已发布，latest；2026-11-12T14:30:16Z） | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.5.44**（commit `0a141c7`，已推） | https://gitcode.com/BayiHY/dsh-aiyayi |
-| Gitee | **1.5.44**（commit `0a141c7`，已推） | https://gitee.com/BayiHY/dsh-aiyayi |
-| GitHub | **1.5.44**（commit `0a141c7`，SSH 路，已推） | https://github.com/BayiHY/dsh-aiyayi |
+| npm | **1.5.45**（已发布，latest；2026-11-12T16:48:34.644Z） | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.5.45**（commit `2a9f390`，已推） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.5.45**（commit `2a9f390`，已推） | https://gitee.com/BayiHY/dsh-aiyayi |
+| GitHub | **1.5.45**（commit `2a9f390`，SSH 路，已推） | https://github.com/BayiHY/dsh-aiyayi |
 
-本次发版：**1.5.44**（本地工具清单机制：`<记忆根>/toolbox.json` + `toolbox_list` / `toolbox_reload`；包内只留 3 个通用工具 + 2 个清单管理工具）。上一版 **1.5.43**（commit `1039dc8`，2026-11-12T13:13:36Z）是**破坏性变更**（三个私有工具移出工具面），**从 1.5.42 或更早升级的用户必须连读 1.5.43 与 1.5.44 两条 CHANGELOG**。1.5.42 那条历史说明保留在下方。
+本次发版：**1.5.45**（飞书引导误触发三连修 + 插件注入身份自标注——`matchSkipIntent` 整句化、skip 上下文门、引导文案自识别、引号剥离、注入文本带 `〔系统提示·非用户发言〕` 身份标签；李浩 2026-11-13 00:14/00:20 两次实锤后授权连夜修复发版）。上一版 **1.5.44**（本地工具清单机制；commit `0a141c7`，2026-11-12T14:30:16Z）；**1.5.43** 是**破坏性变更**（三个私有工具移出工具面），**从 1.5.42 或更早升级的用户必须连读 1.5.43 与 1.5.44 两条 CHANGELOG**。1.5.42 那条历史说明保留在下方。
+
+**1.5.45 发布台账（2026-11-13 制作 / 00:55 发布后回填）**：修复 commit `07800c9`（源码先行）→ 版本号 commit `2a9f390`（package.json 1.5.45 + CHANGELOG 条目与一览 + DEPLOY 待发布台账），三远端（gitcode/gitee/github）main 均 = `2a9f390`。npm 发布 **2026-11-12T16:48:34.644Z**（`time["1.5.45"]`），`npm publish dsh-aiyayi-1.5.45.tgz --registry=https://registry.npmjs.org/`（本地 tgz 直发，与 1.5.43/1.5.44 同口径**无 `gitHead`**，提交号靠本台账与三家远端人工绑定）。tarball shasum **`7620e9ad4af93d3f580076720ac07493e4c0169d`**，integrity **`sha512-wZc79J4NCY3FSPcAtjKHW+CxZhQ2Fic70xvVWKoIu1t/TMLk1gRsxAZmRfbsieTk6VPYFd6CooMICCwHm7eQtg==`**，**53 个文件**（与 1.5.44 相同集合：1.5.45 只改已有文件内容，新增 test 不入包）、`unpackedSize` 1315672。registry 同步实测：publish 完成约 16:46:2x → 16:53:38 回查 `dist-tags.latest=1.5.45 + dist.shasum` 双值同时到位（约 2 分钟，比 1.5.44 的 5.2 分钟快；回查纪律不变：≥6 分钟内不重发）。**profile 装版（实测三路一致）**：`pnpm add dsh-aiyayi@1.5.45 --save-exact --registry=https://registry.npmjs.org/`（DSH 自带 pnpm；`[ERR_PNPM_IGNORED_BUILDS] protobufjs` 警告为已知无害）→ `package.json` 锁 `dsh-aiyayi: "1.5.45"`；**53 个文件 SHA256 tar/prof/源码三路 0 差异**。关键文件 SHA256：`lib/feishu-logic.js`=`D81DCE69BD95745DD1528DA453A218C0DDC21488233A3ED5BB12579D20E8C9A0`、`lib/feishu.js`=`30ADBA5FA6C3B216FFDFC9B33DC11F937F29E7AFF06642234D62A4886590E00D`、`lib/toolkit-async.js`=`866EF6A191D8658544EBD0C11122142BAB24EEFF12D84D2CE027C82559A6BF11`。profile `cordis.patch.yml` 已备份为 `cordis.patch.yml.bak-20261113-1.5.45`，`reloadTag` 已从 `1.5.44` 改 `1.5.45`（仅一行 diff、无 BOM），**HMR 已生效：16:54:31 日志「已就绪，记忆根 F:\阿依娅伊\记忆（1 个应用长连接，已绑定 1 个 chat）」＝ 1.5.45 已在跑，未重启 DSH**。
 
 **1.5.45 待发布台账（2026-11-13 制作）**：**飞书引导误触发三连修 + 插件注入身份自标注**（李浩 2026-11-13 00:14/00:20 两次实锤授权连夜修复发版，1.5.45）。改动 `lib/feishu-logic.js`（`matchSkipIntent` 整句化、新纯函数 `decideSkipIntent`/`isInjectedGuideText`/`normalizeForGuideMatch`/`KNOWN_GUIDE_MARKERS`/`GUIDE_IDENTITY_TAG`、`matchOnboardIntent`/`matchWeixinIntent` 入口归一化+剥引号+marker 排除、两个 build 文案去「（提示）」）、`lib/feishu.js`（`maybeOnboardIntent`：入口 `loadGuided` + 注入文案排除 + skip 上下文门，四处注入文本拼 `GUIDE_IDENTITY_TAG`）、`lib/toolkit-async.js`（`TASK_RESULT_IDENTITY_TAG` + `buildTaskMessagePayload` 带身份标注）。新增 `test/feishu-guide-no-retrigger.test.mjs`（36 断言）、`test/toolkit-async.test.mjs` 两处断言同步。全量 **39 文件 / tests 168、pass 168、fail 0**（2026-11-13 00:37 实跑）。宿主 API 事实：`Agent.followup` 只收 `UserMessage`（role 恒 `'user'`），插件无系统身份注入通道——身份自标注是文本层方案，真身份字段要宿主开新 API。实锤触发链与逐条修法见 CHANGELOG 1.5.45 条目。
 
