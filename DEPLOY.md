@@ -4,12 +4,22 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.5.38**（已发布；本次发版版 **1.5.39**，publish 留待下一步） | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.5.39**（本次 commit，本地提交，push 留待下一步） | https://gitcode.com/BayiHY/dsh-aiyayi |
-| Gitee | **1.5.39**（本次 commit，本地提交，push 留待下一步） | https://gitee.com/BayiHY/dsh-aiyayi |
-| GitHub | **1.5.39**（本次 commit，SSH 路，本地提交，push 留待下一步） | https://github.com/BayiHY/dsh-aiyayi |
+| npm | **1.5.40**（已发布，latest；2026-11-12T06:24:42Z） | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.5.40**（commit `68ae1c6`，已推） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.5.40**（commit `68ae1c6`，已推） | https://gitee.com/BayiHY/dsh-aiyayi |
+| GitHub | **1.5.40**（commit `68ae1c6`，SSH 路，已推） | https://github.com/BayiHY/dsh-aiyayi |
 
-本次发版版：**1.5.39**（toolkit 三件套注册失败修复 + feishu_bind 自动绑定，本地提交；publish/push 留待下一步）。最近发布：2026-11-12，**1.5.38（工具包中间层首批：lib/toolkit.js，toolkit_cmd / toolkit_read / toolkit_write 三工具 + 调用留痕 usage.jsonl + 白名单/截断/超时安全设计）**。上一版 1.5.37（压缩前沉淀机制 precompact）已发布到 npm（发版前核对 dist-tags：registry latest = 1.5.37）。下方详细台账截至 1.5.25（2026-11-11 四连发），1.5.26–1.5.39 的逐版台账见 CHANGELOG。
+本次发版：**1.5.40**（toolkit_cmd / toolkit_write 执行输出对齐 output.schema——宿主对工具输出也做 schema 校验，条件性返回字段改约定值，坑 #78）。四渠道（npm/gitcode/gitee/github）齐在 `68ae1c6`；desktop profile 已装 1.5.40 并逐文件 SHA256 三路核对一致（12/12 MATCH），**等李浩重启 DSH 生效**。
+
+**逐版台账（2026-11-12 补录，1.5.39 / 1.5.40）**：
+- **1.5.39**（commit `eb09344`）：toolkit 三件套注册失败修复（`output.schema` 里 `type` 数组写法被宿主 UNSUPPORTED_SCHEMA 拒，改单类型；坑 #77）+ `feishu_bind` 自动绑定一步接入（不传 chatId 时挑最近活跃 chat 直接绑，旧绑定覆盖不追问；降级仅两种）。npm 发布 2026-11-12T05:08:39Z，tarball sha1 `3ace4af7f26f0263e48b24f8689a22753f7e7d22`，49 个文件（`test/` 排除、`docs/` 不入包）。
+- **1.5.40**（commit `68ae1c6`）：toolkit_cmd / toolkit_write 执行输出不符 `output.schema` 的修复。根因：**宿主不只校验注册端 schema，也在工具 execute 的返回值上跑 `validateJsonSchemaValue(output.schema, value)`**，而 `null` **算「存在且类型错」、不等于缺省**；1.5.39 把 type 改单类型后实现层仍是条件性返回（`truncated` 部分路径不出现、`exitCode` 超时/被拒给 `null`、`backupPath` 新建给 `null`、`mtime` 探测不到给 `null`）→ 注册全过、一执行就被拒。修法：新增 `shapeCmdOutput`/`shapeReadOutput`/`shapeWriteOutput` 单一出口归一，可空语义改约定值（`exitCode` 无真实码→`-1`、`backupPath` 未备份→`''`、`mtime` 探测不到→`''`、`truncated` 恒 boolean），required 列全 properties；留痕 `usage.jsonl` 保留 `exitCode=null` 旧语义。npm 发布 2026-11-12T06:24:42Z，tarball sha1 `16dc0be6ae1a06fc1c481b855324792b66d54827`，integrity `sha512-J0ujQuKqTvQopPmWsx90BMgm++/26KiGE4IvbspBvpASob+cbaEOxvazayyjFcYVf++jCxk3FscgUuVZhl3nuw==`，**49 个文件**（`test/` 排除、`docs/` 不入包；与 1.5.39 同文件数）；profile 装版后 `lib/toolkit.js` SHA256=`2CC7CB3A7406387F70347C222D47F59BB967F4490C0D13A36FC51B073E71E5A7`、`lib/index.js`=`5DD7C8334443B274DBEC1362AD56A788F91194A2AEB398031BE335A2D778CC0D`、`lib/feishu.js`=`B3F89A64CF8D9C824A1FD95B47D57C8F6210D8B1E6E6EB748E2241C2F653D36A`、`lib/feishu-logic.js`=`1DA72D7B5588405737B827A5FC1602F2DCC008E838D02DF4D2BC5A77D659A51C`（本次 12 个关键文件 tar/prof/源码**三路全部一致**）。**顺带记一条实测手法**：把宿主校验器从 `app.asar` 按 `//#region lib/types/json-schema.js` 抽出成可加载模块，可对真实 execute 输出做交叉验证（详见 `docs/经验-宿主工具schema校验与feishu_bind自动绑定.md` 4.5 节）。
+
+**发布流程备忘（2026-11-12 实测补充，两条新的事实）**：
+1. **凭据确实在用户级 `.npmrc`**（`//registry.npmjs.org/:_authToken=…`，`npm_` 开头的 classic token，值 40 字符；本次核实有效：`npm whoami --registry=https://registry.npmjs.org/` → `bayihy`）——**本文档「发布流程」第 2 步的原有记载准确，无需更改**。真正会误导人的是另一件事：**用户级 `.npmrc` 的默认 `registry` 是 `https://registry.npmmirror.com/`**（镜像），而该 token 只绑定 `//registry.npmjs.org/` 这个 key。于是**不带 `--registry` 时**：`npm whoami` 报 `ENEEDAUTH`、`npm view dsh-aiyayi dist-tags` 查到的是镜像的旧数据（会显示 latest 落后、甚至没有刚发的版本）。**结论：本机所有 npm 查询与发布都必须显式带 `--registry=https://registry.npmjs.org/`**，别用裸 `npm view` / `npm whoami` 判断发布是否成功。
+2. **发布后 registry 同步有延迟但不长**：1.5.40 实测 publish 成功（`+ dsh-aiyayi@1.5.40`）后，`npm view dsh-aiyayi@1.5.40 --registry=…` 连续约 2 分钟返回 `E404 No match found for version 1.5.40`、`dist-tags.latest` 仍是 1.5.39；约 2 分钟后一次轮询即返回 `latest=1.5.40` 且 shasum 匹配（`16dc0be6…`）。**看到 E404 别当发布失败重发**（重发会撞「版本已存在」），按 10 秒间隔轮询 `dist-tags.latest` + `dist.shasum` 两个值同时确认即可。
+
+本次发版版：**1.5.40**（toolkit 执行输出对齐 output.schema，坑 #78）。最近发布：2026-11-12T06:24:42Z，**1.5.40**；上一版 **1.5.39**（2026-11-12T05:08:39Z，toolkit 注册修复 + feishu_bind 自动绑定）。上一版 1.5.37（压缩前沉淀机制 precompact）已发布到 npm。下方详细台账截至 1.5.25（2026-11-11 四连发），1.5.26–1.5.40 的逐版台账见 CHANGELOG 与上方「逐版台账」段。
 - **1.5.22**（多应用多长连接，commit `1eb6255`）：config 支持 `apps` 数组（旧单 app 格式自动迁移+备份）；每应用独立 WS 长连接互不干扰；chat 归属机制（`chat-owners.json` 落盘 + `GET /im/v1/messages` 成员探测 + 230002 自愈重试）根因消灭「用 A 应用凭证往 B 应用的 chat 发消息」的 230002/400；`feishu_status` 增逐应用状态/chatOwners，`feishu_bind` 绑定前归属探测；messageId 去重防多 bot 重复投递。npm 发布 2026-11-11T04:59:21Z，tarball sha1 `65fcfa85ec3d1254e8394eeb3f5c7e26f0c3bd88`，**41 个文件**（files 数组排除 `skills/feishu-setup/scripts/logs`——此前运行日志会被打进包）；lib/feishu.js SHA256=`C19509A9A7549EF1875CF77E3384B4D74B3718B02AF7D32BD0914841E17A62BE`、lib/feishu-logic.js=`F56E3F198D409E4405C0EF9B22C4ED3E86D564CF2DEFE123176A2A1C4A449348`。
 - **1.5.23**（commit `632c38a`）：`feishu_bind` 边界——230001 invalid container_id（chat 不存在/伪造）与 230002 同判 not-member 确定拒绝。npm 发布 2026-11-11T05:13:48Z，sha1 `ca6e7b0ad0d8d35eec88ec012c5dbc91893dfad4`。
 - **1.5.24**（commit `c37fb1f`）：修 1.5.23 遗漏 import（`extractFeishuErrorCode` 未导入，probe 抛错即 ReferenceError）；**禁用宿主 `ask_user_question` 选项组件**（`cordis.patch.yml` 两处挂载 `disabled: true`，李浩拍板提问一律纯文本；1.5.18 的飞书点选作答链路随之退役，`tryAnswerByText` 文字兜底保留）。npm 发布 2026-11-11T05:20:36Z，sha1 `8d4e01f18becfc25390bb92fced1630c02a35d2d`。
@@ -29,8 +39,8 @@
 它在源码仓**单独成 commit `2c16bee`**，与 1.5.20 的插件改动（commit `2de3f46`）互不依赖。
 故上表「1.5.20（2c16bee）」表示的是**四渠道推的都是仓库 HEAD `2c16bee`**，不是「create-bot v6 是 1.5.20 的一部分」。
 
-**npm 发布一览（2026-11-12 核对 registry，`npm view dsh-aiyayi dist-tags`）**：latest = **1.5.38**（2026-11-12 已发布；本次发版版为 **1.5.39**——toolkit 三件套注册修复 + feishu_bind 自动绑定，publish 留待下一步，最终以 registry 为准）。
-已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**、**1.5.21**、**1.5.22**、**1.5.23**、**1.5.24**、**1.5.25**、**1.5.26**、**1.5.27**、**1.5.28**、**1.5.29**、**1.5.30**、**1.5.31**、**1.5.32**、**1.5.33**、**1.5.34**、**1.5.35**、**1.5.36**、**1.5.37**、**1.5.38**；
+**npm 发布一览（2026-11-12 核对 registry，`npm view dsh-aiyayi dist-tags --registry=https://registry.npmjs.org/`）**：latest = **1.5.40**（2026-11-12T06:24:42Z 已发布）。
+已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**、**1.5.21**、**1.5.22**、**1.5.23**、**1.5.24**、**1.5.25**、**1.5.26**、**1.5.27**、**1.5.28**、**1.5.29**、**1.5.30**、**1.5.31**、**1.5.32**、**1.5.33**、**1.5.34**、**1.5.35**、**1.5.36**、**1.5.37**、**1.5.38**、**1.5.39**、**1.5.40**；
 跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm；
 **1.5.18 / 1.5.19 也从未发布到 npm**——它们的代码最终随 1.5.20 一起进 npm。
 **版本事实以 npm registry 为准**，本表与 CHANGELOG 顶部「npm 发布一览」保持同一口径。
@@ -57,7 +67,7 @@ git push gitcode main   # 凭证由 git credential manager 提供，无需把 to
 发新版按此顺序（2026-11-05 起）：
 
 1. **bump 版本**：改本仓库 `package.json` 的 `version`（**2026-11-09 更正：原记载的 `gh_repo/` 目录与 `publish.mjs` 已不存在**——npm 发布源就是本 git 仓库，1.5.7 即从它手动打包发布；旧 `bundle/` 目录已归档为工作区 `dsh-aiyayi-bundle-1.4.0.zip`，不再维护）。
-2. **发布 npm**：在本仓库 `npm pack`（先核对产物文件清单），再 `npm publish dsh-aiyayi-<版本>.tgz --registry=https://registry.npmjs.org/`（凭据在用户级 `.npmrc` 的 `//registry.npmjs.org/:_authToken=`；**2026-11-09 更正：原 `node publish.mjs` 脚本已不存在，改手动两步**）。发布前逐文件 SHA256 对照上一版官方 tarball 确认零漂移，发布后 `npm view dsh-aiyayi version` 验证（registry 处理有几分钟延迟，轮询即可）。
+2. **发布 npm**：在本仓库 `npm pack`（先核对产物文件清单），再 `npm publish dsh-aiyayi-<版本>.tgz --registry=https://registry.npmjs.org/`（凭据在用户级 `.npmrc` 的 `//registry.npmjs.org/:_authToken=`；**2026-11-09 更正：原 `node publish.mjs` 脚本已不存在，改手动两步**）。**⚠️ `--registry` 不能省**（2026-11-12 实测）：同一份 `.npmrc` 的默认 `registry` 指向 `registry.npmmirror.com` 镜像，而 token 只绑 `//registry.npmjs.org/`——不带 `--registry` 时 `npm whoami` 会报 ENEEDAUTH、`npm view` 查到的是镜像旧数据，详见「当前发布状态」段的两条备忘。发布前逐文件 SHA256 对照上一版官方 tarball 确认零漂移，发布后 `npm view dsh-aiyayi version --registry=https://registry.npmjs.org/` 验证（registry 处理有几分钟延迟，轮询即可）。
 3. **验证 npm**：`https://registry.npmjs.org/dsh-aiyayi/latest` 的 `version` 字段。注意发布输出会提示"being processed, may take a few minutes"，刚发布完可能仍显示旧版本，等几分钟再查（2026-11-07 实测：第一次查仍是旧版、约 15 秒后即返回新版，`npm view dsh-aiyayi version` 轮询最省事）。
 4. **提交 git**：gh_repo 里 `git add package.json README.md lib/* DEPLOY.md` → commit（消息格式 `1.2.x：<改动摘要>`）。
 5. **推送到 gitcode + gitee + github**：
