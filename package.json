@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.5.36",
+  "version": "1.5.37",
   "license": "MIT",
   "author": "巴依浩爷 (bayihy)",
   "keywords": [
@@ -27,6 +27,7 @@
     "./feishu": "./lib/feishu.js",
     "./feishu-logic": "./lib/feishu-logic.js",
     "./weixin": "./lib/weixin.js",
+    "./precompact": "./lib/precompact.js",
     "./icon": "./icon.svg"
   },
   "files": [
@@ -42,6 +43,7 @@
     "lib/presence-worker.js",
     "lib/feishu.js",
     "lib/feishu-logic.js",
+    "lib/precompact.js",
     "lib/weixin.js",
     "lib/weixin/",
     "skills",

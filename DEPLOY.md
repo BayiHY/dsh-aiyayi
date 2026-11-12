@@ -4,12 +4,12 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.5.36**（本次发版版，publish 随本次执行；registry 现为 **1.5.35**） | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.5.36**（本次 commit） | https://gitcode.com/BayiHY/dsh-aiyayi |
-| Gitee | **1.5.36**（本次 commit） | https://gitee.com/BayiHY/dsh-aiyayi |
-| GitHub | **1.5.36**（本次 commit，SSH 路） | https://github.com/BayiHY/dsh-aiyayi |
+| npm | **1.5.37**（本次发版版，publish 留待下一步；registry 现为 **1.5.36**） | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.5.37**（本次 commit） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.5.37**（本次 commit） | https://gitee.com/BayiHY/dsh-aiyayi |
+| GitHub | **1.5.37**（本次 commit，SSH 路） | https://github.com/BayiHY/dsh-aiyayi |
 
-最近发布：2026-11-12，**1.5.36（修飞书连接状态失真——`feishu_status` 的 `connected` 改为事件驱动实时值，新增 `healthy`）**。上一版 1.5.35（`inboundRouting`）已由并发会话先发到 npm（2026-11-12T02:27:31Z）。下方详细台账截至 1.5.25（2026-11-11 四连发），1.5.26–1.5.36 的逐版台账见 CHANGELOG。
+最近发布：2026-11-12，**1.5.37（压缩前沉淀机制 precompact：lib/precompact.js，会话上下文接近压缩阈值或收尾时先落盘经验文档/记忆/索引再压缩，失败不阻塞）**。上一版 1.5.36（飞书连接状态失真修复）已由并发会话先发到 npm。下方详细台账截至 1.5.25（2026-11-11 四连发），1.5.26–1.5.37 的逐版台账见 CHANGELOG。
 - **1.5.22**（多应用多长连接，commit `1eb6255`）：config 支持 `apps` 数组（旧单 app 格式自动迁移+备份）；每应用独立 WS 长连接互不干扰；chat 归属机制（`chat-owners.json` 落盘 + `GET /im/v1/messages` 成员探测 + 230002 自愈重试）根因消灭「用 A 应用凭证往 B 应用的 chat 发消息」的 230002/400；`feishu_status` 增逐应用状态/chatOwners，`feishu_bind` 绑定前归属探测；messageId 去重防多 bot 重复投递。npm 发布 2026-11-11T04:59:21Z，tarball sha1 `65fcfa85ec3d1254e8394eeb3f5c7e26f0c3bd88`，**41 个文件**（files 数组排除 `skills/feishu-setup/scripts/logs`——此前运行日志会被打进包）；lib/feishu.js SHA256=`C19509A9A7549EF1875CF77E3384B4D74B3718B02AF7D32BD0914841E17A62BE`、lib/feishu-logic.js=`F56E3F198D409E4405C0EF9B22C4ED3E86D564CF2DEFE123176A2A1C4A449348`。
 - **1.5.23**（commit `632c38a`）：`feishu_bind` 边界——230001 invalid container_id（chat 不存在/伪造）与 230002 同判 not-member 确定拒绝。npm 发布 2026-11-11T05:13:48Z，sha1 `ca6e7b0ad0d8d35eec88ec012c5dbc91893dfad4`。
 - **1.5.24**（commit `c37fb1f`）：修 1.5.23 遗漏 import（`extractFeishuErrorCode` 未导入，probe 抛错即 ReferenceError）；**禁用宿主 `ask_user_question` 选项组件**（`cordis.patch.yml` 两处挂载 `disabled: true`，李浩拍板提问一律纯文本；1.5.18 的飞书点选作答链路随之退役，`tryAnswerByText` 文字兜底保留）。npm 发布 2026-11-11T05:20:36Z，sha1 `8d4e01f18becfc25390bb92fced1630c02a35d2d`。
@@ -29,8 +29,8 @@
 它在源码仓**单独成 commit `2c16bee`**，与 1.5.20 的插件改动（commit `2de3f46`）互不依赖。
 故上表「1.5.20（2c16bee）」表示的是**四渠道推的都是仓库 HEAD `2c16bee`**，不是「create-bot v6 是 1.5.20 的一部分」。
 
-**npm 发布一览（2026-11-12 核对 registry，`npm view dsh-aiyayi versions --json`）**：latest = **1.5.36**（本次发版版；发布前 registry 实况为 **1.5.35**——它由并发会话在 2026-11-12T02:27:31Z 发布，内容只有 `inboundRouting`、**不含**连接状态修复，故本版 1.5.36 单独补发；最终以 registry 为准）。
-已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**、**1.5.21**、**1.5.22**、**1.5.23**、**1.5.24**、**1.5.25**、**1.5.26**、**1.5.27**、**1.5.28**、**1.5.29**、**1.5.30**、**1.5.31**、**1.5.32**、**1.5.33**、**1.5.34**、**1.5.35**；
+**npm 发布一览（2026-11-12 核对 registry，`npm view dsh-aiyayi versions --json`）**：latest = **1.5.37**（本次发版版；registry 实况 latest 目前为 **1.5.36**——已由并发会话发布，1.5.36 为飞书连接状态失真修复、**不含** precompact，故本版 1.5.37 单独补发；最终以 registry 为准）。
+已发布：1.0.0、…、1.5.7、**1.5.14**、**1.5.15**、**1.5.16**、**1.5.17**、**1.5.20**、**1.5.21**、**1.5.22**、**1.5.23**、**1.5.24**、**1.5.25**、**1.5.26**、**1.5.27**、**1.5.28**、**1.5.29**、**1.5.30**、**1.5.31**、**1.5.32**、**1.5.33**、**1.5.34**、**1.5.35**、**1.5.36**；
 跳号 1.3.0、1.4.1、1.4.2、1.5.0、1.5.1、1.5.2、1.5.3、**1.5.8–1.5.13** 从未发布到 npm；
 **1.5.18 / 1.5.19 也从未发布到 npm**——它们的代码最终随 1.5.20 一起进 npm。
 **版本事实以 npm registry 为准**，本表与 CHANGELOG 顶部「npm 发布一览」保持同一口径。

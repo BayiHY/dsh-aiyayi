@@ -200,6 +200,20 @@
             name: 'dsh-aiyayi/presence'
           - id: aiyayi-updates
             name: 'dsh-aiyayi/updates'
+          # 压缩前沉淀（1.5.37）：在 dsh-compaction-basic 动手压缩前，把值得沉淀的
+          # 知识先落盘（docs/ 经验文档 + 记忆 + 索引），让压缩只清流水。时机A=接近
+          # 阈值自动触发（pre-step 量 token，ratio×threshold）；时机B=本体用
+          # precompact_run 显式调用（收尾/update_state 前后）。ratio 0.7 是设计文档
+          # 建议的提前量；thresholdRatio/headroomTokens 复刻本 preset 的 compaction。
+          - id: aiyayi-precompact
+            name: 'dsh-aiyayi/precompact'
+            config:
+              ratio: 0.7
+              thresholdRatio: 0.4
+              headroomTokens: 32768
+              memoryPath: 事情/经验
+              # docsDir 不设 → 默认落记忆根下 docs/（可改成工作区 docs 目录）。
+              updateIndex: true
           - id: aiyayi-restrict
             name: 'dsh-aiyayi/restrict'
           - id: time-context
