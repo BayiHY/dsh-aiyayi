@@ -142,17 +142,17 @@ const record = await ta.waitForTask(handle.taskId)
 check('异步 helper：任务最终 success', record?.status === 'success', JSON.stringify(record))
 check('异步 helper：followup 被调用一次', followups.length === 1, followups.length)
 const message = followups[0]
-check('异步 helper：消息结构 = {content:[{type:text,text}], source:{kind:user}}',
-  message?.content?.length === 1 && message.content[0].type === 'text' && message.content[0].text === '【单测】后台跑完了' && message.source?.kind === 'user',
+check('异步 helper：消息结构 = {content:[{type:text,text}], source:{kind:user}}（1.5.45 text 带身份标注）',
+  message?.content?.length === 1 && message.content[0].type === 'text' && message.content[0].text === '〔系统提示·非用户发言〕【单测】后台跑完了' && message.source?.kind === 'user',
   JSON.stringify(message))
 check('异步 helper：source 里没有 undefined 字段（坑 #65）',
   Object.entries(message?.source ?? {}).every(([, v]) => v !== undefined) && Object.keys(message.source).length === 1,
   JSON.stringify(message?.source))
 check('异步 helper：整条消息能无损 JSON 往返（宿主 snapshotJsonValue 同款判据）',
   JSON.stringify(JSON.parse(JSON.stringify(message))) === JSON.stringify(message))
-check('异步 helper：构建器本身也不含 undefined', (() => {
+check('异步 helper：构建器本身也不含 undefined（1.5.45 text 带身份标注）', (() => {
   const payload = ta.buildTaskMessagePayload('x')
-  return JSON.stringify(payload) === JSON.stringify({ content: [{ type: 'text', text: 'x' }], source: { kind: 'user' } })
+  return JSON.stringify(payload) === JSON.stringify({ content: [{ type: 'text', text: '〔系统提示·非用户发言〕x' }], source: { kind: 'user' } })
 })())
 check('异步 helper：投递成功记 delivery=sent', record?.delivery === 'sent', record?.delivery)
 check('异步 helper：durationMs 是正整数', Number.isInteger(record?.durationMs) && record.durationMs >= 0, record?.durationMs)
