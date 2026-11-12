@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.5.43",
+  "version": "1.5.44",
   "license": "MIT",
   "author": "巴依浩爷 (bayihy)",
   "keywords": [
@@ -30,6 +30,7 @@
     "./precompact": "./lib/precompact.js",
     "./toolkit": "./lib/toolkit.js",
     "./toolkit-async": "./lib/toolkit-async.js",
+    "./toolkit-manifest": "./lib/toolkit-manifest.js",
     "./toolkit-extra": "./lib/toolkit-extra.js",
     "./pkg-stats": "./lib/pkg-stats.js",
     "./icon": "./icon.svg"
@@ -50,6 +51,7 @@
     "lib/precompact.js",
     "lib/toolkit.js",
     "lib/toolkit-async.js",
+    "lib/toolkit-manifest.js",
     "lib/toolkit-extra.js",
     "lib/pkg-stats.js",
     "lib/weixin.js",

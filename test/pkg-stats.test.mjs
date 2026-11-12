@@ -14,15 +14,31 @@
  *
  * 说明：本文件**全部用 mock fetch**，不打真网（真网实测见 CHANGELOG 1.5.42 的实测一节）。
  */
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = resolve(fileURLToPath(new URL('.', import.meta.url)))
 const libUrl = (file) => pathToFileURL(join(HERE, '..', 'lib', file)).href
 
+/**
+ * 环境隔离（1.5.44 补）：`tk.apply()` 现在会读 `<记忆根>/toolbox.json` 注册清单工具。
+ * 不隔离的话，这个测试会用**真机的记忆根**（= 真在真实记忆根上测，红线），
+ * 注册面还会被真清单里的条目干扰。这里把 AIYAYI_HOME + 指路文件都定向到沙盘，
+ * 沙盘里故意**不放** toolbox.json → 等价于"用户没配清单"的干净环境。
+ */
+const sandbox = mkdtempSync(join(tmpdir(), 'aiyayi-pkgstats-1544-'))
+const sandboxRoot = join(sandbox, 'root')
+mkdirSync(sandboxRoot, { recursive: true })
+process.env.AIYAYI_HOME = sandboxRoot
+
 const ps = await import(libUrl('pkg-stats.js'))
 const tk = await import(libUrl('toolkit.js'))
+const { __testing: homeTesting } = await import(libUrl('home.js'))
+homeTesting.setPointerPath(join(sandbox, 'pointer', 'location.json'))
+mkdirSync(join(sandbox, 'pointer'), { recursive: true })
+homeTesting.pointerCacheReset()
 
 let ok = true
 const check = (label, cond, extra = '') => {
@@ -501,9 +517,12 @@ check('归一：NaN/Infinity 归 0',
 /* ------------------------------------------------------------------ *
  * 10. 注册 / own-tools / 经 execute 壳（真跑一次，用 mock 换掉全局 fetch）
  * ------------------------------------------------------------------ */
-check('注册：1.5.43 起 pkg_stats 已不在 TOOL_NAMES（实现保留、不注册）',
-  !tk.TOOL_NAMES.includes('pkg_stats') && tk.TOOL_NAMES.length === 3, JSON.stringify(tk.TOOL_NAMES))
-check('注册：DEFAULT_CONFIG 有 1.5.42 的配置项',
+// 1.5.43 / 1.5.44：pkg_stats 已移出安装包（改由本机清单驱动，脚本在 G:\阿依娅伊\工具\pkg_stats\）。
+// 本文件保留实现层（lib/pkg-stats.js）的全部行为断言；注册面改成断言"已移出"。
+check('注册：TOOL_NAMES 里没有 pkg_stats（已移出安装包，改由本机清单驱动）',
+  !tk.TOOL_NAMES.includes('pkg_stats') && tk.TOOL_NAMES.join(',') === 'toolkit_cmd,toolkit_read,toolkit_write,toolbox_list,toolbox_reload',
+  JSON.stringify(tk.TOOL_NAMES))
+check('注册：DEFAULT_CONFIG 仍保留 1.5.42 的配置项（升级用户的 patch.yml 不会变孤儿；实现层仍读它）',
   tk.DEFAULT_CONFIG.pkgStatsDefaultPackage === 'dsh-aiyayi'
   && tk.DEFAULT_CONFIG.pkgStatsDefaultRepo === 'BayiHY/dsh-aiyayi'
   && tk.DEFAULT_CONFIG.pkgStatsTimeoutMs === 15000
@@ -516,41 +535,43 @@ check('注册：DEFAULT_CONFIG 有 1.5.42 的配置项',
   }))
 
 const { isOwnTool, OWN_TOOLS } = await import(libUrl('own-tools.js'))
-check('own-tools：1.5.43 起 pkg_stats 不在静态兜底表（移出工具面，不注册也不放行）',
+check('own-tools：pkg_stats 不在静态兜底表（移出工具面，不注册也不放行）',
   isOwnTool('pkg_stats') === false && !OWN_TOOLS.includes('pkg_stats'),
   JSON.stringify({ isOwn: isOwnTool('pkg_stats'), inList: OWN_TOOLS.includes('pkg_stats') }))
-check('own-tools：三件套仍被放行', ['toolkit_cmd', 'toolkit_read', 'toolkit_write'].every((n) => isOwnTool(n)))
+check('own-tools：三件套 + 两个清单管理工具仍被放行',
+  ['toolkit_cmd', 'toolkit_read', 'toolkit_write', 'toolbox_list', 'toolbox_reload'].every((n) => isOwnTool(n)),
+  OWN_TOOLS.join(','))
 
 const registered = []
 const ctx = {
   effect(fn) { fn(); return () => {} },
+  on() { return () => {} },
   tools: { register(def) { registered.push(def); return () => {} } },
   logger: { info: () => {}, warn: () => {} },
 }
 tk.apply(ctx, { usageEnabled: false })
-check('注册：经 apply() 只注册三件套（pkg_stats 已在 1.5.43 移出工具面）',
-  registered.map((d) => d.name).join(',') === 'toolkit_cmd,toolkit_read,toolkit_write',
+check('注册：经 apply() 注册出 5 个工具（3 基础 + 2 清单管理，不含 pkg_stats）',
+  registered.map((d) => d.name).join(',') === 'toolkit_cmd,toolkit_read,toolkit_write,toolbox_list,toolbox_reload',
   registered.map((d) => d.name).join(','))
-// 1.5.43 起不再经 apply() 注册；直接调导出的 execute 入口（1.5.44 的清单加载器复用同一个）。
-const pkgDef = { execute: (args) => ps.executePkgStats(args, { cfg: tk.mergeConfig({}), logUsage: () => {}, warn: () => {} }) }
+check('注册：pkg_stats 不再注册（名字不在注册面）', !registered.some((d) => d.name === 'pkg_stats'))
 check('注册：pkg_stats 的 output.schema 就是本模块那份', ps.PKG_STATS_SCHEMA.output.schema === SCHEMA.output.schema)
 check('注册：pkg_stats 的 required 列全（导出面再核一次）', requiredCoversAll(SCHEMA.output.schema))
 
-// 经 execute 壳真调一次：临时替换 globalThis.fetch（壳只认全局 fetch）。
+// 经**实现层**真调一次：临时替换 globalThis.fetch（实现只认全局 fetch）。
 const originalFetch = globalThis.fetch
 globalThis.fetch = makeFetch(happyRoutes).fetchImpl
 let shellResult = null
 let shellThrew = null
 try {
-  shellResult = await pkgDef.execute({})
+  shellResult = await ps.executePkgStats({}, { cfg: {}, logUsage: () => {}, warn: () => {} })
 } catch (error) {
   shellThrew = error
 } finally {
   globalThis.fetch = originalFetch
 }
-check('转发：经 execute 壳调用不抛', shellThrew === null, String(shellThrew))
-checkOutput('转发：经 execute 壳调用输出过宿主校验', SCHEMA.output.schema, shellResult)
-check('转发：经 execute 壳调用拿到真实形状（ok / 版本 / 下载量）',
+check('转发：经实现层调用不抛', shellThrew === null, String(shellThrew))
+checkOutput('转发：经实现层调用输出过宿主校验', SCHEMA.output.schema, shellResult)
+check('转发：经实现层调用拿到真实形状（ok / 版本 / 下载量）',
   shellResult.ok === true && shellResult.version === '1.5.41' && shellResult.npm.lastMonth.downloads === 4851,
   JSON.stringify({ ok: shellResult.ok, version: shellResult.version, m: shellResult.npm.lastMonth }))
 

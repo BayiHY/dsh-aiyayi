@@ -58,22 +58,77 @@ GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她
 
 ## 工具箱（本体直调，不派子代）
 
-宿主 agent loop **同步 await 一批工具**——一批没跑完，下一次模型请求就发不出去（坑 #79）。所以工具箱按"耗时"分两档。
+宿主 agent loop **同步 await 一批工具**——一批没跑完，下一次模型请求就发不出去（坑 #79）。所以工具箱的纪律是：**能异步的一律异步**，同步只留给"几毫秒就能返回"的东西。
 
-**1.5.43 起（破坏性变更）工具面只留三个通用工具**：`toolkit_cmd` / `toolkit_read` / `toolkit_write`。
-`watch_read` / `mem_sync` / `pkg_stats` 三个**已从注册表移除**（不再注册、不再进 own-tools 白名单）——
-它们是发版方自己的特殊能力（要手表脚本目录 / 会真提交记忆仓库 / 要联网查下载量），不该进通用安装包，
-而且无条件注册时它们约占每轮 690 token、拉长工具面、抬高误调率。**实现文件全部保留**，
-1.5.44 的本地清单机制（`<记忆根>/toolbox.json` → 按需注册）直接复用。
+**npm 安装包里只留简单通用的能力**（1.5.43 / 1.5.44 起）：`toolkit_cmd` / `toolkit_read` / `toolkit_write`
+外加两个清单管理工具 `toolbox_list` / `toolbox_reload`。`watch_read` / `mem_sync` / `pkg_stats`
+三个**已从注册表移除**（不再注册、不再进 own-tools 白名单）——它们是发版方自己的特殊能力
+（要手表脚本目录 / 会真提交记忆仓库 / 要联网查下载量），不该进通用安装包，而且无条件注册时
+它们约占每轮 690 token、拉长工具面、抬高误调率。**实现文件全部保留**，1.5.44 起改由
+本机清单（`<记忆根>/toolbox.json` → 按需注册）驱动。
 
 | 工具 | 类型 | 干什么 | 返回 |
 | --- | --- | --- | --- |
 | `toolkit_cmd` | 同步 | 只读命令（白名单前缀整词 + 禁 shell 元字符） | `{ok, cmd, stdout, stderr, exitCode, ...}` |
 | `toolkit_read` | 同步 | 文件探测 + 小文件读（前 8KB，上限 64KB） | `{ok, exists, size, mtime, content, ...}` |
 | `toolkit_write` | 同步 | 受限写入（记忆根白名单，64KB，原子写 + .bak） | `{ok, path, bytes, backupPath, ...}` |
-| ~~`watch_read`~~ | 异步 | **1.5.43 移出工具面**：手表取数（电量/步数/睡眠/血氧/心率，入 SQLite） | 立刻 `{status:'started', taskId, hint}`；25-100 秒后结果作为一条**消息推回会话** |
-| ~~`mem_sync`~~ | 同步 | **1.5.43 移出工具面**：记忆仓库提交 + 推配置里的远端（默认不推） | `{status, commit, pushed:[{remote,ok,error}], hits, hint}` |
-| ~~`pkg_stats`~~ | 同步 | **1.5.43 移出工具面**：npm 下载量（昨/7 天/30 天）+ latest 版本 + GitHub/Gitee/GitCode 热度 | `{ok, package, version, repo, npm:{lastDay,lastWeek,lastMonth,...}, github, gitee, gitcode, fetchedAt}` |
+| `toolbox_list` | 同步 | 巡检本机工具清单（每条：name / enabled / mode / script 在不在 / 是否已注册 / 不注册的原因） | `{ok, exists, path, root, error, tools:[...], problems}` |
+| `toolbox_reload` | 同步 | 重读清单：注销全部旧清单工具、按当前文件重新注册 | `{ok, exists, path, removed, registered, skipped, problems, hint, error}` |
+
+**1.5.43–1.5.44 移出工具面**的三个（实现保留、脚本已搬到本机 `G:\阿依娅伊\工具\`，按需由清单注册）：
+`watch_read`（异步手表取数）/ `mem_sync`（记忆仓库提交 + 推配置的远端）/ `pkg_stats`（npm 下载量 + 代码仓热度）。
+
+其他工具（`mem_sync` / `pkg_stats` / `watch_read` …）**走本机清单**，脚本不进 npm 包：普通用户装插件不会看到一堆用不上的工具（1.5.42 时 6 个工具实测约 1334 token/轮）。
+
+### 本地工具清单（1.5.44）
+
+清单文件：**`<记忆根>/toolbox.json`**（记忆根走 `location.json` → `AIYAYI_HOME` → 默认路径，与其它插件一致）。
+
+```json
+{
+  "version": 1,
+  "tools": [
+    {
+      "name": "mem_sync",
+      "enabled": true,
+      "script": "G:/阿依娅伊/工具/mem_sync/mem_sync.js",
+      "description": "同步记忆仓库：git add + commit + push 到配置的远端",
+      "timeoutMs": 180000,
+      "mode": "async",
+      "args": [],
+      "env": { "AIYAYI_MEM_PUSH_REMOTES": "origin" },
+      "params": {
+        "message": { "type": "string", "description": "commit message（可选）" }
+      }
+    }
+  ]
+}
+```
+
+字段：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `name` | ✓ | 工具名，必须匹配 `^[a-z][a-z0-9_]{1,40}$` |
+| `enabled` | | 默认 **false**，显式 `true` 才注册 |
+| `script` | ✓ | 脚本**绝对路径**；允许 `~` 与 `%变量%` / `${变量}` 展开 |
+| `description` | ✓ | 给模型的工具描述 |
+| `timeoutMs` | | 默认 60000，上限 300000（超上限夹取） |
+| `mode` | | **只支持 `"async"`**。写 `"sync"` 直接判这条校验失败并报回会话——同步工具会堵死整轮对话，这正是要避开的 |
+| `args` | | 固定参数数组（附加在脚本路径之后） |
+| `params` | | 调用参数声明（简化 JSON Schema，只支持 `string` / `number` / `boolean`；`required: true` 标必填） |
+| `env` | | 给脚本的环境变量（本机配置走这里，不必改脚本） |
+| `cwd` | | 脚本工作目录，默认脚本所在目录 |
+
+**每个清单工具都走异步**（`lib/toolkit-async.js` 的 `startDetachedTask`）：调用立刻返回 `{status:'started', taskId, hint}`，脚本在后台跑，跑完/超时/失败都把结果作为一条消息用 followup 推回会话。
+
+脚本约定（加载器按扩展名决定解释器：`.js` → node，`.py` → python，`.ps1` → powershell，`.cmd/.bat` → cmd，其余当可执行文件）：
+
+- **stdout 只输出一个 JSON 对象**（加载器会 `JSON.parse` 它，`hint` 字段当结论句放在投递正文最前面；不是 JSON 就原样展示）；
+- 退出码非 0 或 `ok:false` → 判失败，投递正文带**退出码 + stderr 尾部摘要**；
+- 环境变量里能拿到：`AIYAYI_TOOLBOX_TOOL`（工具名）、`AIYAYI_TOOLBOX_ROOT`（记忆根）、`AIYAYI_TOOLBOX_MANIFEST`（清单路径）、`AIYAYI_TOOLBOX_ARGS`（`{tool, args, fixedArgs}` 的 JSON）、以及清单里 `env` 的键。
+
+失败**一律显式**（不静默）：清单不存在 → 只记日志（正常，用户没配）；清单 JSON 语法错误 / 某条校验失败 / 脚本不存在 → 该条不注册，并在下一个会话的第一步注入一条 `[工具清单]` 消息说清哪条、为什么；运行失败或超时 → followup 报回退出码与 stderr 摘要。改了清单或脚本后调 `toolbox_reload` 生效。
 
 异步工具的范式（以后加长任务工具照这个写，细节见 `docs/经验-工具真异步与宿主同步await.md`）：
 
@@ -87,7 +142,7 @@ startDetachedTask({ exec, kind: 'watch_read', hint: '已开始取数…', run: a
 
 调用留痕统一落 `<记忆根>/toolkit/usage.jsonl`（同步工具按次记，异步工具记 `started` + 完成两条）。
 
-`pkg_stats` 的三个实测注意点（1.5.42 记录；该工具在 1.5.43 已移出工具面，实现保留，1.5.44 由本地清单按需注册）：
+`pkg_stats` 的三个实测注意点（1.5.42 记录；写死在脚本行为里。该工具 1.5.43 已移出工具面，1.5.44 起脚本在本机 `G:\阿依娅伊\工具\pkg_stats\pkg_stats.js`，由本地清单按需注册）：
 
 - **npm 统计的 `end` 日期滞后约 2 天**——`last-day` 不是"今天"。所以三个窗口都把 `start`/`end` 原样带回，别把这数当当日实况。
 - **GitHub 直连在本机不通**（`Recv failure: Connection was reset`），兜底走第三方代理 **gh-proxy.com**——该代理会看到你查询的仓库路径（`owner/repo` 会进它的访问日志）；`github.source` 会标 `direct` / `gh-proxy`，不放心就把 `pkgStatsAllowGithubProxy` 设 `false`。
@@ -113,10 +168,11 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
 - `lib/doc.js` — aiyayi-doc 文档解析插件（1.4.0，挂检索员 preset；ZIP/XML 最小解析零依赖 + 动态加载 shipped libreoffice-kit 做 pdf 页图与旧版转换）
 - `lib/own-tools.js` — 她的工具名单单一真源（注册处登记、放行处判定，防手写白名单漂移）
 - `lib/precompact.js` — aiyayi-precompact 压缩前沉淀检查插件（1.5.37；在 dsh-compaction-basic 动手压缩前，把值得沉淀的任务闭环/结论/新经验先落盘为经验文档+记忆+索引，失败不阻塞主流程；`precompact_run` 显式工具入口 + 接近阈值自动触发）
-- `lib/toolkit.js` — aiyayi-toolkit 工具包中间层插件（1.5.38；首批 3 工具：`toolkit_cmd` 只读命令白名单执行 / `toolkit_read` 文件探测 + 小文件读取 / `toolkit_write` 受限写入；调用留痕落 `<记忆根>/toolkit/usage.jsonl`；简单状态型查询本体直调、不派小伙伴。1.5.39 修复 type 数组 schema 导致三件套注册全败的问题，坑 #77；1.5.40 修执行输出对齐 output.schema——宿主对工具输出也做 schema 校验，条件性返回字段一律用约定值，坑 #78）
+- `lib/toolkit.js` — aiyayi-toolkit 工具包中间层插件（1.5.38；首批 3 工具：`toolkit_cmd` 只读命令白名单执行 / `toolkit_read` 文件探测 + 小文件读取 / `toolkit_write` 受限写入；调用留痕落 `<记忆根>/toolkit/usage.jsonl`；简单状态型查询本体直调、不派小伙伴。1.5.39 修复 type 数组 schema 导致三件套注册全败的问题，坑 #77；1.5.40 修执行输出对齐 output.schema——宿主对工具输出也做 schema 校验，条件性返回字段一律用约定值，坑 #78；1.5.44 起工具面收窄为 3 基础 + 2 清单管理，其余工具改由本地清单驱动）
+- `lib/toolkit-manifest.js` — 1.5.44 的**本地工具清单加载器**：读 `<记忆根>/toolbox.json` → 逐条校验（name 规则 / 必填字段 / `mode` 只许 async / 脚本存在性 / 超时上限 / params 三类型）→ 为 `enabled:true` 的注册工具，每个都经 `startDetachedTask` 异步执行、立刻返回 taskId、跑完 followup 推回会话；清单坏/条目坏/脚本缺失一律显式报回会话（pre-step 注入），运行失败与超时带退出码 + stderr 摘要。同时提供 `toolbox_list` / `toolbox_reload` 两个同步管理工具
 - `lib/toolkit-async.js` — aiyayi-toolkit 的**真异步能力**（1.5.41）：`startDetachedTask()` 立刻返回 `{status:'started', taskId}`、把 `run()` 甩到下一轮宏任务；跑完（含失败/超时）经 `exec.agent.followup(createUserMessage(...))` 把结果作为一条消息注入会话，并有进程内 task 表可查。为什么走 followup 而不是 `ctx.jobs`：后者是 producer 侧能力，`preset-aiyayi` 本体没挂 `tool-jobs`。坑 #65（source 禁 undefined）/ #68（投递前让出宿主 publish 宏任务）/ #79（宿主同步 await 工具）的规避写法都收在这一个文件里
-- `lib/toolkit-extra.js` — 1.5.41 新增的两个具体工具：`watch_read`（**异步**，手表取数，立刻返回 taskId，后台跑 `skg_probe/ble_direct/watch_read.py`，任务级总超时 180s，结果/超时/失败都推回会话）+ `mem_sync`（**同步**，记忆仓库 `git status --porcelain -z` → `git diff HEAD` 全文 + 未跟踪文件敏感内容扫描 → add/commit → 依次 push gitee/gitcode master；越界一律拒绝，坑 #80 的 quotepath 陷阱也在这里修）
-- `lib/pkg-stats.js` — 1.5.42 新增的 `pkg_stats`（**同步**）：npm 三个下载窗口（含 `start`/`end` 原样，npm 的 end 滞后约 2 天）+ registry 的 latest 版本与发布时间 + GitHub / Gitee / GitCode 的 star / fork / watcher / open issues。域名白名单（精确主机名）+ 参数逐段校验编码 + 15 秒总预算；某平台挂了只写进它自己的 `unavailable`，其余照常返回，绝不抛。
+- `lib/toolkit-extra.js` — 1.5.41 的两个具体工具实现（**1.5.44 起不再注册进工具面，文件保留供实现层复用/回归测试**）：`watch_read`（异步，手表取数）+ `mem_sync`（同步，记忆仓库提交推送）。**运行时版本已搬到本机脚本** `G:\阿依娅伊\工具\mem_sync\mem_sync.js`（清单驱动）
+- `lib/pkg-stats.js` — 1.5.42 的 `pkg_stats` 实现（**1.5.44 起不再注册进工具面，文件保留**）：npm 三个下载窗口 + registry latest + GitHub / Gitee / GitCode 热度。**运行时版本已搬到本机脚本** `G:\阿依娅伊\工具\pkg_stats\pkg_stats.js`（清单驱动）
 - `lib/feishu.js` — aiyayi-feishu 飞书桥接宿主插件（1.5.8 起；跨会话服务，长连接收消息、按指令路由到 aiyayi 会话、回发；凭读取记忆根 `feishu/config.json`）
 - `lib/feishu-logic.js` — 飞书纯逻辑（路由/映射/文本抽取/三档复用决策/**长连接状态机**，无外部依赖，可单测；test/feishu-route.test.mjs、test/feishu-reuse-session.test.mjs、test/feishu-status.test.mjs 覆盖）
 - `skills/feishu-setup/` — 内置技能（1.5.13 起随包自动同步到 DSH 技能根）：飞书机器人安装/验证/排障全流程（含 2026-11-10 扫码接入改造说明；脚本 `scripts/create-bot.js` v5 等由技能同步维护）

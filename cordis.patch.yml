@@ -218,31 +218,32 @@
           # （文件探测+小文件读取）/ toolkit_write（受限写入：记忆根+白名单目录，64KB，
           # 原子写+自动 .bak）。简单状态型查询本体直接调，不用派小伙伴；留痕落
           # <记忆根>/toolkit/usage.jsonl（环形 500 行）。数组一律整体替换（不是叠加）。
-          # 1.5.41 起工具箱加「真异步」能力（坑 #79：宿主同步 await 工具，长任务会堵死
-          # 整轮且无超时兜底），并新增两个具体工具：
-          #   · watch_read（异步，手表取数）——立刻返回 taskId，25-100 秒后结果经
-          #     exec.agent.followup 作为一条消息推回会话；任务级总超时 180 秒杀进程树。
-          #   · mem_sync（同步，记忆仓库提交推双远端）——git status/diff 扫描敏感内容
-          #     → add/commit（阿依娅伊 <aiyayi@local>）→ 依次 push gitee/gitcode master；
-          #     越界或命中密钥一律拒绝并回脱敏行号。
-          # 1.5.42 起再加一个同步工具（同样"几秒内完成"这一档）：
-          #   · pkg_stats（同步，查 npm 下载量与代码仓热度）——npm 三个下载窗口
-          #     （last-day/week/month，**start/end 原样带回**：npm 的 end 滞后约 2 天，
-          #     "last-day" 不是今天）+ registry 的 latest 版本与发布时间 + GitHub /
-          #     Gitee / GitCode 的 star / fork / watcher / open issues。
-          #     只允许 https GET 到白名单域名（精确主机名）：api.npmjs.org /
-          #     registry.npmjs.org / api.github.com / gh-proxy.com / gitee.com / gitcode.com；
-          #     repo/package 参数逐段字符校验 + 编码；整次调用 15 秒总预算。
-          #     某平台挂了只写进它自己那段的 unavailable，其余照常返回，绝不抛。
-          #     ⚠ **gh-proxy.com 是第三方代理**（GitHub 直连在本机不通时的兜底）：它会
-          #     看到你查询的仓库路径（owner/repo 进它的访问日志），不放心就设
-          #     pkgStatsAllowGithubProxy: false 关掉这条兜底。
-          #     ⚠ GitCode 无匿名 API（private-token 必需），stars/forks 恒为 0 且
-          #     unavailable 写明原因；页面上的 star 数是 UI 数字，不作接口确证。
-          #     ⚠ Gitee 的 watchers_count 是"关注数"，语义与 GitHub watchers 不同。
+          # 1.5.41 起工具箱有「真异步」能力（坑 #79：宿主同步 await 工具，长任务会堵死
+          # 整轮且无超时兜底）：startDetachedTask 立刻返回 taskId，跑完经
+          # exec.agent.followup 把结果作为一条消息推回会话（lib/toolkit-async.js）。
+          #
+          # ⚠ **1.5.44 起工具面收窄**：安装包里只剩三个通用工具（上面三个）+ 两个清单
+          #   管理工具 toolbox_list / toolbox_reload。watch_read / mem_sync / pkg_stats
+          #   **已移出 npm 包**，改由**本机工具清单** <记忆根>/toolbox.json 驱动
+          #   （lib/toolkit-manifest.js）：
+          #     · 清单里每条引用本机脚本绝对路径，脚本不进包（在 G:\阿依娅伊\工具\…）；
+          #     · 每条都必须 mode:"async"（写 sync 直接判该条校验失败并报回会话）；
+          #     · 每个清单工具调用立刻返回 {status:'started', taskId}，跑完 followup 推回；
+          #     · 清单坏了/条目坏了/脚本缺失会注入一条 [工具清单] 消息报回会话，不静默；
+          #     · 改完清单或脚本用 toolbox_reload 重载，toolbox_list 巡检每条的注册状态。
+          #   mem_sync / pkg_stats / watch_read 的默认值与实测注意点（npm end 滞后约 2 天、
+          #   GitHub 直连不通走 gh-proxy.com 第三方代理、GitCode 无匿名 API）现在写在
+          #   各自脚本里，本文件下面的 mem* / pkgStats* / watch* 项**保留但不再被读取**
+          #   （只为升级用户的 patch 不留孤儿配置；要改行为请改清单里该工具的 env）。
           - id: aiyayi-toolkit
             name: 'dsh-aiyayi/toolkit'
             config:
+              # 本地工具清单（1.5.44）：manifestPath: null（默认）= <记忆根>/toolbox.json，
+              # 给字符串则整体接管（调试 / 多套清单）。清单里的 .py 用 manifestPython、
+              # .ps1 用 manifestPowershell 指定解释器（默认 'python' / 'powershell'）。
+              # manifestPath: null
+              # manifestPython: python
+              # manifestPowershell: pwsh
               # 只读命令白名单（前缀整词匹配；白名单外一律拒绝）。
               cmdWhitelist:
                 - git log
@@ -274,11 +275,14 @@
                 - D:\AI\TRAE_PRO\阿依娅依\docs
               usageEnabled: true
               usageMaxLines: 500
-              # ── 1.5.43 破坏性变更：以下三个工具已从工具面移除（不再注册、不再进白名单）──
+              # ── 1.5.43 / 1.5.44 破坏性变更：以下三个工具已从工具面移除（不再注册、不再进白名单）──
               # watch_read / mem_sync / pkg_stats 是发版方的私有能力，不进通用安装包。
-              # 实现文件仍在包里，1.5.44 由本地清单（<记忆根>/toolbox.json）按需注册。
-              # 下面的配置项**当前不再有任何效果**，留作 1.5.44 接口参考，先别照抄启用。
-              # ── 1.5.41 新增项（这里只写"本机需要显式给"的；其余用代码默认值）──
+              # 实现文件仍在包里；1.5.44 起它们改由**本机工具清单**
+              # <记忆根>/toolbox.json 按需注册（脚本在 G:\阿依娅伊\工具\…，不进包）。
+              #   ⚠ **下面这些 watch* / mem* / pkgStats* 配置项 1.5.44 起不再被读取**：
+              #   保留只为让升级用户已写的同名项不变孤儿。**要改行为请改清单里该工具的 env**
+              #   （见 README「本地工具清单」一节），别在这里取消注释——不会生效。
+              # ── 1.5.41 遗留项（仅作接口参考，不再生效）──
               # watch_read：手表脚本目录。不设 = 按插件自身位置推导
               #   <包目录>/../../skg_probe/ble_direct（本机即 D:\AI\TRAE_PRO\阿依娅依\skg_probe\ble_direct）。
               #   目录搬家时在这里给绝对路径。watchPython 默认 'python'（需能 import bleak）。
@@ -295,8 +299,7 @@
               # memPushRemotes:
               #   - origin
               # memBranch: master
-              # ── 1.5.42 新增项（同上：这里只写"本机需要显式给"的；以下全是代码默认值，
-              #    取消注释即生效，不改默认行为）──
+              # ── pkg_stats 遗留项（同上：不再被读取）──
               # pkg_stats：默认查询目标（本体一般不用传参）。
               # pkgStatsDefaultPackage: dsh-aiyayi
               # pkgStatsDefaultRepo: BayiHY/dsh-aiyayi

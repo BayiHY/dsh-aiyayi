@@ -10,6 +10,80 @@
 
 ---
 
+## 1.5.44（2026-11-12：本地工具清单驱动——安装包只留 3+2 工具，其余走本机脚本）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- **改了什么（新增 `lib/toolkit-manifest.js` + `test/toolkit-manifest.test.mjs`；改 `lib/toolkit.js` / `lib/own-tools.js` / `package.json` / `README.md` / `cordis.patch.yml` 注释 / 三个既有测试的注册面断言；本机新增三个脚本与 `toolbox.json`）**：
+
+  **一、设计依据（李浩 2026-11-12 定调）**
+  - 工具箱存在的目的是让本体**异步执行命令和工具**、不阻断对话：**每个工具都必须立刻返回 taskId，后台跑完用 followup 推回会话**。同步工具一旦卡住整轮就堵死，那还不如不用。
+  - **npm 安装包里只留简单通用的能力**（toolkit_cmd / toolkit_read / toolkit_write）。其他工具走**本地清单**：清单与脚本都在本机，清单引用本机脚本绝对路径，**脚本不进 npm 包**。这样普通用户装插件不会看到一堆用不上的工具（1.5.42 时 6 个工具实测约 1334 token/轮）。
+
+  **二、清单文件 `<记忆根>/toolbox.json`（最终格式）**
+  ```json
+  {
+    "version": 1,
+    "tools": [
+      {
+        "name": "mem_sync",
+        "enabled": true,
+        "script": "G:/阿依娅伊/工具/mem_sync/mem_sync.js",
+        "description": "同步记忆仓库：git add + commit + push 到配置的远端",
+        "timeoutMs": 180000,
+        "mode": "async",
+        "args": [],
+        "env": { "AIYAYI_MEM_PUSH_REMOTES": "origin" },
+        "params": { "message": { "type": "string", "description": "commit message（可选）" } }
+      }
+    ]
+  }
+  ```
+  字段：`name`（必填，`^[a-z][a-z0-9_]{1,40}$`）/ `enabled`（**默认 false**，显式 true 才注册）/ `script`（必填，绝对路径，允许 `~` 与 `%变量%`、`${变量}` 展开）/ `description`（必填）/ `timeoutMs`（默认 60000，上限 300000，超上限夹取并告警）/ `mode`（**只支持 `"async"`**，写 `"sync"` 直接判该条校验失败——同步会堵对话，这正是要避开的）/ `args`（固定参数数组）/ `params`（简化 JSON Schema，只支持 string/number/boolean；`required: true` 标必填）/ `env`（给脚本的环境变量）/ `cwd`（默认脚本所在目录）。
+
+  **三、加载器 `lib/toolkit-manifest.js`**
+  - 读清单 → 逐条校验 → 为 `enabled:true` 的注册工具；**每个工具都走 `startDetachedTask`**：调用立刻返回 `{status:'started', taskId, tool, hint, error}`，后台按扩展名 spawn（`.js`→node / `.py`→python / `.ps1`→powershell / `.cmd|.bat`→cmd / 其余当可执行文件），跑完 followup 推回会话。
+  - **失败一律显式，不静默**：清单不存在→只记日志（正常，用户没配）；JSON 语法错误→报回会话（带行列位置）；某条校验失败→报回（带工具名+原因），**其他条目照常加载**；脚本不存在→该条不注册并报回；运行失败/超时→followup 带退出码与 stderr 尾部摘要。
+  - **能力声明校验在加载器里做**（不是脚本自己说了算）：脚本必须存在且是普通文件；路径白名单（禁指向记忆根外）这一版只做"存在性 + 越界提示"，留到以后。
+  - 脚本约定：stdout 只输出一个 JSON 对象（加载器 parse 后把 `hint` 放正文首行；非 JSON 原样展示）；退出码非 0 或 `ok:false` 判失败。环境变量注入 `AIYAYI_TOOLBOX_TOOL/ROOT/MANIFEST/ARGS` + 清单 `env`。
+
+  **四、两个管理工具（同步，只读清单，几毫秒）**
+  - `toolbox_list`：列出清单每条（name / enabled / mode / script / scriptExists / registered / timeoutMs / reason）+ 清单级 problems + 行列级的 JSON 错误。
+  - `toolbox_reload`：注销全部旧清单工具、按当前文件重新注册；返回 removed / registered / skipped / problems。
+  - 两者都进 `TOOL_NAMES` 与 `own-tools.js` 静态表。**清单里的工具不在静态表里**——注册时由 `registerOwnTool(name)` 动态放行，保证白名单始终是超集（清单增减不会把工具挡在 restrict 之外）。
+
+  **五、移出包内的三个工具**
+  - `TOOL_NAMES` 删掉 `watch_read` / `mem_sync` / `pkg_stats`，`own-tools.js` 静态表同步删掉（并写明别再写回来：会留下"已放行但没注册"的幽灵条目）。
+  - `lib/toolkit-extra.js` / `lib/pkg-stats.js` **文件保留**（实现层与 1.5.41/1.5.42 的单测继续用它们），只是不再 import 进工具面。
+  - `lib/toolkit-async.js` **原样保留**（异步骨架是基础设施，清单工具全走它）。
+  - `DEFAULT_CONFIG` 里的 `watch*` / `mem*` / `pkgStats*` 项**保留但不读**：只为升级用户已写的 cordis.patch.yml 项不变孤儿（默认值现在写在各自脚本里）。
+
+  **六、三个本机脚本（`G:\阿依娅伊\工具\`，不进包）**
+  - `mem_sync/mem_sync.js`：从 `toolkit-extra.js` 抽出，独立 CLI，**保留全部安全守卫**——记忆根解析（`AIYAYI_TOOLBOX_ROOT` > `AIYAYI_HOME` > `location.json` > 默认）、`rev-parse --show-toplevel` 仓库守卫（仓库顶必须与记忆根一致）、路径越界拒绝、敏感扫描（私钥正则含 `OPENSSH`：`[A-Z0-9 _-]*`）、**只扫 `+`/`-` 变化行**（P1-2）、暂存区 `A ` 也算新增文件（P1-1b）、`diff HEAD` 失败不吞成空串、远端与分支无隐含默认（没配远端=零副作用 noop；空仓库/detached 用 `symbolic-ref` 兜底、拿不到就报错）、`partial` 时 `ok:false` 并附真实远端名（P0-1/P0-2/P0-3）。
+  - `pkg_stats/pkg_stats.js`：同理抽出，保留域名白名单（精确主机名 + 只许 https + 不许带凭据）、参数逐段校验与编码、15 秒总预算、各平台失败隔离、`unavailable` 写明原因。
+  - `watch_read/watch_read.js`：**占位**。本机没有手表取数脚本（`skg_probe/ble_direct` 是单位机路径），清单里 `enabled: false`。脚本检测到真脚本（`AIYAYI_WATCH_SCRIPT` 或约定路径）就透传，否则如实回 `status:"not-configured"` 并给接线步骤，**不做任何蓝牙动作、不假装取过数**。
+  - `G:\阿依娅伊\工具\README.md`：脚本约定 + 现有脚本表 + 怎么加新工具 + mem_sync 远端配置。
+
+  **七、本机清单 `F:\阿依娅伊\记忆\toolbox.json`（已写）**
+  `mem_sync`（enabled:true，env `AIYAYI_MEM_PUSH_REMOTES=origin`）/ `pkg_stats`（enabled:true）/ `watch_read`（enabled:false，脚本占位）。
+
+- **为什么**：工具面的 token 成本是每轮固定开销，而"发版方私有能力"对普通用户全是噪音；同时私有能力一旦同步执行就容易堵住整轮（坑 #79）。把"装什么"从代码里挪到本机文件里，既省 token，又让每台机器按需装配，还强制了"所有工具异步"这条纪律。
+- **踩坑记录（当场实测）**：
+  1. **`apply()` 期没有会话，拿不到 followup**。清单在 preset 启动期加载，那时 `exec.agent` 还不存在，所以"清单坏了要报回会话"不能在 load 时直接投递。做法：load 时把问题攒进 pending，挂 `agent/pre-step`（同 restrict.js 范式，`ctx.effect` 包住），第一个 agent 的第一步注入一条 `[工具清单]` 快照消息，注入后清空（同一 agent 用 WeakSet 防重刷）。
+  2. **测试必须在沙盘**。`pkg-stats.test.mjs` 原来不隔离记忆根——1.5.44 起 `apply()` 会读真机清单，等于**在真实记忆根上测**（红线）。已补 AIYAYI_HOME + 指路文件隔离，沙盘里不放 toolbox.json 等价于"用户没配清单"。
+  3. **`toolbox_list` 只巡检、不注册**。写完清单不 reload 的话 `registered` 全 false，这是设计而不是 bug（巡检本就该反映"此刻注册面"而不是"清单里想要什么"），单测把这条语义写死了。
+  4. **有两个既有测试的断言必须跟着改**（`toolkit.test.mjs` / `toolkit-async.test.mjs` / `pkg-stats.test.mjs` 里"6 个工具"、"TOOL_NAMES 含 xxx"、经注册壳调 watch_read）：它们测的是 1.5.41/1.5.42 的工具面。改法是**保留实现层断言、改注册面断言**（watch_read/mem_sync 改成直接调 `executeWatchRead`/`executeMemSync`，pkg_stats 改成直接调 `executePkgStats`），不删测试。
+- **测试**：新增 `test/toolkit-manifest.test.mjs`（约 110 条断言，**全程 %TEMP% 沙盘**）。覆盖：清单解析（合法/非法 JSON 带行列/空文件/缺 name·script·description/name 不合规/mode:sync 被拒/version≠1/重名/timeoutMs 超上限夹取/相对路径/脚本不存在/params 非三类型/~ 与 %变量% 展开）；加载（清单不存在只记日志、enabled:false 不注册、enabled:true 注册、坏条目不影响其他条目、坏清单与条目问题都注入会话且不重复刷屏）；异步（**立刻返回 <300ms**、慢脚本 1.5 秒也不阻塞、followup 真被调到、超时被杀并投递、退出码 7 + stderr 摘要、非 JSON 输出原样展示、脚本被删后预检同步报错且不起任务、`AIYAYI_TOOLBOX_ARGS`/固定 args/清单 env/记忆根四个透传）；管理工具（list 字段与语义、reload 注销旧工具 + 注册新工具 + 坏清单时也清干净）；工具面（TOOL_NAMES=5、own-tools 超集与动态放行、包内不再注册那三个）。
+- **回归**：`node test/*.test.mjs` 全量 **38 个文件全通过**（基线 37 个全通过 + 新增 1 个）。
+- **真机实测（只读，不改真实记忆）**：用真 `F:\阿依娅伊\记忆\toolbox.json` 起一次 `apply()`，注册面 = `toolkit_cmd,toolkit_read,toolkit_write,toolbox_list,toolbox_reload,mem_sync,pkg_stats`；`toolbox_list` 显示三条清单工具（watch_read enabled:false、存在问题为空）；真调一次 `pkg_stats` 工具 —— **execute 4ms 返回 taskId**，后台 6.6 秒跑完并把结果推进 task 表（那次 followup 因手工脚本没有真实 host Agent 而记 `delivery: failed`，属预期）。
+- **⚠ `.gitignore`（记忆库白名单式，只放行 `memory.md` + `memories/`）的判断：这一版不动，建议"不放行"**。
+  理由：清单里写的是**设备相关的脚本绝对路径**（`G:/阿依娅伊/工具/...`）与设备相关的 env，跟着记忆库推到云端/别的机器上会用不上甚至指错文件；`toolbox.json` 更像"本机配置"而不是"记忆内容"。要是以后想让它跟着走，更合适的做法是"清单里引入设备无关的相对位置 + 每台设备一份 `toolbox.local.json` 覆盖"，而不是直接把这份设备路径提交进库。这条留给 1.5.44 合并时最终定（记忆库那边一行都没改）。
+- **合并建议（给主干）**：分支 `feat/toolbox-manifest` 已 **rebase 到 1.5.43（1039dc8）之上**，冲突已按"1.5.43 的实现 + 1.5.44 的工具面"逐处解完并跑绿：
+  - `TOOL_NAMES` = 本分支的 5 项（3 基础 + 2 清单管理）；`builtins` = 本分支（只剩 3+2，清单加载）；
+  - `DEFAULT_CONFIG` = 1.5.43 的新默认值（`memPushRemotes: []` / `memBranch: ''`）+ 本分支的 `manifest*` 三项；
+  - `own-tools.js` = 本分支（删三个私有工具 + 加两个管理工具；并保留 1.5.43 那句"别写死回来"的说明）；
+  - `toolkit-extra.js` / `pkg-stats.js` = **原样取 1.5.43**（本分支没动它们；P0/P1 修复与 `mem-sync-1543.test.mjs` 全绿）；
+  - 三个既有测试的注册面断言改成 5 项、实现层断言改成直调导出物（不删测试）。
+  `git merge feat/toolbox-manifest` 现在应当**零冲突**。合并后：① 跑 `node test/*.test.mjs`（本分支实测 **39 个文件全通过**）；② 把本机 `F:\阿依娅伊\记忆\toolbox.json` 里的 mem_sync 指向 `G:\阿依娅伊\工具\mem_sync\mem_sync.js`（已写好，含 1.5.43 全部守卫）；③ `toolbox_reload` + `toolbox_list` 验证；④ 最后再决定 `.gitignore` 要不要放行 `toolbox.json`（本分支没改）。**不 push、不 publish**。
 ## 1.5.43（2026-11-12 修 `mem_sync` 的 P0/P1 缺陷 + **破坏性变更**：三个私有工具移出工具面）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）

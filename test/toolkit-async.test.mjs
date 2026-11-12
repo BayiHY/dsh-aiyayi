@@ -516,17 +516,20 @@ const makeCtx = () => ({
   logger: { info: () => {}, warn: () => {} },
 })
 const api = tk.apply(makeCtx(), { usageEnabled: false })
-check('注册：1.5.43 起工具面只留三件套（watch_read / mem_sync / pkg_stats 已移出）',
-  registered.map((d) => d.name).join(',') === 'toolkit_cmd,toolkit_read,toolkit_write',
+// 1.5.43 / 1.5.44：watch_read / mem_sync / pkg_stats 已移出工具面（改由本机清单驱动，
+// 见 test/toolkit-manifest.test.mjs）。这里只断言"工具面是 1.5.44 的形态"，
+// 实现的 schema / 归一函数 / execute 入口继续在下面直接测（实现文件保留，清单脚本复用同一套逻辑）。
+check('注册：工具面是 1.5.44 形态（3 基础 + 2 清单管理，不再有 watch_read/mem_sync/pkg_stats）',
+  registered.map((d) => d.name).join(',') === 'toolkit_cmd,toolkit_read,toolkit_write,toolbox_list,toolbox_reload',
   registered.map((d) => d.name).join(','))
-check('注册：目录 list 与之一致（3 个）', api.list().length === 3, api.list())
+check('注册：目录 list 与之一致（5 个）', api.list().length === 5, api.list())
 check('注册：watch_read / mem_sync 已不在 TOOL_NAMES（实现保留、不注册）',
   !tk.TOOL_NAMES.includes('watch_read') && !tk.TOOL_NAMES.includes('mem_sync'), JSON.stringify(tk.TOOL_NAMES))
 
-// schema 结构仍然逐条校验**导出物**（实现文件保留，1.5.44 的清单加载器要复用，
+// schema 结构仍然逐条校验**导出物**（实现文件保留，清单加载器与独立脚本要复用，
 // 所以 schema 合规性必须继续被钉住，只是不再经 apply() 注册）。
 for (const [name, def] of [['watch_read', tx.WATCH_SCHEMA], ['mem_sync', tx.MEM_SYNC_SCHEMA]]) {
-  check(`schema：${name} 存在`, Boolean(def))
+  check(`schema：${name} 存在`, Boolean(def?.name === name))
   check(`schema：${name} parameters.type 是单字符串 object`, def?.parameters?.type === 'object', JSON.stringify(def?.parameters))
   check(`schema：${name} output.schema.type 是单字符串 object`, def?.output?.schema?.type === 'object', JSON.stringify(def?.output?.schema))
   check(`schema：${name} required 列全 properties（坑 #78 的教训）`, requiredCoversAll(def.output.schema), JSON.stringify(def.output.schema.required))
@@ -546,7 +549,7 @@ checkOutput('归一：mem_sync 对脏 pushed/hits 产出合规形状', tx.MEM_SY
   tx.shapeMemSyncOutput({ status: null, ok: 'yes', commit: null, pushed: [{ remote: null, ok: 'true', error: undefined }, null], hits: [null, 3], hint: null, error: undefined }))
 
 // 直接调导出的 execute（1.5.43 起它们不再经 apply() 注册，但实现与签名必须保持可用——
-// 1.5.44 的本地清单加载器就靠这个入口把它们挂进工具面）。
+// 1.5.44 的本地清单脚本与加载器都靠这个入口/逻辑）。空远端配置是 1.5.43 的零副作用 noop 语义。
 const watchViaShell = await tx.executeWatchRead({}, { cfg: {}, logUsage: () => {}, warn: () => {}, exec: { agent: { id: 'sess-shell', followup: () => {} } } })
 checkOutput('转发：watch_read 的 execute 直调也过宿主校验', tx.WATCH_SCHEMA.output.schema, watchViaShell)
 check('转发：watch_read 直调返回 started 或明确的 error（二选一，绝不抛）',
@@ -562,19 +565,7 @@ check('转发：mem_sync 直调在空远端配置下是 noop（零副作用，1.
  *     （这是 1.5.41 的命门——签名从 `(args)=>` 改成 `(args, exec)=>` 就是为了这个）。
  *     用一个假 watchDir + node 当 python：脚本立刻失败退出 → 走 error 分支 → 仍必须投递。
  *     1.5.43 起 watch_read 不再经 apply() 注册，这里直接调它的 execute（签名与透传行为不变，
- *     1.5.44 的清单加载器复用同一个入口）。 */
-const shellRegistered = []
-const shellCtx = {
-  effect(fn) { fn(); return () => {} },
-  tools: { register(def) { shellRegistered.push(def); return () => {} } },
-  logger: { info: () => {}, warn: () => {} },
-}
-tk.apply(shellCtx, {
-  usageEnabled: false,
-  watchDir: fakeWatchDir,
-  watchPython: process.execPath,
-  watchTimeoutMs: 8000,
-})
+ *     1.5.44 的清单脚本复用同一套投递纪律；清单链路的真任务覆盖在 toolkit-manifest.test.mjs）。 */
 const shellFollowups = []
 const shellStarted = await tx.executeWatchRead({ rounds: 1, listenSec: 0 }, {
   cfg: { usageEnabled: false, watchDir: fakeWatchDir, watchPython: process.execPath, watchTimeoutMs: 8000 },
