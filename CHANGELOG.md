@@ -10,21 +10,23 @@
 
 ---
 
-## 1.5.35（2026-11-12 两笔改动：`feishu_status` 新增最近入站路由回看 `inboundRouting`；修连接状态失真——`connected` 改为事件驱动实时值）
+## 1.5.35（2026-11-12 新增：`feishu_status` 最近入站路由回看 `inboundRouting` 字段）——**已发布（npm 2026-11-12T02:27:31Z）**
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
-- 本版由两次独立改动合并而来（同一天先后落在 1.5.35 上），两条内容都保留如下。
-
-### 改动一：`feishu_status` 新增最近入站路由回看 `inboundRouting`
+- git：`a6df9e7`（代码）+ `d023c1a`（DEPLOY 文档）；npm publish 由并发会话于 2026-11-12T02:27:31Z 完成，registry `gitHead=d023c1a`、shasum `45fc11369c0a5aa5c4ca2aa5290d1560cc59069a`。
 
 - **改了什么（只动 `lib/` 与新增测试，无对外行为变更）**：
   - `lib/feishu-logic.js`：新增 `INBOUND_ROUTING_FILE='inbound-routing.json'`、`INBOUND_ROUTING_LIMIT=20`、`readInboundRouting(root)`、`appendInboundRouting(root,{at,chatId,appId,action,sessionId})`（空 chatId 忽略；环形缓冲 新→旧 超 20 丢最旧；写入 feishu 子目录）。
   - `lib/feishu.js`：`onIncomingMessage()` 各路由分支（select/route/auto-new/bind/new/reuse/choose/new-fallback）调用 `recordRouting(action,sessionId)`；`feishu_status` 返回新增 `inboundRouting` 字段（读 `readInboundRouting(root)`）。
 - **为什么**：`feishu_status` 此前只报当前绑定/应用状态，看不到最近入站消息被路由到哪个会话、怎么路由的，排查"消息去哪了"要翻日志；回看字段让最近的入站路由一目了然（新→旧，上限 20 条）。
 - **测试**：新增 `test/feishu-inbound-routing.test.mjs`（本文件单跑全过）；全量 159 项 3 挂 = 既有环境基线（`alarm-inject`/`home-relocate`/`tools-surface` 磁盘探测，非本次引入，与 1.5.21/1.5.22/1.5.27 条目同基线）。
-- 打包与 npm publish **不在本次范围**：本版只做版本号对齐 + 推 git（gitcode / gitee / github 三远端），打包与 npm 发布留作下一步单独执行。
+- 发布：npm publish 由并发会话完成（2026-11-12T02:27:31Z），打包 47 files / packed 349.2 kB。
+- **本版不含连接状态修复**：同一时间另一条工作线在做 `connected` 实时化（见 1.5.36）。两笔改动在 git 上合并后，1.5.35 的 npm 包**先于合并**被发布，故不含后者——这也是 1.5.36 单独发版的原因。
 
-### 改动二：修飞书连接状态失真——`connected` 在断开/重连期间从不回写
+## 1.5.36（2026-11-12 修复：飞书连接状态失真——`connected` 在断开/重连期间从不回写）
+
+- 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
+- **为什么单独发一版**：本修复原计划随 1.5.35 发布，但 1.5.35 已被一个并发会话抢先 `npm publish`（2026-11-12T02:27:31Z，内容只有 `inboundRouting`）。npm 不允许同版本重发，而线上包仍在报假 `connected: true`（用户被误导"飞书一切正常"），所以按"修复必须真到达用户"的原则升为 **1.5.36** 单独发布。代码层面两笔改动早已合并（git 上同一棵树），差异只在版本号与发布时机。
 
 - 症状：`feishu_status` 的 `connected` 自首次建连成功后恒为 `true`，即使长连接早已断开、SDK 正在重连也照报在线。2026-11-11 日志里 `[ws] reconnect` 出现 **326 次**（平均 124.5 秒一次，与 SDK 的 120s + 0~30s 抖动重连定时器吻合），期间 `feishu_status` 一直报 `connected: true`，用户被误导成"飞书一切正常"。
 - **根因（源码定位，不是推测）**：`lib/feishu.js` 旧 441-448 行只在 `channel.connect().then()` 里写 `state.connected = true`，**之后没有任何回写**。全仓 grep `onReconnecting|onReconnected|onError` → **0 处命中**。而 `feishu_status`（旧 1447/1453 行）读的就是这个粘性值：`connected: state ? state.connected === true : false`。SDK 的自动重连是在 WS 内部循环里完成的，插件从未被告知。
@@ -52,8 +54,11 @@
   - 另有独立取证脚本 `test/feishu-status-proof.mjs`（文件名不带 `.test.mjs`，**不进全量通配**）：按 SDK 真实时序喂一串假 WS 事件（首次建连 → 抖动断连 → 重连成功 → 4 轮抖动风暴 → 重试耗尽 → 恢复），逐步打印 feishu_status 可见字段并断言。实跑输出 `exit 0`：`connected=true/healthy=true → false/false（断连）→ true/true 且 reconnectCount=1 → true/false 且 5min=5 → false/false + lastError → 窗口滑过后 healthy=true`，`PROVEN`。
   - 取证脚本开发中自身纠正一次：最初「5 分钟窗口」把断连也推进了 120s，导致 4 轮抖动摊到 10 分钟外、`healthHint` 为 null——说明窗口裁剪逻辑正常工作，抖动必须真的密集才判不健康（把每轮压到 20s 内后如期触发）。
 - 新文件均无 BOM。
-- 版本号三处对齐：`package.json` version、本条目、profile `cordis.patch.yml` 里 `aiyayi-feishu` 的 `config.reloadTag` 均为 `1.5.35`（profile 已先备份为 `cordis.patch.yml.bak-1.5.35-20261112-102041`）。
 - 未包含：SDK 事件里拿不到 close code / reason（`wsInstance.on('close', ...)` 在 SDK 内部只打 debug 日志、不回传参数，102873-102877），所以 `lastDisconnectReason` 记的是插件侧归因（`ws-reconnecting` / `sdk-state:<state>` / `plugin-dispose`），不是飞书的原始关闭码。
+
+- **教训（并发发版会撞车，写在这供后来人省事）**：本版差点与另一条会话同时发同一个版本号——那边 10:21 推代码、10:27 直接 `npm publish 1.5.35`，而本会话 10:29 才 push，回查 registry 才发现版本号已被占。**以后发版前必须先查两处再动手：`npm view dsh-aiyayi dist-tags`（看 latest 有没有被抢）与 `git fetch <remote> && git log HEAD..<remote>/main`（看远端有没有新提交）**，不要闷头改完就直接 `git push` + `npm publish`。npm 的版本号是**全局不可逆**的，一旦被别人占了，只能改号重发，白折腾一轮。并发会话之间尤其要约定：改版本号属于"抢占式操作"，先查后占。
+- 版本号三处对齐：`package.json` version、本条目、profile `cordis.patch.yml` 里 `aiyayi-feishu` 的 `config.reloadTag` 均为 `1.5.36`（profile 已先备份为 `cordis.patch.yml.bak-1.5.36-20261112-104808`）。
+- **与 1.5.35 的共存验证**（合并冲突解决后专门做的，不只看测试绿）：用真实形状的 `inbound-routing.json`（3 条记录）跑 `feishu_status`，断言 ① 记录原样读出、顺序新→旧、`sessionId: null` 保留；② `healthy` 从 true→false→断连三次翻转时，`inboundRouting` **逐字节不变**（`JSON.stringify` 比对相同）。`healthy` 只读连接状态机、不读入站数据，两条数据通路互不干扰。23 项断言全过。
 
 ## 1.5.34（2026-11-12 修复：`presence-clock.test.mjs` 跨午夜偶发失败——**只改测试，无运行时行为变化**）
 
