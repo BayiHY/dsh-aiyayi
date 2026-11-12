@@ -214,6 +214,44 @@
               memoryPath: 事情/经验
               # docsDir 不设 → 默认落记忆根下 docs/（可改成工作区 docs 目录）。
               updateIndex: true
+          # 工具包中间层（首批 3 工具）：toolkit_cmd（只读命令，白名单收敛）/ toolkit_read
+          # （文件探测+小文件读取）/ toolkit_write（受限写入：记忆根+白名单目录，64KB，
+          # 原子写+自动 .bak）。简单状态型查询本体直接调，不用派小伙伴；留痕落
+          # <记忆根>/toolkit/usage.jsonl（环形 500 行）。数组一律整体替换（不是叠加）。
+          - id: aiyayi-toolkit
+            name: 'dsh-aiyayi/toolkit'
+            config:
+              # 只读命令白名单（前缀整词匹配；白名单外一律拒绝）。
+              cmdWhitelist:
+                - git log
+                - git status
+                - git diff
+                - git show
+                - npm view
+                - npm search
+                - pnpm -v
+                - pnpm --version
+                - node --version
+                - node -v
+                - ls
+                - dir
+                - type
+                - cat
+                - head
+                - tail
+                - wc
+                - where
+                - which
+              cmdTimeoutMs: 30000
+              maxOutputChars: 2048
+              readMaxBytes: 8192
+              writeMaxBytes: 65536
+              # 写入白名单：writePaths: null（默认）= 记忆根（动态解析，搬家自动跟随）
+              #   + writeExtraPaths；给数组则完全接管。工作区 docs 是本机路径，走追加项。
+              writeExtraPaths:
+                - D:\AI\TRAE_PRO\阿依娅依\docs
+              usageEnabled: true
+              usageMaxLines: 500
           - id: aiyayi-restrict
             name: 'dsh-aiyayi/restrict'
           - id: time-context
