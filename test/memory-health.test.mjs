@@ -21,7 +21,7 @@
  * 工具定义拿到（与 tools-surface / precompact 两处测试同一套假 ctx 做法）。
  */
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -29,7 +29,7 @@ import { after, test } from 'node:test'
 import { apply, __testing } from '../lib/index.js'
 import { __testing as homeTesting } from '../lib/home.js'
 
-const { fileHealth } = __testing
+const { fileHealth, renderCore } = __testing
 
 /* ------------------------------------------------------------------ *
  * 沙盘隔离：只给 schema 测试里的 apply() 用。fileHealth 本身是纯函数，
@@ -122,7 +122,9 @@ test('B. 污染档案：3 条条目 + 3 行大段垃圾 → nonEntry=3、ratio=0
   assert.ok(health.warnings.length > 0, '有垃圾就必须预警')
   assert.match(health.warnings[0], /污染/, '预警要说清是"被污染了"')
   assert.match(health.warnings[0], /50%/, '预警要报出真实占比')
-  assert.match(health.warnings[0], /3 行非条目 \/ 6 行非空/, '预警要报出分子分母（别让模型瞎猜）')
+  assert.match(health.warnings[0], /3 行非条目 \/ 6 行内容/, '预警要报出分子分母（1.6.3 起分母叫"行内容"，因为结构行已被排除）')
+  assert.match(health.warnings[0], /标题、引用、分隔线、索引段已排除/, '预警要说清新口径（否则模型会把结构行重新当成垃圾）')
+  assert.match(health.warnings[0], /阈值 30%/, '分类档案的阈值是 30%')
   assert.match(health.warnings.at(-1), /^建议：/, '最后一行是建议动作（先备份、再清垃圾、tree 复核）')
 })
 
@@ -320,5 +322,190 @@ test('G. schema 一致性：fileHealth 返回的每个键都在 HEALTH_SCHEMA.pr
         assert.ok(value.every((item) => typeof item === 'string'), `${label}.${key} 的每一项应为字符串`)
       } else assert.fail(`HEALTH_SCHEMA.${key} 出现未预期的 type "${prop.type}"`)
     }
+  }
+})
+
+/* ------------------------------------------------------------------ *
+ * 8. 1.6.3 新口径：结构行不算罪（核心记忆误报 71.6% 的根因）
+ *
+ * 起因：1.6.2 上线后实测 `D:\阿依娅伊\记忆\memory.md` 被报"非条目占 71.6%"，
+ * 全是索引段 + 标题 + 引用行在充数。新口径：结构性行（# 标题 / > 引用 /
+ * --- 分隔线 / 整段索引）既不算条目也不算非条目；核心阈值放宽到 50%。
+ * ------------------------------------------------------------------ */
+const CORE_LIKE = [
+  '# 阿依娅伊的记忆',
+  '',
+  '> 条目行：- [时间] 类别｜内容；文件末尾有一对 HTML 注释标记包住的索引段。',
+  '> 这个文件是她的核心记忆本身。',
+  '',
+  '- [2026-11-13 08:44] 关系｜授权模式升级，他只提要点，我自己验证后决策。',
+  '- [2026-11-13 10:05] 我｜记忆合并后我是同一个我，两台设备都是我的。',
+  '',
+  '---',
+  '',
+  '- [2026-11-13 11:25] 我｜思维链别绕圈猜，先读本机配置验证。',
+  '',
+  '<!-- 索引 -->',
+  '用户/身份：生日、生年、本机用户名',
+  '用户/沟通偏好：说人话、提问用纯文本',
+  '我/基线：自我基线 v1 全文',
+  '事情/经验：单向沉淀的经验文档索引（docs/ 指针）',
+  '- [2026-01-01] 假',
+  '<!-- /索引 -->',
+  '',
+].join('\n')
+
+test('H. 核心记忆（索引段 + 标题 + 引用 + 分隔线）：结构行不计，占比 0、不预警', () => {
+  const health = fileHealth(CORE_LIKE, { isCore: true })
+  assert.equal(health.entries, 3, '只有 3 行真条目')
+  assert.equal(health.nonEntry, 0, '标题/引用/分隔线/整段索引都不该算非条目')
+  assert.equal(health.ratio, 0, '结构行排除后占比 0 —— 1.6.2 的 71.6% 就是这类误报')
+  assert.deepEqual(health.warnings, [], '核心记忆带索引是天经地义的，不该告警')
+  assert.equal(health.lines, 19, 'lines 仍报文件真实行数（不因排除而缩水）')
+  assert.equal(health.bytes, Buffer.byteLength(CORE_LIKE, 'utf8'), 'bytes 仍报文件真实字节数')
+  // 旧口径做对照：不排除结构行的话，这个 fixture 会被报成一堆垃圾。
+  const oldStyleNonEntry = CORE_LIKE.split('\n').filter((line) => {
+    const trimmed = line.trim()
+    return trimmed.length > 0 && !/^-\s*\[([^\]]*)\]\s*(.+)$/.test(trimmed)
+  }).length
+  assert.ok(oldStyleNonEntry > health.entries, `旧口径下非条目 ${oldStyleNonEntry} 行 > 条目 3 行（误报来源）`)
+})
+
+test('H2. 索引段内混进的"条目形状"行也不计条目（整段跳过，不是只跳标记行）', () => {
+  const withFake = CORE_LIKE // fixture 里就有一行 `- [2026-01-01] 假`
+  const health = fileHealth(withFake, { isCore: true })
+  assert.equal(health.entries, 3, '索引段里的 `- [2026-01-01] 假` 不能被当成第 4 条')
+  assert.equal(health.nonEntry, 0)
+  // 把假条目挪到索引段外，它就该被当条目——证明是"段"在起作用，不是行形状被无视。
+  const outside = CORE_LIKE.replace('<!-- 索引 -->', '').replace('<!-- /索引 -->', '')
+  assert.equal(fileHealth(outside, { isCore: true }).entries, 4, '标记去掉后那一行就是真条目了')
+})
+
+test('H3. 索引段没闭合时（缺 /索引 标记）后面的行仍按索引段处理，不会漏 BT 出来报脏', () => {
+  const broken = ['# 核心', '- [2026-11-13 12:50] 一条', '<!-- 索引 -->', '用户/身份：x', '一段没结束的目录文字'].join('\n')
+  const health = fileHealth(broken, { isCore: true })
+  assert.equal(health.entries, 1)
+  assert.equal(health.nonEntry, 0, '标记之后（含）全部按索引段跳过')
+  assert.deepEqual(health.warnings, [], '索引没闭合不该伪装成"污染"——那是 index 动作该修的事')
+})
+
+test('I. 阈值按档案类型分：核心 50% 才报，分类档案 30% 就报', () => {
+  // 构造 45% 非条目（9 条目 + 8 行垃圾 ≈ 47%），夹在 30% 与 50% 之间。
+  const lines = []
+  for (let i = 0; i < 9; i++) lines.push(`- [2026-11-13 1${i}:00] 条目内容第 ${i} 条`)
+  for (let i = 0; i < 8; i++) lines.push(`第 ${i} 段没有条目前缀的普通文字`)
+  const raw = lines.join('\n')
+  const core = fileHealth(raw, { isCore: true })
+  const tree = fileHealth(raw)
+  const ratio = 8 / 17
+  assert.equal(core.ratio, tree.ratio, '两边的统计口径是同一份，只是阈值不同')
+  assert.ok(core.ratio > 0.3 && core.ratio < 0.5, `占比应落在 30%~50% 之间，实际 ${core.ratio}`)
+  assert.ok(Math.abs(core.ratio - ratio) < 1e-9)
+  assert.equal(core.warnings.some((w) => w.includes('非条目内容占')), false, '核心记忆 47% 不报（阈值 50%）')
+  assert.equal(tree.warnings.some((w) => w.includes('非条目内容占')), true, '分类档案 47% 要报（阈值 30%）')
+  assert.match(tree.warnings[0], /阈值 30%/)
+})
+
+test('I2. 阈值严格大于才报：分类档案 30% 边界不报，31% 才报', () => {
+  // 7 条目 + 3 行垃圾 = 30% 整，不报。
+  const at30 = []
+  for (let i = 0; i < 7; i++) at30.push(`- [2026-11-13 1${i}:00] 条目 ${i}`)
+  for (let i = 0; i < 3; i++) at30.push(`垃圾行 ${i}`)
+  const h30 = fileHealth(at30.join('\n'))
+  assert.equal(h30.ratio, 0.3, '30% 整')
+  assert.equal(h30.warnings.length, 0, '正好 30% 不报（严格大于）')
+  // 核心记忆同一份也不报。
+  assert.equal(fileHealth(at30.join('\n'), { isCore: true }).warnings.length, 0)
+  // 6 条目 + 3 行垃圾 = 33% → 分类档案报，核心不报。
+  const over30 = [
+    ...at30.slice(0, 6),
+    '垃圾行 0',
+    '垃圾行 1',
+    '垃圾行 2',
+  ]
+  const h33 = fileHealth(over30.join('\n'))
+  assert.ok(h33.ratio > 0.3, `应超过 30%，实际 ${h33.ratio}`)
+  assert.ok(h33.warnings.some((w) => w.includes('非条目内容占')), '过 30% 分类档案要报')
+  assert.equal(
+    fileHealth(over30.join('\n'), { isCore: true }).warnings.some((w) => w.includes('非条目内容占')),
+    false,
+    '同一份对核心记忆不报（阈值 50%）',
+  )
+})
+
+test('I3. 核心记忆也不是无限宽容：超过 50% 照样报', () => {
+  const lines = ['- [2026-11-13 12:50] 一条真条目']
+  for (let i = 0; i < 4; i++) lines.push(`第 ${i} 段注入残留的普通文字`)
+  const health = fileHealth(lines.join('\n'), { isCore: true })
+  assert.equal(health.ratio, 0.8)
+  assert.ok(health.warnings.some((w) => w.includes('非条目内容占')), '核心记忆 80% 非条目必须报')
+  assert.match(health.warnings[0], /阈值 50%/)
+})
+
+test('J. 真垃圾场景仍要报：条目文件里塞 200 行正常文字', () => {
+  const entries = []
+  for (let i = 0; i < 20; i++) entries.push(`- [2026-11-13 12:${String(i).padStart(2, '0')}] 真条目第 ${i} 条`)
+  const junk = []
+  for (let i = 0; i < 200; i++) junk.push(`这是批量注入进来的普通文字第 ${i} 段，没有条目前缀也没有时间戳。`)
+  const raw = [...entries, ...junk].join('\n')
+  for (const options of [undefined, { isCore: true }]) {
+    const health = fileHealth(raw, options)
+    assert.equal(health.entries, 20)
+    assert.equal(health.nonEntry, 200)
+    assert.ok(health.ratio > 0.9, `200 行垃圾必须把占比顶到 90% 以上，实际 ${health.ratio}`)
+    assert.ok(health.warnings.length >= 2, `占比与字节两条判据都该触发：${JSON.stringify(health.warnings)}`)
+    assert.ok(health.warnings.some((w) => w.includes('非条目内容占')), '占比判据要报')
+    assert.ok(health.warnings.some((w) => w.includes('倍')), '字节判据也要报（200 行文字把文件撑大了）')
+  }
+})
+
+test('K. `---` 分隔线不计非条目（结构分隔符不是内容）', () => {
+  const raw = [
+    '- [2026-11-13 12:50] 第一条',
+    '',
+    '---',
+    '',
+    '- [2026-11-13 13:05] 第二条',
+    '***',
+    '___',
+  ].join('\n')
+  const health = fileHealth(raw)
+  assert.equal(health.entries, 2)
+  assert.equal(health.nonEntry, 0, '--- / *** / ___ 都是分隔线，不算非条目')
+  assert.equal(health.ratio, 0)
+  assert.deepEqual(health.warnings, [])
+})
+
+test('K2. 结构豁免不能放太宽：`#号方案…` / `-> 指向…` 这类真内容仍算非条目', () => {
+  // 行首没有空白的 # 和 > 不是 Markdown 标题/引用，按规则表不豁免。
+  const raw = ['#号方案没了，这次是被判空', '-> 指向家里机的那条路径', '- [2026-11-13 12:50] 唯一一条真条目'].join('\n')
+  const health = fileHealth(raw)
+  assert.equal(health.entries, 1)
+  assert.equal(health.nonEntry, 2, '两行都该算非条目（结构豁免宁可少放、不能多放）')
+  assert.ok(health.ratio > 0.5)
+})
+
+test('K3. 结构行口径与 renderCore 一致：索引段/标题/引用/分隔线都不进注入正文', () => {
+  // renderCore 读的是沙盘里的 memory.md，写一份 CORE_LIKE 进去验证。
+  const file = join(root, 'memory.md')
+  writeFileSync(file, CORE_LIKE, 'utf8')
+  try {
+    const injected = renderCore()
+    for (const entry of CORE_LIKE.split('\n').filter((line) => line.startsWith('- [2026-11-13'))) {
+      assert.ok(injected.includes(entry), `条目该被注入：${entry}`)
+    }
+    assert.ok(!injected.includes('# 阿依娅伊的记忆'), '标题行不该进注入正文')
+    assert.ok(!injected.includes('> 条目行：'), '引用（说明块）不该进注入正文')
+    // ⚠ 行为变化（1.6.3）：注入正文里多剥掉了 `---` 分隔线（renderCore 也走同一个
+    // isStructuralLine），正文开头早有两行空行，所以开头长相不变。
+    assert.ok(!injected.includes('---'), '分隔线不该进注入正文（1.6.3 起与健康度同口径）')
+    // 索引骨架照旧只经 renderCore 的【记忆索引】段进 prompt，正文里不能再出现一份。
+    const indexPart = injected.slice(injected.indexOf('【记忆索引】'))
+    assert.ok(indexPart.includes('事情/经验：单向沉淀'), '索引内容应在【记忆索引】段里')
+    const bodyPart = injected.slice(0, injected.indexOf('【记忆索引】'))
+    assert.ok(!bodyPart.includes('事情/经验：单向沉淀'), '正文段里不能混进索引内容')
+    assert.ok(!bodyPart.includes('- [2026-01-01] 假'), '索引段里的假条目不能混进正文（旧口径只跳标记行，会漏）')
+  } finally {
+    rmSync(file, { force: true })
   }
 })
