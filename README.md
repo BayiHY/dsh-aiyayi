@@ -22,10 +22,11 @@
 | 新版本提醒 | 自写插件 `aiyayi-updates`（本包 `lib/updates.js`） | 每个会话第一个回合查一次 npm（registry.npmjs.org，失败落 npmmirror；成功结果缓存 6h、失败 30min 后重试）：本地版本比 latest 旧时，往消息尾部追加 `[更新提示]` 快照，她会用自己的口吻顺口提一句。同一远端版本只提醒一次（updates.json 落盘去重，跨重启不重复念叨）；检查失败/离线一律静默。**判据：`~\\.dsh\\aiyayi\\updates.json` 不存在 = 从没发现过新版（本地已是最新）；她答不上"自己是什么版本"是设计边界（升级判断靠被动推送），已由 presence 的版本自述补上** |
 | 飞书桥接 | 自写插件 `aiyayi-feishu`（本包 `lib/feishu.js`）+ 纯逻辑 `lib/feishu-logic.js` | 长连接 WebSocket 接飞书机器人（无需公网）；新会话说「接入飞书」即可引导绑定，发附件需 `im:resource` 权限（速查见「已知限制与飞书权限」） |
 | 微信桥接 | 自写插件 `aiyayi-weixin`（本包 `lib/weixin.js` + `lib/weixin/`，1.5.27 起） | 微信 **ClawBot 机器人**通道（腾讯官方 iLink 协议，长轮询，无需公网）。**默认关闭**：profile patch 里 `weixin.enabled` 必须显式 `true` 才加载，`weixin.accounts` 写 `[{accountId, credentialRef}]`，凭证先 `weixin_login` 扫码拿（二维码 121 秒寿命）。工具 `weixin_status` / `weixin_login` / `weixin_bind` / `weixin_unbind`。`allowlist` 留空 = **只放行已显式绑定的用户**（与官方相反，陌生消息丢弃）。**没有 weixin-setup 技能** |
+| 手机操控（DSH-Go） | 自写插件 `aiyayi-phone`（本包 `lib/phone.js`，1.7.0 起）+ `own-tools.js` 的 `'mcp__phone__'` 前缀放行 | 住进 **dsh-app 手机版（DSH-Go）** 时自动适配：宿主经 dsh-mcp-client（serverName: phone）挂进来的 `mcp__phone__*` 工具不被 restrict 收掉；本体首轮注入 `[手机]` 操控守则（先读屏、事务走 intent、登录/验证码/支付 handoff、银行/支付/系统设置不碰、产出放 `/sdcard/Download/DSH-Go/`），之后每轮一行短提醒；住在手机里但操控没开时每会话提示一次。手机活**本体亲手做、不派小伙伴**（强交互通道，后台子代接不住确认框）；桌面环境全程静默零注入 |
 | 对接落到哪个会话 | `lib/feishu.js` + `lib/feishu-logic.js` + `lib/weixin/accounts.js` | 默认落到「发起对接的那个会话」，能复用就复用；没绑过的 chat 首条消息按三档自动处理（单活跃会话直接接 / 多活跃列编号让用户选 / 0 个才新建） |
 | 其他 | time-context、compaction 组（提前压缩，见坑 #14/#16）、tool-ask-user | 她没有 bash/文件/技能/搜索/网络工具，想动手只能派活；纯查资料走 `retriever` 检索员，不惊动小伙伴 |
 
-上表「长期记忆 / 记忆路径可迁移 / 工具白名单 / 飞书桥接 / 对接落到哪个会话」五行的完整细节：**[机制与实现详解](./docs/机制与实现详解.md)**。
+上表「长期记忆 / 记忆路径可迁移 / 工具白名单 / 手机操控 / 飞书桥接 / 对接落到哪个会话」六行的完整细节：**[机制与实现详解](./docs/机制与实现详解.md)**。
 
 ## 安装与启用
 
@@ -83,6 +84,7 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
 - `lib/restrict.js` — aiyayi-restrict 工具白名单插件（零依赖）
 - `lib/presence.js` — aiyayi-presence 重逢感知插件（重逢快照 + 体检单，零依赖）
 - `lib/presence-worker.js` — aiyayi-presence-worker 检索员断因透传插件（薄壳调 `presence.js`）
+- `lib/phone.js` — aiyayi-phone 手机操控适配插件（DSH-Go：`mcp__phone__*` 放行靠 own-tools，探测+`[手机]` 守则注入在这里，1.7.0 起）
 - `lib/updates.js` — aiyayi-updates 新版本提醒插件（零依赖）
 - `lib/net.js` — aiyayi-net 联网工具（aiyayi_fetch + aiyayi_cdp，零外置依赖）
 - `lib/doc.js` — aiyayi-doc 文档解析插件（docx/xlsx/pptx/pdf，挂检索员 preset）

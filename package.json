@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.6.4",
+  "version": "1.7.0",
   "license": "MIT",
   "author": "巴依浩爷 (bayihy)",
   "keywords": [
@@ -24,6 +24,7 @@
     "./net": "./lib/net.js",
     "./doc": "./lib/doc.js",
     "./presence-worker": "./lib/presence-worker.js",
+    "./phone": "./lib/phone.js",
     "./feishu": "./lib/feishu.js",
     "./feishu-logic": "./lib/feishu-logic.js",
     "./weixin": "./lib/weixin.js",
@@ -44,6 +45,7 @@
     "lib/net.js",
     "lib/doc.js",
     "lib/presence-worker.js",
+    "lib/phone.js",
     "lib/feishu.js",
     "lib/feishu-logic.js",
     "lib/precompact.js",
