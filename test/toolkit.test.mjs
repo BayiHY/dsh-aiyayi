@@ -288,18 +288,19 @@ const api = tk.apply(makeCtx(), {
   cmdWhitelist: ['node -e', ...tk.mergeConfig({}).cmdWhitelist],
 })
 // **1.5.43 / 1.5.44 破坏性变更**：watch_read / mem_sync / pkg_stats 三个工具已从工具面移除。
-// 通用安装包 = 三个简单通用的工具（命令 / 读 / 写）+ 两个清单管理工具（toolbox_list / toolbox_reload）。
+// 通用安装包 = 三个简单通用的工具（命令 / 读 / 写）+ 三个清单管理工具
+// （toolbox_list / toolbox_reload / toolbox_remove，1.6.1 加 remove）。
 // 三个私有工具改成由本机清单 <记忆根>/toolbox.json 驱动（见 test/toolkit-manifest.test.mjs）。
-const ALL_TOOL_NAMES = 'toolkit_cmd,toolkit_read,toolkit_write,toolbox_list,toolbox_reload'
-check('注册：五个工具已注册（3 基础 + 2 清单管理）',
-  registered.length === 5 && registered.map((d) => d.name).join(',') === ALL_TOOL_NAMES, registered.map((d) => d.name).join(','))
+const ALL_TOOL_NAMES = 'toolkit_cmd,toolkit_read,toolkit_write,toolbox_list,toolbox_reload,toolbox_remove'
+check('注册：六个工具已注册（3 基础 + 3 清单管理）',
+  registered.length === 6 && registered.map((d) => d.name).join(',') === ALL_TOOL_NAMES, registered.map((d) => d.name).join(','))
 check('注册：目录 list 与之一致', api.list().join(',') === ALL_TOOL_NAMES, api.list())
 check('注册：包内不再有 watch_read / mem_sync / pkg_stats（已移出安装包）',
   ['watch_read', 'mem_sync', 'pkg_stats'].every((n) => !registered.some((d) => d.name === n)), registered.map((d) => d.name).join(','))
 for (const def of registered) {
   check(`schema：${def.name} parameters 是 object`, def.parameters?.type === 'object', JSON.stringify(def.parameters))
-  // 1.5.44：两个管理工具无参数（properties 为空是合法的），只有基础三件套必须有属性。
-  if (['toolkit_cmd', 'toolkit_read', 'toolkit_write'].includes(def.name)) {
+  // 1.5.44：管理三件套里只有 toolbox_remove 有参数（name），list/reload 无参数（空 properties 合法）。
+  if (['toolkit_cmd', 'toolkit_read', 'toolkit_write', 'toolbox_remove'].includes(def.name)) {
     check(`schema：${def.name} parameters 有 properties`, Object.keys(def.parameters?.properties ?? {}).length > 0, JSON.stringify(def.parameters))
   }
   const schema = def.output?.schema
@@ -380,10 +381,10 @@ check('own-tools：陌生名不放行', isOwnTool('rm_rf_del_everything') === fa
 // 工具目录：add / remove / 卸载兜底。
 const extraDef = { name: 'toolkit_extra', description: '测试自定义工具', parameters: { type: 'object', properties: {} }, output: { schema: { type: 'object' } } }
 api.add('toolkit_extra', extraDef, async () => ({ ok: true }))
-check('目录：add 注册新工具（list 变 6）', api.list().length === 6 && registered.length === 6, api.list())
+check('目录：add 注册新工具（list 变 7）', api.list().length === 7 && registered.length === 7, api.list())
 check('目录：add 后尚未反注册', disposedFlags.get('toolkit_extra')() === false)
 api.remove('toolkit_extra')
-check('目录：remove 反注册并移出目录', api.list().length === 5 && registered.length === 6, api.list())
+check('目录：remove 反注册并移出目录', api.list().length === 6 && registered.length === 7, api.list())
 check('目录：remove 真的调了 disposer', disposedFlags.get('toolkit_extra')() === true)
 check('目录：重复 remove 返回 false', api.remove('toolkit_extra') === false)
 for (const cleanup of cleanups) cleanup()

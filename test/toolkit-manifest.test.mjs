@@ -8,15 +8,20 @@
  *      清单不存在只记日志不报错、条目坏掉不影响其他条目；
  *   3) **异步**：调用立刻返回 taskId（不等脚本跑完）、后台跑完 followup 真的被调到、
  *      超时被杀并报回、非 0 退出码报回带 stderr 摘要；
- *   4) **管理工具**：toolbox_list / toolbox_reload 输出正确、重载能注销旧工具；
- *   5) **工具面**：TOOL_NAMES 只剩 3+2、own-tools 超集（清单工具动态放行）、
- *      包内不再注册 mem_sync / watch_read / pkg_stats。
+ *   4) **管理工具**：toolbox_list / toolbox_reload / toolbox_remove（1.6.1 新增 remove）
+ *      输出正确、重载能注销旧工具、remove 改文件后立即生效；
+ *   5) **工具面**：TOOL_NAMES 只剩 3+3、own-tools 超集（清单工具动态放行）、
+ *      包内不再注册 mem_sync / watch_read / pkg_stats；
+ *   6) **capabilities（1.6.1）**：合法声明归一、结构非法 fail-close 拒注册、未知顶层字段
+ *      产生 warning、env 白名单注入生效（白名单外不透传 + 系统最低需求保留 + 声明经
+ *      AIYAYI_TOOLBOX_CAPABILITIES 透传）、process:false 调用即拒绝、paths 白名单对
+ *      cwd/env 声明路径的调用前校验、无声明兼容全量 env、toolbox_list 标位显形。
  *
  * 环境隔离：AIYAYI_HOME 定向到 %TEMP% 沙盘 + 指路文件也隔到沙盘，
  * **绝不在真实记忆根上测**；createUserMessage 用 __testing 注入（gh_repo 没有 node_modules）。
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -188,14 +193,14 @@ const makeCtx = () => ({
 })
 const api = tk.apply(makeCtx(), { usageEnabled: false })
 const names = registered.map((d) => d.name)
-check('注册：三个基础工具 + 两个管理工具都在', ['toolkit_cmd', 'toolkit_read', 'toolkit_write', 'toolbox_list', 'toolbox_reload'].every((n) => names.includes(n)), names.join(','))
+check('注册：三个基础工具 + 三个管理工具都在', ['toolkit_cmd', 'toolkit_read', 'toolkit_write', 'toolbox_list', 'toolbox_reload', 'toolbox_remove'].every((n) => names.includes(n)), names.join(','))
 check('注册：enabled:true 的清单工具注册上了', names.includes('on_tool'), names.join(','))
 check('注册：enabled:false 的不注册', !names.includes('off_tool'), names.join(','))
 check('注册：mode:sync 的不注册', !names.includes('sync_tool'), names.join(','))
 check('注册：脚本不存在的不注册', !names.includes('gone_tool'), names.join(','))
 check('注册：包内不再有 mem_sync / watch_read / pkg_stats', !names.includes('mem_sync') && !names.includes('watch_read') && !names.includes('pkg_stats'), names.join(','))
 check('注册：清单工具在 own-tools 里被动态放行', (await import(libUrl('own-tools.js'))).isOwnTool('on_tool') === true)
-check('注册：TOOL_NAMES 只剩 3+2', tk.TOOL_NAMES.join(',') === 'toolkit_cmd,toolkit_read,toolkit_write,toolbox_list,toolbox_reload', tk.TOOL_NAMES.join(','))
+check('注册：TOOL_NAMES 只剩 3+3', tk.TOOL_NAMES.join(',') === 'toolkit_cmd,toolkit_read,toolkit_write,toolbox_list,toolbox_reload,toolbox_remove', tk.TOOL_NAMES.join(','))
 check('注册：目录 list 与注册面一致', api.list().join(',') === names.join(','), api.list().join(','))
 
 /* 3b. 清单 JSON 坏掉：必须报回会话（不许静默） */
@@ -390,8 +395,8 @@ check('toolbox_list：注册面里有它', Boolean(listTool))
 const listValue = await registered.find((d) => d.name === 'toolbox_list').execute({})
 check('toolbox_list：返回结构过 schema（字段齐全）', Object.keys(listValue).join(',') === 'ok,exists,path,root,error,tools,problems', Object.keys(listValue).join(','))
 check('toolbox_list：列出清单里的每一条（含 enabled:false）', listValue.tools.length === 3 && listValue.tools.map((t) => t.name).join(',') === 'list_on,list_off,list_gone', JSON.stringify(listValue.tools.map((t) => t.name)))
-check('toolbox_list：每条都有 name/enabled/mode/script/scriptExists/registered/timeoutMs/reason',
-  listValue.tools.every((t) => ['name', 'enabled', 'mode', 'script', 'scriptExists', 'registered', 'timeoutMs', 'reason'].every((k) => k in t)))
+check('toolbox_list：每条都有 name/enabled/mode/script/scriptExists/registered/timeoutMs/capabilities/reason',
+  listValue.tools.every((t) => ['name', 'enabled', 'mode', 'script', 'scriptExists', 'registered', 'timeoutMs', 'capabilities', 'reason'].every((k) => k in t)))
 check('toolbox_list：mode 全部是 async', listValue.tools.every((t) => t.mode === 'async'))
 check('toolbox_list：脚本缺失的那条 scriptExists=false 且有 reason', listValue.tools.some((t) => t.scriptExists === false && t.reason.includes('脚本不存在')), JSON.stringify(listValue.tools))
 // 语义：toolbox_list 只巡检、不注册（这几条是刚写进清单的，还没 reload 过 → registered 全 false）。
@@ -445,12 +450,243 @@ const renderFail = manifestDef.output.render({}, mf.shapeManifestOutput({ ok: fa
 check('render：失败路径给出原因', JSON.stringify(renderFail).includes('脚本不存在'), JSON.stringify(renderFail))
 
 const ownTools = await import(libUrl('own-tools.js'))
-check('own-tools：三个基础工具 + 两个管理工具都在静态表里',
-  ['toolkit_cmd', 'toolkit_read', 'toolkit_write', 'toolbox_list', 'toolbox_reload'].every((n) => ownTools.OWN_TOOLS.includes(n)), ownTools.OWN_TOOLS.join(','))
+check('own-tools：三个基础工具 + 三个管理工具都在静态表里',
+  ['toolkit_cmd', 'toolkit_read', 'toolkit_write', 'toolbox_list', 'toolbox_reload', 'toolbox_remove'].every((n) => ownTools.OWN_TOOLS.includes(n)), ownTools.OWN_TOOLS.join(','))
 check('own-tools：mem_sync / watch_read / pkg_stats 不在静态表里（已移出安装包）',
   ['mem_sync', 'watch_read', 'pkg_stats'].every((n) => !ownTools.OWN_TOOLS.includes(n)), ownTools.OWN_TOOLS.join(','))
 check('own-tools：三者仍被判为"自己的工具"→ 会不会误挡？答：不再注册，isOwnTool 无意义；但 registered 动态放行可用',
   ownTools.isOwnTool('on_tool') === true || ownTools.isOwnTool('reloaded_tool') === true)
+
+/* ------------------------------------------------------------------ *
+ * 7. capabilities（1.6.1）：声明归一 / 非法拒注册 / 未知字段 warning / env 白名单 /
+ *    process:false / paths 调用前校验 / 无声明兼容 / toolbox_list 标位
+ * ------------------------------------------------------------------ */
+
+// 7a. 合法声明：归一 + ~ 展开
+{
+  const capRoot = join(sandbox, 'cap-whitelist-root')
+  const capsParsed = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{
+    ...goodEntry,
+    name: 'caps_tool',
+    capabilities: {
+      paths: { write: ['~/cap-whitelist-root'], read: [sandbox.replace(/\\/g, '/')] },
+      process: true,
+      env: ['AIYAYI_CAPS_ALLOWED'],
+    },
+  }] }), { path: manifestPath })
+  check('capabilities：合法声明解析通过', capsParsed.problems.length === 0, JSON.stringify(capsParsed.problems))
+  check('capabilities：归一保留三个维度（declared=true）',
+    capsParsed.entries[0].capabilitiesDeclared === true
+    && capsParsed.entries[0].capabilities.paths.write.length === 1
+    && capsParsed.entries[0].capabilities.paths.read.length === 1
+    && capsParsed.entries[0].capabilities.process === true
+    && capsParsed.entries[0].capabilities.env.join(',') === 'AIYAYI_CAPS_ALLOWED',
+    JSON.stringify(capsParsed.entries[0].capabilities))
+  check('capabilities：~ 展开成家目录', capsParsed.entries[0].capabilities.paths.write[0] === join(homedir(), 'cap-whitelist-root'),
+    JSON.stringify(capsParsed.entries[0].capabilities.paths))
+}
+
+// 7b. 结构非法 → fail-close 拒注册（issue 里写明原因）
+{
+  const badCases = [
+    ['未知子键', { paths: { write: [sandbox.replace(/\\/g, '/')] }, net: 'all' }, '未知子键'],
+    ['process 类型错', { process: 'yes' }, '必须是布尔值'],
+    ['paths 相对路径', { paths: { read: ['./rel/dir'] } }, '绝对路径'],
+    ['env 非法值', { env: 'none' }, '"full" 或非空字符串数组'],
+    ['capabilities 是数组', [], '必须是对象'],
+  ]
+  for (const [title, caps, expect] of badCases) {
+    const parsed = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{ ...goodEntry, name: 'caps_bad', capabilities: caps }] }))
+    check(`capabilities：${title} → 拒注册且写明原因`,
+      parsed.problems.length === 1 && parsed.problems[0].reason.includes(expect)
+      && parsed.entries[0].capabilitiesDeclared === false,
+      JSON.stringify(parsed.problems))
+  }
+}
+
+// 7c. 未知顶层字段 → warning（不再静默；不判失败）
+{
+  const unknown = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{ ...goodEntry, scirpt: 'typo-field' }] }))
+  check('未知顶层字段：收集 warning 且 problems 不受影响',
+    unknown.problems.length === 0 && unknown.warnings.length === 1 && unknown.warnings[0].includes('scirpt'),
+    JSON.stringify(unknown.warnings))
+  const known = mf.parseManifestText(JSON.stringify({ version: 1, tools: [goodEntry] }))
+  check('未知顶层字段：全已知字段零 warning', known.warnings.length === 0, JSON.stringify(known.warnings))
+}
+
+// 7d. env 白名单注入（runToolScript 直调：全量 / 白名单 / AIYAYI_TOOLBOX_CAPABILITIES 透传）
+{
+  process.env.AIYAYI_CAPS_PROBE = 'leak-me'
+  const envProbe = makeScript('envprobe-caps.js', `
+process.stdout.write(JSON.stringify({
+  probe: process.env.AIYAYI_CAPS_PROBE ?? null,
+  allowed: process.env.AIYAYI_CAPS_ALLOWED ?? null,
+  hasPath: Boolean(process.env.PATH || process.env.Path),
+  hasSystemRoot: process.env.SYSTEMROOT !== undefined || process.env.SystemRoot !== undefined || process.env.WINDIR !== undefined,
+  capsDeclared: JSON.parse(process.env.AIYAYI_TOOLBOX_CAPABILITIES ?? 'null'),
+}) + '\\n')
+`)
+  const whitelistParsed = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{
+    ...goodEntry, name: 'env_wl_tool', script: envProbe.replace(/\\/g, '/'),
+    capabilities: { env: ['AIYAYI_CAPS_ALLOWED'] },
+    env: { AIYAYI_CAPS_ALLOWED: 'yes-declared' },
+  }] }))
+  check('env 白名单夹具：校验通过', whitelistParsed.problems.length === 0, JSON.stringify(whitelistParsed.problems))
+  const wlResult = await mf.runToolScript({ tool: whitelistParsed.entries[0], callArgs: {}, root, manifestPath, cfg: {} })
+  const wlOut = JSON.parse(wlResult.stdout)
+  check('env 白名单：白名单键可透传（含清单 env 声明值）', wlOut.allowed === 'yes-declared', JSON.stringify(wlOut))
+  check('env 白名单：白名单外的键不透传（AIYAYI_CAPS_PROBE 不可见）', wlOut.probe === null, JSON.stringify(wlOut))
+  check('env 白名单：系统最低需求仍在（PATH / SYSTEMROOT）', wlOut.hasPath === true && wlOut.hasSystemRoot === true, JSON.stringify(wlOut))
+  check('env 白名单：AIYAYI_TOOLBOX_CAPABILITIES 带声明 JSON',
+    wlOut.capsDeclared !== null && Array.isArray(wlOut.capsDeclared.env) && wlOut.capsDeclared.env[0] === 'AIYAYI_CAPS_ALLOWED',
+    JSON.stringify(wlOut.capsDeclared))
+
+  const fullParsed = mf.parseManifestText(JSON.stringify({ version: 1, tools: [
+    { ...goodEntry, name: 'env_full_tool', script: envProbe.replace(/\\/g, '/') },
+  ] }))
+  const fullResult = await mf.runToolScript({ tool: fullParsed.entries[0], callArgs: {}, root, manifestPath, cfg: {} })
+  const fullOut = JSON.parse(fullResult.stdout)
+  check('未声明兼容：全量环境照旧透传（现状不变）', fullOut.probe === 'leak-me', JSON.stringify(fullOut))
+  check('未声明兼容：AIYAYI_TOOLBOX_CAPABILITIES 为 null', fullOut.capsDeclared === null, JSON.stringify(fullOut.capsDeclared))
+  delete process.env.AIYAYI_CAPS_PROBE
+}
+
+// 7e. process:false → 调用即拒绝（fail-close；现壳唯一执行路径是 spawn，如实拒绝）
+{
+  const parsed = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{
+    ...goodEntry, name: 'no_proc_tool', script: SCRIPT_OK.replace(/\\/g, '/'), capabilities: { process: false },
+  }] }))
+  const before = ta.listTasks().length
+  const handle = mf.executeManifestTool(parsed.entries[0], {}, { exec: fakeExec, cfg: {} })
+  check('process:false：调用即同步拒绝且写明原因',
+    handle.ok === false && handle.status === 'error' && handle.error.includes('process=false'), JSON.stringify(handle))
+  check('process:false：不起后台任务', ta.listTasks().length === before, JSON.stringify(ta.listTasks().length))
+}
+
+// 7f. paths 声明 → 调用前校验条目自带的 cwd / env 绝对路径（越界不起进程）
+{
+  const capRoot = join(sandbox, 'cap-root')
+  mkdirSync(capRoot, { recursive: true })
+  const capRootSlash = capRoot.replace(/\\/g, '/')
+  const badCwd = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{
+    ...goodEntry, name: 'caps_cwd_bad', script: SCRIPT_OK.replace(/\\/g, '/'),
+    capabilities: { paths: { write: [capRootSlash] } },
+    cwd: sandbox.replace(/\\/g, '/'),
+  }] }))
+  const badHandle = mf.executeManifestTool(badCwd.entries[0], {}, { exec: fakeExec, cfg: {} })
+  check('paths：cwd 越白名单 → 同步拒绝', badHandle.ok === false && badHandle.error.includes('cwd'), JSON.stringify(badHandle))
+
+  const okCwd = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{
+    ...goodEntry, name: 'caps_cwd_ok', script: SCRIPT_OK.replace(/\\/g, '/'),
+    capabilities: { paths: { write: [capRootSlash] } },
+    cwd: capRootSlash,
+  }] }))
+  const okHandle = mf.executeManifestTool(okCwd.entries[0], {}, { exec: fakeExec, cfg: {} })
+  check('paths：cwd 在白名单内 → 正常受理', okHandle.status === 'started', JSON.stringify(okHandle))
+  await ta.waitForTask(okHandle.taskId)
+
+  const badEnv = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{
+    ...goodEntry, name: 'caps_env_bad', script: SCRIPT_OK.replace(/\\/g, '/'),
+    capabilities: { paths: { write: [capRootSlash] } },
+    env: { EVIL_PATH: 'C:/Windows/not-allowed-by-capabilities.txt' },
+  }] }))
+  const badEnvHandle = mf.executeManifestTool(badEnv.entries[0], {}, { exec: fakeExec, cfg: {} })
+  check('paths：env 里声明的绝对路径越白名单 → 同步拒绝',
+    badEnvHandle.ok === false && badEnvHandle.error.includes('env.EVIL_PATH'), JSON.stringify(badEnvHandle))
+
+  const okEnv = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{
+    ...goodEntry, name: 'caps_env_ok', script: SCRIPT_OK.replace(/\\/g, '/'),
+    capabilities: { paths: { write: [capRootSlash] } },
+    env: { GOOD_PATH: join(capRoot, 'out.txt').replace(/\\/g, '/') },
+  }] }))
+  const okEnvHandle = mf.executeManifestTool(okEnv.entries[0], {}, { exec: fakeExec, cfg: {} })
+  check('paths：env 绝对路径在白名单内 → 正常受理', okEnvHandle.status === 'started', JSON.stringify(okEnvHandle))
+  await ta.waitForTask(okEnvHandle.taskId)
+}
+
+// 7g. toolbox_list 标位：未声明 capabilities 的条目显形
+{
+  writeManifest({ version: 1, tools: [
+    { ...goodEntry, name: 'caps_list_on', script: SCRIPT_OK.replace(/\\/g, '/'), capabilities: { env: ['AIYAYI_CAPS_X'] } },
+    { ...goodEntry, name: 'caps_list_plain', script: SCRIPT_OK.replace(/\\/g, '/') },
+  ] })
+  const rowsManager = mf.createManifestManager({
+    addTool: () => {}, removeTool: () => {}, registerOwnTool: () => {},
+    cfg: { manifestPath }, env: { ...process.env },
+  })
+  const rows = rowsManager.inspect()
+  check('toolbox_list 标位：声明了 capabilities 的条目为 true',
+    rows.tools.find((t) => t.name === 'caps_list_on')?.capabilities === true, JSON.stringify(rows.tools))
+  check('toolbox_list 标位：未声明的条目为 false（显形）',
+    rows.tools.find((t) => t.name === 'caps_list_plain')?.capabilities === false, JSON.stringify(rows.tools))
+  const shaped = mf.shapeToolboxList(rows)
+  check('toolbox_list 标位：shape 后行字段齐全（capabilities 恒布尔）',
+    shaped.tools.every((t) => typeof t.capabilities === 'boolean'), JSON.stringify(shaped.tools))
+}
+
+/* ------------------------------------------------------------------ *
+ * 8. toolbox_remove（1.6.1）：改清单文件 + 立即重载；失败不改文件
+ * ------------------------------------------------------------------ */
+{
+  writeManifest({ version: 1, tools: [
+    { ...goodEntry, name: 'remove_a', script: SCRIPT_OK.replace(/\\/g, '/') },
+    { ...goodEntry, name: 'remove_b', script: SCRIPT_OK.replace(/\\/g, '/') },
+  ] })
+  const rmDefs = new Map()
+  const rmManager = mf.createManifestManager({
+    addTool: (name, def, impl) => rmDefs.set(name, { def, impl }),
+    removeTool: (name) => rmDefs.delete(name),
+    registerOwnTool: () => {},
+    cfg: { manifestPath },
+    env: { ...process.env },
+  })
+  const rmLoad = rmManager.load()
+  check('toolbox_remove 夹具：两条都注册', rmLoad.registered.join(',') === 'remove_a,remove_b', JSON.stringify(rmLoad))
+
+  const rmReport = rmManager.removeEntry('remove_a')
+  check('toolbox_remove：ok=true 且带回 entry',
+    rmReport.ok === true && rmReport.entry === 'remove_a', JSON.stringify(rmReport))
+  check('toolbox_remove：文件真的少了一条',
+    JSON.parse(readFileSync(manifestPath, 'utf8')).tools.map((t) => t.name).join(',') === 'remove_b',
+    readFileSync(manifestPath, 'utf8'))
+  check('toolbox_remove：重载注销了被移除条目', rmReport.removed.includes('remove_a'), JSON.stringify(rmReport.removed))
+  check('toolbox_remove：重载后注册面只剩 remove_b',
+    rmReport.registered.join(',') === 'remove_b' && [...rmDefs.keys()].join(',') === 'remove_b',
+    JSON.stringify({ registered: rmReport.registered, defs: [...rmDefs.keys()] }))
+  check('toolbox_remove：输出形状过 shape（字段齐全）',
+    Object.keys(mf.shapeToolboxRemove(rmReport)).join(',') === 'ok,exists,path,entry,removed,registered,skipped,problems,hint,error',
+    Object.keys(mf.shapeToolboxRemove(rmReport)).join(','))
+
+  const ghost = rmManager.removeEntry('ghost_tool')
+  check('toolbox_remove：不存在的名字 → ok=false 且不改文件',
+    ghost.ok === false && ghost.error.includes('ghost_tool')
+    && JSON.parse(readFileSync(manifestPath, 'utf8')).tools.map((t) => t.name).join(',') === 'remove_b',
+    JSON.stringify(ghost))
+  const noName = rmManager.removeEntry('')
+  check('toolbox_remove：缺 name → ok=false', noName.ok === false && noName.error.includes('缺 name'), JSON.stringify(noName))
+
+  writeFileSync(manifestPath, 'not json at all', 'utf8')
+  const broken = rmManager.removeEntry('remove_b')
+  check('toolbox_remove：清单坏 → ok=false（带行列定位）且未改文件',
+    broken.ok === false && broken.error.includes('语法错误') && readFileSync(manifestPath, 'utf8') === 'not json at all',
+    JSON.stringify(broken))
+
+  const missingManager = mf.createManifestManager({
+    addTool: () => {}, removeTool: () => {}, registerOwnTool: () => {},
+    cfg: { manifestPath: join(sandbox, 'no-such-dir', 'toolbox.json') },
+    env: { ...process.env },
+  })
+  const missing = missingManager.removeEntry('whatever')
+  check('toolbox_remove：清单不存在 → ok=false（没有可移除的条目）',
+    missing.ok === false && missing.exists === false && missing.error.includes('清单不存在'), JSON.stringify(missing))
+
+  // 端到端：经 apply 注册出来的 toolbox_remove 工具本体调用
+  writeManifest({ version: 1, tools: [{ ...goodEntry, name: 'remove_e2e', script: SCRIPT_OK.replace(/\\/g, '/') }] })
+  const e2e = await registered.find((d) => d.name === 'toolbox_remove').execute({ name: 'remove_e2e' })
+  check('toolbox_remove：经注册面端到端移除成功',
+    e2e.ok === true && e2e.entry === 'remove_e2e' && JSON.parse(readFileSync(manifestPath, 'utf8')).tools.length === 0,
+    JSON.stringify(e2e))
+}
 
 /* ------------------------------------------------------------------ *
  * 收尾

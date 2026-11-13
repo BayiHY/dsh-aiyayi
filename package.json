@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "license": "MIT",
   "author": "巴依浩爷 (bayihy)",
   "keywords": [
@@ -31,8 +31,6 @@
     "./toolkit": "./lib/toolkit.js",
     "./toolkit-async": "./lib/toolkit-async.js",
     "./toolkit-manifest": "./lib/toolkit-manifest.js",
-    "./toolkit-extra": "./lib/toolkit-extra.js",
-    "./pkg-stats": "./lib/pkg-stats.js",
     "./icon": "./icon.svg"
   },
   "files": [
@@ -52,8 +50,6 @@
     "lib/toolkit.js",
     "lib/toolkit-async.js",
     "lib/toolkit-manifest.js",
-    "lib/toolkit-extra.js",
-    "lib/pkg-stats.js",
     "lib/weixin.js",
     "lib/weixin/",
     "skills",

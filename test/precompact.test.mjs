@@ -10,7 +10,7 @@
  *
  * 全部在临时沙盘里造记忆根（AIYAYI_HOME 定向 + 指路文件隔离），绝不碰真实记忆目录。
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -154,6 +154,174 @@ const stepped = await preStepHandler(
   async () => ({ kind: 'proceed', messages: [{ id: 'm1', role: 'user', content: 'x' }] }),
 )
 check('缺 tokenMeter 服务时 pre-step 不抛、照常放行 next', stepped?.kind === 'proceed', stepped)
+
+/* ------------------------------------------------------------------ *
+ * 7. 1.6.1 批B：collectRecentContent 过滤注入节点（真实对话 vs 系统注入）
+ *
+ * 确诊 bug：系统注入节点（persona/[时间]/[重逢]/[闹钟]/[状态]/MNEMON…）每步
+ * 追加在 surface 尾部，旧代码抓尾部 12 条抓到的全是注入文本，误判 worth 后
+ * 把系统提示沉淀成"经验文档"（记忆库里 You-are-an-AI-agent-* 假文档的由来）。
+ * ------------------------------------------------------------------ */
+// 假 session：entries[i] = { role, text, sourceKind }；deriveEventMessage 返回
+// 带 role/content/source 的消息（形状对齐宿主 @deepseek-ai/dsh-session）。
+function fakeEntry(role, text, sourceKind = 'user') {
+  return { role, text, sourceKind }
+}
+function makeFakeSession(entries) {
+  const events = entries.map((entry, i) => ({ entry, seq: i + 1 }))
+  return {
+    surface: { nodes: events.map((event) => event.seq) },
+    eventAt: (seq) => events[seq - 1] ?? null,
+    deriveEventMessage: (event) =>
+      event
+        ? {
+            id: `m-${event.seq}`,
+            role: event.entry.role,
+            content: [{ type: 'text', text: event.entry.text }],
+            source: { kind: event.entry.sourceKind ?? 'user' },
+          }
+        : null,
+  }
+}
+
+const injectedOnly = makeFakeSession([
+  fakeEntry('user', 'You are an AI agent powered by DeepSeek Harness. 你的任务是陪他说话。结论：3 个应用 3 条长连接。', 'aiyayi-presence'),
+  fakeEntry('user', '[时间] 现在 2026-11-13 12:00 · [重逢] 我们又见面了 · [闹钟] 你名下 0 个还挂着', 'aiyayi-presence'),
+  fakeEntry('user', 'MNEMON 运行时记忆快照：……（宿主级注入）', 'mnemon'),
+])
+check('7.1 全是注入节点 → collectRecentContent 返回空串（走 skipped 路径）', pc.collectRecentContent(injectedOnly, 12) === '', pc.collectRecentContent(injectedOnly, 12))
+
+const mixed = makeFakeSession([
+  fakeEntry('user', 'You are an AI agent powered by DeepSeek Harness.（persona 注入）', 'aiyayi-presence'),
+  fakeEntry('user', '帮我把 26 个文件搬完，结论：G 盘是外置盘。', 'user'),
+  fakeEntry('assistant', '搬完了：26 个文件全过校验，实测 3.5 秒。', 'assistant'),
+  fakeEntry('user', '[时间] 现在 2026-11-13 12:01', 'aiyayi-presence'),
+])
+const mixedText = pc.collectRecentContent(mixed, 12)
+check('7.2 真实用户文本被保留', mixedText.includes('帮我把 26 个文件搬完'), mixedText)
+check('7.2 assistant 输出被保留', mixedText.includes('搬完了：26 个文件全过校验'), mixedText)
+check('7.2 persona 注入被过滤', !mixedText.includes('You are an AI agent'), mixedText)
+check('7.2 presence [时间] 注入被过滤', !mixedText.includes('[时间]'), mixedText)
+
+// 飞书/微信引导注入走 followup，source.kind 也是 'user'——元数据拦不住的靠特征表拦。
+const guideInjected = makeFakeSession([
+  fakeEntry('user', '\u2060〔系统提示·非用户发言〕本会话还没接入飞书聊天机器人……回复「不用」即可跳过。', 'user'),
+  fakeEntry('user', '今天天气不错。', 'user'),
+])
+const guideText = pc.collectRecentContent(guideInjected, 12)
+check('7.3 引导注入（source.kind=user）被特征表过滤', !guideText.includes('还没接入飞书'), guideText)
+check('7.3 真实用户话保留', guideText.includes('今天天气不错'), guideText)
+
+check('7.4 isInjectedNodeText：persona 首行命中', pc.isInjectedNodeText('You are an AI agent powered by DeepSeek Harness.'))
+check('7.4 isInjectedNodeText：[状态]/[闹钟·异常] 首行命中', pc.isInjectedNodeText('[状态] 上下文 40% · 窗口 52K') && pc.isInjectedNodeText('[闹钟·异常] 有 1 个孤儿目标'))
+check('7.4 isInjectedNodeText：MNEMON 关键词命中', pc.isInjectedNodeText('这是 MNEMON 快照的内容'))
+check('7.4 isInjectedNodeText：真实对话不误伤', !pc.isInjectedNodeText('帮我把 26 个文件搬完，结论：G 盘是外置盘。'))
+
+check('7.5 isRealConversationMessage：assistant 全收', pc.isRealConversationMessage({ role: 'assistant', content: [{ type: 'text', text: 'x' }] }))
+check('7.5 isRealConversationMessage：直发用户消息（kind=user）收', pc.isRealConversationMessage({ role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'x' }] }))
+check('7.5 isRealConversationMessage：注入快照（kind=aiyayi-presence）不收', !pc.isRealConversationMessage({ role: 'user', source: { kind: 'aiyayi-presence', form: 'snapshot' }, content: [{ type: 'text', text: 'x' }] }))
+check('7.5 isRealConversationMessage：压缩检查点（kind=compact-checkpoint）不收', !pc.isRealConversationMessage({ role: 'user', source: { kind: 'compact-checkpoint' }, content: [{ type: 'text', text: 'x' }] }))
+check('7.5 isRealConversationMessage：system/tool 消息不收', !pc.isRealConversationMessage({ role: 'system', content: [{ type: 'text', text: 'x' }] }) && !pc.isRealConversationMessage({ role: 'tool', content: [{ type: 'text', text: 'x' }] }))
+check('7.5 isRealConversationMessage：缺 source 元数据不收（宁漏勿垃圾）', !pc.isRealConversationMessage({ role: 'user', content: [{ type: 'text', text: 'x' }] }))
+
+// 窗口语义：count 只看尾部 N 条，窗口外/窗口内照旧、注入照滤。
+const windowed = makeFakeSession([
+  fakeEntry('user', '最早的真实消息：搬 44 个文件，结论：内置盘优先。', 'user'),
+  fakeEntry('user', '[时间] 现在 2026-11-13 12:02', 'aiyayi-presence'),
+])
+check('7.6 count=1 尾部只有注入 → 空串', pc.collectRecentContent(windowed, 1) === '', pc.collectRecentContent(windowed, 1))
+check('7.6 count=2 放宽窗口 → 真实消息回到候选', pc.collectRecentContent(windowed, 2).includes('搬 44 个文件'), pc.collectRecentContent(windowed, 2))
+
+/* ------------------------------------------------------------------ *
+ * 8. 1.6.1 批B：时机A前置门——会话里没有真实用户消息就不做沉淀检查
+ * ------------------------------------------------------------------ */
+const docsDir = join(root, 'docs')
+const docsCount = () => {
+  try {
+    return readdirSync(docsDir).filter((f) => f.endsWith('.md')).length
+  } catch {
+    return 0
+  }
+}
+
+// 带 tokenMeter/llm 的 rich ctx：让时机A检查真正走到阈值判定。
+let preStepHandlerA = null
+const richCtx = {
+  effect(fn) {
+    fn()
+    return () => {}
+  },
+  on(event, handler) {
+    if (event === 'agent/pre-step') preStepHandlerA = handler
+    return () => {}
+  },
+  tools: {
+    register() {
+      return () => {}
+    },
+  },
+  get(name) {
+    if (name === 'tokenMeter') return { measure: (session) => ({ totalTokens: session.__tokens ?? 40000 }) }
+    if (name === 'llm') return { resolveModelInfo: async () => ({ context: { contextWindow: 131072 }, defaultMaxTokens: 0 }) }
+    return undefined
+  },
+  logger: { info: () => {}, warn: () => {} },
+}
+pc.apply(richCtx, cfg)
+check('8.0 rich ctx 注册出时机A pre-step 处理器', preStepHandlerA !== null)
+
+const stepSession = (entries, tokens = 40000) => {
+  const session = makeFakeSession(entries)
+  session.requestHeader = () => ({ config: { provider: 'p', model: 'm', maxTokens: 0 } })
+  session.__tokens = tokens
+  return session
+}
+const next = async () => ({ kind: 'proceed', messages: [] })
+const runStep = async (session) => preStepHandlerA({ agent: { session }, signal: new AbortController().signal }, next)
+
+check('8.1 hasRealUserMessage：只有注入 → false', pc.hasRealUserMessage(injectedOnly) === false)
+check('8.1 hasRealUserMessage：有真实用户消息 → true', pc.hasRealUserMessage(mixed) === true)
+check('8.1 hasRealUserMessage：只有 assistant（无用户消息）→ false', pc.hasRealUserMessage(makeFakeSession([fakeEntry('assistant', '完成了 11 个文件。', 'assistant')])) === false)
+
+// 8.2：开场会话（surface 只有注入节点）→ 前置门直接 return，绝不沉淀。
+// persona 注入文本本身能骗过 judgeSettle（含"结论"+量化数据），没有门就会写垃圾文档。
+const docsBefore8 = docsCount()
+await runStep(stepSession([fakeEntry('user', 'You are an AI agent powered by DeepSeek Harness. 结论：12 个盘全部体检完毕。', 'aiyayi-presence')]))
+check('8.2 开场（无真实用户消息）不触发沉淀（无新文档）', docsCount() === docsBefore8, `${docsBefore8} → ${docsCount()}`)
+
+// 8.3：只有 assistant 消息、无真实用户消息——collect 抓得到 assistant 文本、
+// judgeSettle 也会判 worth，但前置门（认"用户消息"）必须拦住。
+await runStep(stepSession([fakeEntry('assistant', '任务闭环：完成了 11 个文件的迁移，结论：内置盘优先，实测 2.2 秒。', 'assistant')]))
+check('8.3 只有 assistant、无真实用户消息 → 不触发沉淀', docsCount() === docsBefore8, `${docsBefore8} → ${docsCount()}`)
+
+/* ------------------------------------------------------------------ *
+ * 9. 1.6.1 批B：名额机制——verdict 不 worth 不消耗名额；worth 正常沉淀
+ * ------------------------------------------------------------------ */
+// 9.1：同一会话（同一对象进 WeakSet 判据）三步走。
+const quotaEntries = [fakeEntry('user', '今天聊了会儿天，没什么特别的事。', 'user')]
+const quotaSession = stepSession(quotaEntries)
+const docsBefore9 = docsCount()
+await runStep(quotaSession) // 第一步：verdict 不 worth → skipped，且不占名额。
+check('9.1a 弱内容第一步不沉淀', docsCount() === docsBefore9, `${docsBefore9} → ${docsCount()}`)
+// 第二步：同一会话换成 worth 内容——旧代码这里已被第一步烧掉名额（先 add 后跑），
+// 修完必须还能正常沉淀。
+quotaEntries[0].text = '任务闭环：迁移完成，结论：内置盘优先，实测 3.5 秒，26 个文件全过。'
+await runStep(quotaSession)
+check('9.1b 名额没被第一步打水漂：同会话第二次跑沉淀成功', docsCount() === docsBefore9 + 1, `${docsBefore9} → ${docsCount()}`)
+// 第三步：名额已被第二步（沉淀成功）占用，再跑不重复写。
+quotaEntries[0].text = '任务闭环：又一批 66 个文件完成迁移，实测 8.8 秒，结论：无损坏。'
+await runStep(quotaSession)
+check('9.1c 名额已占：第三步不再重复沉淀', docsCount() === docsBefore9 + 1, `${docsBefore9} → ${docsCount()}`)
+
+// 9.2：有真实对话且 worth → 正常沉淀（docs 文档 + memories 条目都落盘）。
+const freshEntries = [
+  fakeEntry('user', '帮我把 88 个文件搬完，结论：C 盘是内置盘。', 'user'),
+  fakeEntry('assistant', '搬完了：88 个文件全过校验，实测 5.5 秒。', 'assistant'),
+]
+await runStep(stepSession(freshEntries))
+check('9.2 有真实对话且 worth → 正常沉淀出文档', docsCount() === docsBefore9 + 2, `${docsBefore9} → ${docsCount()}`)
+const memoryFile9 = join(root, 'memories', '事情', '经验.md')
+check('9.2 记忆条目同步落盘（带 88 个文件的指针行）', existsSync(memoryFile9) && readFileSync(memoryFile9, 'utf8').includes('88 个文件'), memoryFile9)
 
 // 收尾清理
 process.on('exit', () => {

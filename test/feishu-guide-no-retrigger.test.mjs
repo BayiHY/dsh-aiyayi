@@ -141,6 +141,8 @@ assert.ok(feishuSrc.includes('不接入也没关系'), 'f2：marker②来自 ski
 assert.ok(feishuSrc.includes('已记录接入目标'), 'f3：marker③来自 onboard 确认文案')
 assert.ok(feishuSrc.includes('请立即调用 feishu_bind 工具'), 'f4：marker④来自 onboard 确认主路径句')
 assert.ok(weixinGuideText.includes('用户要接微信 ClawBot 机器人'), 'f5：marker⑤来自微信指引正文')
-assert.equal(KNOWN_GUIDE_MARKERS.length, 5, 'f6：marker 数量锁定——新增注入文案要同步补 marker')
+// 1.6.1 批B：+2（buildSwitchPendingBindPrompt / buildPendingRebindNotice，
+// 见 test/feishu-pending-switch.test.mjs (D) 段）。
+assert.equal(KNOWN_GUIDE_MARKERS.length, 7, 'f6：marker 数量锁定——新增注入文案要同步补 marker')
 
 console.log('feishu-guide-no-retrigger.test.mjs: ALL PASS')
