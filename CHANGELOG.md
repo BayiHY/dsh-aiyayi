@@ -38,6 +38,12 @@
   - `read` 的健康度摘要行尾补"（已排除标题、引用、分隔线、索引段）"。
   - `lib/index.js:66` 的设计意图注释补上本次修正的原因、日期与原则：**只报可疑迹象，不把"不是条目本身"当罪**——告警响多了会被忽略，真正该看一眼的 266KB 那种反而被淹没。
 
+  **五、发布前扫包顺带清掉的本机绝对路径残留（与本版主修复无关，但同属本版）**
+  - `skills/feishu-setup/scripts/save-secret.js`：`--out` 缺省值原本写死成发版方本机的 `D:\AI\TRAE_PRO\阿依娅依\work\feishu-app-create\credential-<appId>.json`——**别人跑这条脚本会把凭证往不存在的目录写、直接 ENOENT**。改成 `path.join(process.cwd(), 'work', 'feishu-app-create', ...)`，与本目录 `create-bot.js` 的既有约定一致（它早就用 `process.cwd()`，本文件第 7 行的注释写的也是相对 cwd 的路径）。这个缺陷从 **1.5.16** 起就在已发布的包里（1.6.2 的 tarball 实测同样带这行）。
+  - `cordis.patch.yml`：`writeExtraPaths` 原本写死发版方工作区的 docs 绝对路径，对其他用户是噪音（路径不存在时不生效、也不报错）。改成 `writeExtraPaths: []` + 注释说明怎么放开自己的目录；`skg_probe` / 工具脚本两处注释里的本机路径改占位写法。
+  - `lib/toolkit-manifest.js` / `lib/toolkit.js` / `skills/feishu-setup/scripts/package.json`：注释与示例里的 `G:` / `D:` 盘本机路径改为 `~/tools/…` 这类通用写法（纯文档，**无行为变化**）。
+  - 刻意**没改**：`CHANGELOG.md` 里 12 处历史本机路径——那是已发布条目的原文，本仓规矩是"数字、时间、日期一律不改"的原文照录。
+
 ### ⚠ 行为变化
 
 - `health.entries` / `nonEntry` / `ratio` 三个数字的口径变了：结构行被剔除后，占比普遍低于 1.6.2。**拿 1.6.2 的占比当基线对比会看到"数字变小"，那是口径修正，不是档案变干净了。**
