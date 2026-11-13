@@ -1,6 +1,6 @@
 {
   "_comment": "Local module-resolution override for this directory only. Not a publishable npm package.",
-  "_reason": "The nearest ancestor package.json (G:/.../dsh-aiyayi/package.json) declares \"type\": \"module\", which makes the CommonJS scripts in this folder (create-bot.js etc., which use require()) fail with: ReferenceError: require is not defined in ES module scope. This file overrides that for this directory.",
+  "_reason": "The nearest ancestor package.json (the installed dsh-aiyayi/package.json) declares \"type\": \"module\", which makes the CommonJS scripts in this folder (create-bot.js etc., which use require()) fail with: ReferenceError: require is not defined in ES module scope. This file overrides that for this directory.",
   "_not_a_package": "Do not npm install / npm publish here.",
   "name": "feishu-setup-scripts-local",
   "private": true,

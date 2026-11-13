@@ -16,7 +16,7 @@ const path = require('path');
 const args = process.argv.slice(2);
 function arg(name, def) { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : def; }
 const APP_ID = arg('app-id', '');
-const OUT = arg('out', '') || ('D:\\AI\\TRAE_PRO\\阿依娅依\\work\\feishu-app-create\\credential-' + APP_ID + '.json');
+const OUT = arg('out', '') || path.join(process.cwd(), 'work', 'feishu-app-create', 'credential-' + APP_ID + '.json');
 const PORT = arg('port', '9222');
 if (!APP_ID) { console.error('用法: node save-secret.js --app-id cli_xxx [--out 路径]'); process.exit(1); }
 function withTimeout(p, ms, label) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT ' + label)), ms))]); }
