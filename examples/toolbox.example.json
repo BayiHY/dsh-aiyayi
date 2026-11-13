@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "tools": [
+    {
+      "name": "mem_sync",
+      "enabled": true,
+      "script": "~/tools/mem_sync.js",
+      "description": "同步记忆仓库：git add + commit + push 到配置的远端",
+      "timeoutMs": 180000,
+      "mode": "async",
+      "args": [],
+      "env": { "AIYAYI_MEM_PUSH_REMOTES": "origin" },
+      "params": {
+        "message": { "type": "string", "description": "commit message（可选）" }
+      }
+    }
+  ]
+}

@@ -58,6 +58,7 @@
     "lib/weixin/",
     "skills",
     "!skills/feishu-setup/scripts/logs",
+    "examples",
     "cordis.patch.yml",
     "icon.svg",
     "README.md",
