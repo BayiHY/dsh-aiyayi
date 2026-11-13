@@ -323,6 +323,244 @@ check('9.2 有真实对话且 worth → 正常沉淀出文档', docsCount() === 
 const memoryFile9 = join(root, 'memories', '事情', '经验.md')
 check('9.2 记忆条目同步落盘（带 88 个文件的指针行）', existsSync(memoryFile9) && readFileSync(memoryFile9, 'utf8').includes('88 个文件'), memoryFile9)
 
+/* ------------------------------------------------------------------ *
+ * 10. 坑 #82：precompact_run 的 output.schema 必须与三路实际返回值一致
+ *
+ * 宿主在两处把关（源码位置：app.asar → @deepseek-ai/dsh-tools）：
+ *   a) 注册期 `ToolsService.register` 调 `assertSupportedJsonSchema(output.schema)`
+ *      → type 只收单个字符串（坑 #77：type 数组被拒）；required 的每个名字必须在
+ *        properties 里；items 只能挂在 array 上。
+ *   b) 执行期 `createSuccessResult` 调
+ *      `validateJsonSchemaValue(output.schema, snapshotToolValue(结果), "value")`
+ *      → required 里每个键必须存在（Object.hasOwn）且不为 undefined，否则
+ *        `missing required property "value.xxx"`；additionalProperties:false 时
+ *        返回对象多出任何未声明键 → `"value.xxx" is not a declared property`。
+ *      注意：**声明了但没返回** 的键不参与校验（只有 required 缺了才报错），
+ *      所以 schema 里 `reason` 声明了、三路都不返回是合法的。
+ *
+ * 修复前的真实形态：
+ *   分支A 多 verdict/trigger；分支B 多 verdict/trigger/memoryFile/filename 且缺
+ *   required 的 skipped；分支C 多 trigger —— 三路都会被宿主拒掉。
+ * ------------------------------------------------------------------ */
+const HOST_SCHEMA_TYPES = ['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']
+const isPlainRecord10 = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
+
+/**
+ * 复刻宿主 validateJsonSchemaValue（覆盖本包 output.schema 用到的子集：
+ * type 单字符串 / properties / required / additionalProperties / items / enum / const）。
+ * 规则逐条对齐 asar 里的 checkValue / checkScalarValue。
+ */
+function hostValidateValue(schema, value, path = 'value') {
+  const out = []
+  const type = schema?.type
+  if (type === undefined) return out
+  if (typeof type !== 'string' || !HOST_SCHEMA_TYPES.includes(type)) {
+    out.push(Array.isArray(type)
+      ? `${path}.type must be a single type string (type arrays are not supported)`
+      : `${path}.type must be one of ${HOST_SCHEMA_TYPES.join('/')}`)
+    return out
+  }
+  if (type === 'object') {
+    if (!isPlainRecord10(value)) return [`"${path}" must be an object`]
+    for (const key of schema.required ?? []) {
+      // 宿主判据：Object.hasOwn 且 !== undefined，两者缺一都算 missing。
+      if (!Object.hasOwn(value, key) || value[key] === undefined) {
+        out.push(`missing required property "${path === '' ? key : `${path}.${key}`}"`)
+      }
+    }
+    for (const [key, child] of Object.entries(schema.properties ?? {})) {
+      // 声明了但没返回 → 跳过（不报错、也不校验类型）。
+      if (!Object.hasOwn(value, key) || value[key] === undefined) continue
+      out.push(...hostValidateValue(child, value[key], path === '' ? key : `${path}.${key}`))
+    }
+    if (schema.additionalProperties === false) {
+      for (const key of Object.keys(value)) {
+        if (!Object.hasOwn(schema.properties ?? {}, key)) {
+          out.push(`"${path === '' ? key : `${path}.${key}`}" is not a declared property (additionalProperties: false)`)
+        }
+      }
+    }
+    return out
+  }
+  if (type === 'array') {
+    if (!Array.isArray(value)) return [`"${path}" must be an array`]
+    if (schema.items) value.forEach((entry, i) => out.push(...hostValidateValue(schema.items, entry, `${path}[${i}]`)))
+    return out
+  }
+  if (type === 'string') return typeof value === 'string' ? [] : [`"${path}" must be a string`]
+  if (type === 'boolean') return typeof value === 'boolean' ? [] : [`"${path}" must be a boolean`]
+  if (type === 'integer') {
+    return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) ? [] : [`"${path}" must be an integer`]
+  }
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value) ? [] : [`"${path}" must be a finite JSON number`]
+  if (type === 'null') return value === null ? [] : [`"${path}" must be null`]
+  return out
+}
+
+/** 复刻宿主注册期 assertSupportedJsonSchema：关键字子集 + type 单字符串 + required 在 properties。 */
+const HOST_CONSTRAINT_KEYS = new Set(['type', 'oneOf', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const'])
+const HOST_ANNOTATION_KEYS = new Set(['description', 'title', 'default', 'examples'])
+function hostAssertSupportedSchema(schema, path = 'schema', out = []) {
+  if (!isPlainRecord10(schema)) {
+    out.push(`${path} must be a schema object`)
+    return out
+  }
+  for (const key of Object.keys(schema)) {
+    if (!HOST_CONSTRAINT_KEYS.has(key) && !HOST_ANNOTATION_KEYS.has(key)) {
+      out.push(`${path}.${key} is not a supported keyword`)
+    }
+  }
+  if (Object.hasOwn(schema, 'oneOf')) {
+    for (const key of ['type', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const']) {
+      if (Object.hasOwn(schema, key)) out.push(`${path}.${key} is not supported beside oneOf`)
+    }
+    const branches = schema.oneOf
+    if (!Array.isArray(branches) || branches.length < 2) out.push(`${path}.oneOf must be an array of at least two schemas`)
+    else branches.forEach((branch, i) => hostAssertSupportedSchema(branch, `${path}.oneOf[${i}]`, out))
+    return out
+  }
+  if (!Object.hasOwn(schema, 'type')) {
+    for (const key of ['properties', 'required', 'additionalProperties', 'items', 'enum', 'const']) {
+      if (Object.hasOwn(schema, key)) out.push(`${path}.${key} requires type or oneOf`)
+    }
+    return out
+  }
+  const type = schema.type
+  if (typeof type !== 'string' || !HOST_SCHEMA_TYPES.includes(type)) {
+    out.push(Array.isArray(type)
+      ? `${path}.type must be a single type string (type arrays are not supported)`
+      : `${path}.type must be one of ${HOST_SCHEMA_TYPES.join('/')}`)
+    return out
+  }
+  // 关键字只能挂在对应类型上。
+  const allowedOn = { properties: ['object'], required: ['object'], additionalProperties: ['object'], items: ['array'], enum: ['string', 'number', 'integer', 'boolean', 'null'], const: ['string', 'number', 'integer', 'boolean', 'null'] }
+  for (const [key, types] of Object.entries(allowedOn)) {
+    if (Object.hasOwn(schema, key) && !types.includes(type)) out.push(`${path}.${key} is not supported on type "${type}"`)
+  }
+  if (type === 'object') {
+    const properties = Object.hasOwn(schema, 'properties') ? schema.properties : undefined
+    if (Object.hasOwn(schema, 'properties')) {
+      if (!isPlainRecord10(properties)) out.push(`${path}.properties must be an object of schemas`)
+      else for (const [key, child] of Object.entries(properties)) hostAssertSupportedSchema(child, `${path}.properties.${key}`, out)
+    }
+    if (Object.hasOwn(schema, 'required')) {
+      const required = schema.required
+      if (!Array.isArray(required) || required.some((k) => typeof k !== 'string')) out.push(`${path}.required must be an array of strings`)
+      else {
+        const declared = isPlainRecord10(properties) ? properties : {}
+        for (const key of required) if (!Object.hasOwn(declared, key)) out.push(`${path}.required names "${key}" which is not in properties`)
+      }
+    }
+    if (Object.hasOwn(schema, 'additionalProperties') && typeof schema.additionalProperties !== 'boolean') {
+      out.push(`${path}.additionalProperties must be a boolean`)
+    }
+  }
+  if (type === 'array' && Object.hasOwn(schema, 'items')) hostAssertSupportedSchema(schema.items, `${path}.items`, out)
+  return out
+}
+
+const outSchema = precompactTool.output?.schema
+
+// 10.1 守门员自检：必须先能抓出今天这三种真实失败形态（防校验器失明）。
+const beforeFixA = { settled: false, skipped: true, verdict: { worth: false, score: 0, reasons: [] }, trigger: 'manual' }
+check('10.1a 守门员能抓出「多出未声明键」（旧分支A 的 verdict/trigger）',
+  hostValidateValue({ type: 'object', additionalProperties: false, properties: { settled: { type: 'boolean' }, skipped: { type: 'boolean' } }, required: ['settled', 'skipped'] }, beforeFixA)
+    .some((v) => v.includes('"value.trigger" is not a declared property (additionalProperties: false)')),
+  JSON.stringify(hostValidateValue({ type: 'object', additionalProperties: false, properties: { settled: { type: 'boolean' }, skipped: { type: 'boolean' } }, required: ['settled', 'skipped'] }, beforeFixA)))
+const beforeFixB = { settled: true, docPath: 'x', memoryFile: 'm', memoryLocation: 'l', indexUpdated: true, title: 't', filename: 'f', verdict: { worth: true, score: 3, reasons: ['r'] }, trigger: 'B' }
+check('10.1b 守门员能抓出「缺 required」（旧分支B 缺 skipped）',
+  hostValidateValue({ type: 'object', additionalProperties: false, properties: { settled: { type: 'boolean' }, skipped: { type: 'boolean' } }, required: ['settled', 'skipped'] }, beforeFixB)
+    .some((v) => v === 'missing required property "value.skipped"'),
+  JSON.stringify(hostValidateValue({ type: 'object', additionalProperties: false, properties: { settled: { type: 'boolean' }, skipped: { type: 'boolean' } }, required: ['settled', 'skipped'] }, beforeFixB)))
+check('10.1c 守门员能抓出 type 数组（坑 #77：宿主只收单字符串）',
+  hostAssertSupportedSchema({ type: ['string', 'null'] }).some((v) => v.includes('type arrays are not supported')),
+  JSON.stringify(hostAssertSupportedSchema({ type: ['string', 'null'] })))
+
+// 10.2 schema 本身要在注册期合法（宿主 assertSupportedJsonSchema 的判据）。
+const regViolations = hostAssertSupportedSchema(outSchema)
+check('10.2 output.schema 过宿主注册期校验（关键字子集/单 type/required⊆properties）', regViolations.length === 0, regViolations.join('；'))
+
+// 10.3 schema 必须覆盖三分支实际返回的全部键（否则 additionalProperties:false 必炸）。
+const declaredKeys = Object.keys(outSchema?.properties ?? {})
+const branchKeys = {
+  // 分支A（L469）：{ settled, skipped, verdict, trigger }
+  A: ['settled', 'skipped', 'verdict', 'trigger'],
+  // 分支B（L480）：settle() 的 6 个 + settled/skipped/verdict/trigger
+  B: ['settled', 'skipped', 'docPath', 'memoryFile', 'memoryLocation', 'indexUpdated', 'title', 'filename', 'verdict', 'trigger'],
+  // 分支C（L487）：{ settled, skipped, error, trigger }
+  C: ['settled', 'skipped', 'error', 'trigger'],
+}
+for (const [branch, keys] of Object.entries(branchKeys)) {
+  const missing = keys.filter((k) => !declaredKeys.includes(k))
+  check(`10.3 分支${branch} 的返回键全部在 schema.properties 里`, missing.length === 0, missing)
+}
+check('10.3 verdict 子 schema 覆盖 worth/score/reasons', ['worth', 'score', 'reasons'].every((k) => Object.hasOwn(outSchema?.properties?.verdict?.properties ?? {}, k)),
+  Object.keys(outSchema?.properties?.verdict?.properties ?? {}))
+check('10.3 required 仍是 settled/skipped（三路都返回这两键）', JSON.stringify(outSchema?.required) === JSON.stringify(['settled', 'skipped']), outSchema?.required)
+
+// 10.4 真实调用注册出来的 execute，三路返回值逐字段过宿主校验。
+const checkHostOutput = (label, value) => {
+  const violations = hostValidateValue(outSchema, value)
+  check(label, violations.length === 0, `${violations.join('；')}\n        实际输出: ${JSON.stringify(value)}`)
+  return value
+}
+const execCtxLogger = { info: () => {}, warn: () => {} }
+
+// 分支A：弱内容 → skipped:true，带 verdict + trigger。
+const outA = await precompactTool.execute({ content: '今天聊了会儿天，没什么特别的事。' })
+check('10.4 分支A 形态：settled:false + skipped:true + verdict + trigger',
+  outA.settled === false && outA.skipped === true && typeof outA.trigger === 'string' && isPlainRecord10(outA.verdict),
+  JSON.stringify(outA))
+checkHostOutput('10.4 分支A 返回值过宿主 output 校验', outA)
+
+// 分支B：值得沉淀 → settled:true，且必须显式带 skipped:false（required）。
+const outB = await precompactTool.execute({
+  content: '完成了 precompact schema 修复。关键结论：schema 必须与返回值一一对应。数据：3 个分支 4 个字段。',
+})
+check('10.4 分支B 形态：settled:true + skipped:false（required 补齐）',
+  outB.settled === true && outB.skipped === false && outB.docPath && outB.memoryFile && outB.filename, JSON.stringify(outB))
+checkHostOutput('10.4 分支B 返回值过宿主 output 校验（含 memoryFile/filename/verdict/trigger）', outB)
+
+// 分支C：沉淀中途抛错 → error 兜底，带 trigger。
+const outC = await precompactTool.execute({
+  force: true,
+  content: '这段一定要落盘',
+  memoryPath: '坏/名/字:冒号',
+})
+check('10.4 分支C 形态：settled:false + skipped:true + error + trigger',
+  outC.settled === false && outC.skipped === true && typeof outC.error === 'string' && typeof outC.trigger === 'string',
+  JSON.stringify(outC))
+checkHostOutput('10.4 分支C 返回值过宿主 output 校验', outC)
+
+// 10.5 verdict 子对象逐字段校验（worth:boolean / score:number / reasons:string[]）。
+const verdictSub = outSchema?.properties?.verdict
+check('10.5 verdict 子对象 required = worth/score/reasons',
+  JSON.stringify(verdictSub?.required) === JSON.stringify(['worth', 'score', 'reasons']), verdictSub?.required)
+check('10.5 合法 verdict 过校验',
+  hostValidateValue(verdictSub, { worth: true, score: 3, reasons: ['有实质内容', '像有任务闭环'] }, 'value.verdict').length === 0,
+  JSON.stringify(hostValidateValue(verdictSub, { worth: true, score: 3, reasons: ['x'] }, 'value.verdict')))
+check('10.5 score 非数字被拒',
+  hostValidateValue(verdictSub, { worth: true, score: '3', reasons: [] }, 'value.verdict')
+    .some((v) => v === '"value.verdict.score" must be a finite JSON number'),
+  JSON.stringify(hostValidateValue(verdictSub, { worth: true, score: '3', reasons: [] }, 'value.verdict')))
+check('10.5 reasons 非数组被拒',
+  hostValidateValue(verdictSub, { worth: true, score: 1, reasons: 'x' }, 'value.verdict')
+    .some((v) => v === '"value.verdict.reasons" must be an array'),
+  JSON.stringify(hostValidateValue(verdictSub, { worth: true, score: 1, reasons: 'x' }, 'value.verdict')))
+check('10.5 verdict 多出未声明键被拒',
+  hostValidateValue(verdictSub, { worth: true, score: 1, reasons: [], extra: 1 }, 'value.verdict')
+    .some((v) => v.includes('"value.verdict.extra" is not a declared property')),
+  JSON.stringify(hostValidateValue(verdictSub, { worth: true, score: 1, reasons: [], extra: 1 }, 'value.verdict')))
+
+// 10.6 reason 字段结论：声明了但三路都不返回 —— 宿主只校验 required 与未声明键，
+// "声明了但没返回"不违例，故保持现状（不往返回值里硬塞 reason）。
+check('10.6 reason 声明在 properties 里但不在 required（宿主允许不返回）',
+  Object.hasOwn(outSchema?.properties ?? {}, 'reason') && !(outSchema?.required ?? []).includes('reason'),
+  { declared: Object.hasOwn(outSchema?.properties ?? {}, 'reason'), required: outSchema?.required })
+check('10.6 缺 reason 的返回值不产生 missing required 报错',
+  hostValidateValue(outSchema, { settled: false, skipped: true, verdict: { worth: false, score: 0, reasons: ['无候选材料'] }, trigger: 'manual' }).length === 0,
+  JSON.stringify(hostValidateValue(outSchema, { settled: false, skipped: true, verdict: { worth: false, score: 0, reasons: ['无候选材料'] }, trigger: 'manual' }).filter((v) => v.includes('reason'))))
+
 // 收尾清理
 process.on('exit', () => {
   try {
