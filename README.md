@@ -175,8 +175,8 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
 - `lib/toolkit-async.js` — aiyayi-toolkit 的**真异步能力**（1.5.41）：`startDetachedTask()` 立刻返回 `{status:'started', taskId}`、把 `run()` 甩到下一轮宏任务；跑完（含失败/超时）经 `exec.agent.followup(createUserMessage(...))` 把结果作为一条消息注入会话，并有进程内 task 表可查。为什么走 followup 而不是 `ctx.jobs`：后者是 producer 侧能力，`preset-aiyayi` 本体没挂 `tool-jobs`。坑 #65（source 禁 undefined）/ #68（投递前让出宿主 publish 宏任务）/ #79（宿主同步 await 工具）的规避写法都收在这一个文件里
 - `lib/toolkit-extra.js` — 1.5.41 的两个具体工具实现（**1.5.44 起不再注册进工具面，文件保留供实现层复用/回归测试**）：`watch_read`（异步，手表取数）+ `mem_sync`（同步，记忆仓库提交推送）。**运行时版本已搬到本机脚本** `G:\阿依娅伊\工具\mem_sync\mem_sync.js`（清单驱动）
 - `lib/pkg-stats.js` — 1.5.42 的 `pkg_stats` 实现（**1.5.44 起不再注册进工具面，文件保留**）：npm 三个下载窗口 + registry latest + GitHub / Gitee / GitCode 热度。**运行时版本已搬到本机脚本** `G:\阿依娅伊\工具\pkg_stats\pkg_stats.js`（清单驱动）
-- `examples/mem_sync.js` — `mem_sync` 的**通用示例脚本**（1.5.46 起随包分发）：参数化设计、无本机硬编码（记忆根走 环境变量/指路文件/默认位置，远端与分支只认配置，没配远端=零副作用 noop），复制到本机任意位置后在 `toolbox.json` 里把 `script` 指过去即可
-- `examples/toolbox.example.json` — 工具清单示例（1.5.46 起）：一条 `mem_sync` 的完整写法；`script` 是通用建议路径，照抄后要改成自己机器上的实际路径
+- `examples/mem_sync.js` — `mem_sync` 的**通用示例脚本**（1.6.0 起随包分发）：参数化设计、无本机硬编码（记忆根走 环境变量/指路文件/默认位置，远端与分支只认配置，没配远端=零副作用 noop），复制到本机任意位置后在 `toolbox.json` 里把 `script` 指过去即可
+- `examples/toolbox.example.json` — 工具清单示例（1.6.0 起）：一条 `mem_sync` 的完整写法；`script` 是通用建议路径，照抄后要改成自己机器上的实际路径
 - `lib/feishu.js` — aiyayi-feishu 飞书桥接宿主插件（1.5.8 起；跨会话服务，长连接收消息、按指令路由到 aiyayi 会话、回发；凭读取记忆根 `feishu/config.json`）
 - `lib/feishu-logic.js` — 飞书纯逻辑（路由/映射/文本抽取/三档复用决策/**长连接状态机**，无外部依赖，可单测；test/feishu-route.test.mjs、test/feishu-reuse-session.test.mjs、test/feishu-status.test.mjs 覆盖）
 - `skills/feishu-setup/` — 内置技能（1.5.13 起随包自动同步到 DSH 技能根）：飞书机器人安装/验证/排障全流程（含 2026-11-10 扫码接入改造说明；脚本 `scripts/create-bot.js` v5 等由技能同步维护）
