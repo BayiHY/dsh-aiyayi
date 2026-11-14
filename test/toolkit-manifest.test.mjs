@@ -2,12 +2,14 @@
  * 1.5.44：本地工具清单（lib/toolkit-manifest.js）单测。
  *
  * 覆盖要点（对应任务书"测试要求"）：
- *   1) **清单解析**：合法 / 非法 JSON / 缺必填字段 / name 不合规 / mode:"sync" 被拒 /
- *      version≠1 / 重名 / timeoutMs 越界 / params 类型非法 / ~ 与 %变量% 展开；
+ *   1) **清单解析**：合法 / 非法 JSON / 缺必填字段 / name 不合规 / mode:"sync" 合法（新）而
+ *      mode 非法值被拒 / version≠1 / 重名 / timeoutMs 越界 / params 类型非法 / ~ 与 %变量% 展开；
  *   2) **加载**：enabled:false 不注册、enabled:true 注册、脚本不存在时**显式报错**、
  *      清单不存在只记日志不报错、条目坏掉不影响其他条目；
  *   3) **异步**：调用立刻返回 taskId（不等脚本跑完）、后台跑完 followup 真的被调到、
  *      超时被杀并报回、非 0 退出码报回带 stderr 摘要；
+ *   3b) **同步（mode:"sync"，新）**：阻塞直返 success/error、正文在 text、无 taskId、不 followup、
+ *      不起后台任务；
  *   4) **管理工具**：toolbox_list / toolbox_reload / toolbox_remove（1.6.1 新增 remove）
  *      输出正确、重载能注销旧工具、remove 改文件后立即生效；
  *   5) **工具面**：TOOL_NAMES 只剩 3+3、own-tools 超集（清单工具动态放行）、
@@ -96,7 +98,7 @@ check('buildParamsSchema：参数名不合规拒', ps3.ok === false)
 check('buildParamsSchema：undefined 是合法的（无参数工具）', mf.buildParamsSchema(undefined).ok === true)
 
 /* ------------------------------------------------------------------ *
- * 2. 清单解析：合法 / 非法 / 缺字段 / 名字不合规 / mode:sync 被拒
+ * 2. 清单解析：合法 / 非法 / 缺字段 / 名字不合规 / mode:sync 合法（新）+ 非法值被拒
  * ------------------------------------------------------------------ */
 const goodEntry = {
   name: 'demo_tool',
@@ -130,8 +132,12 @@ const missingDesc = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{ 
 check('解析：缺 description → problems 有原因', missingDesc.problems.some((p) => p.reason.includes('description')))
 
 const syncMode = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{ ...goodEntry, mode: 'sync' }] }))
-check('解析：mode:"sync" 被拒（不是降级成异步）',
-  syncMode.problems.length === 1 && syncMode.problems[0].reason.includes('只允许 async'), JSON.stringify(syncMode.problems))
+check('解析：mode:"sync" 合法（不再被拒），entry.mode 收成 sync',
+  syncMode.problems.length === 0 && syncMode.entries?.[0]?.mode === 'sync', JSON.stringify(syncMode.problems))
+
+const badMode = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{ ...goodEntry, mode: 'weird' }] }))
+check('解析：mode:"weird" 被拒（合法值只有 async/sync）',
+  badMode.problems.length === 1 && badMode.problems[0].reason.includes('不被支持'), JSON.stringify(badMode.problems))
 
 const scriptMissing = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{ ...goodEntry, script: join(sandbox, 'nope.js').replace(/\\/g, '/') }] }))
 check('解析：脚本不存在 → problems 里有"脚本不存在"', scriptMissing.problems.some((p) => p.reason.includes('脚本不存在')), JSON.stringify(scriptMissing.problems))
@@ -196,7 +202,7 @@ const names = registered.map((d) => d.name)
 check('注册：三个基础工具 + 三个管理工具都在', ['toolkit_cmd', 'toolkit_read', 'toolkit_write', 'toolbox_list', 'toolbox_reload', 'toolbox_remove'].every((n) => names.includes(n)), names.join(','))
 check('注册：enabled:true 的清单工具注册上了', names.includes('on_tool'), names.join(','))
 check('注册：enabled:false 的不注册', !names.includes('off_tool'), names.join(','))
-check('注册：mode:sync 的不注册', !names.includes('sync_tool'), names.join(','))
+check('注册：mode:sync 的正常注册（sync 支持后的新语义）', names.includes('sync_tool'), names.join(','))
 check('注册：脚本不存在的不注册', !names.includes('gone_tool'), names.join(','))
 check('注册：包内不再有 mem_sync / watch_read / pkg_stats', !names.includes('mem_sync') && !names.includes('watch_read') && !names.includes('pkg_stats'), names.join(','))
 check('注册：清单工具在 own-tools 里被动态放行', (await import(libUrl('own-tools.js'))).isOwnTool('on_tool') === true)
@@ -229,13 +235,18 @@ check('坏清单：注入的消息结构合法（source 无 undefined、可 JSON
 const decision2 = await badHandlers[0]({ agent: { id: 'sess-1' } }, async () => ({ kind: 'ok', messages: [] }))
 check('坏清单：同一个 agent 不重复刷屏', (decision2.messages ?? []).length === 0)
 
-/* 3c. 条目级问题也报回会话（带工具名与原因） */
-writeManifest({ version: 1, tools: [{ ...goodEntry, name: 'bad_mode', mode: 'sync' }] })
+/* 3c. 条目级问题也报回会话（带工具名与原因）；mode:'weird' 才非法——'sync' 现在是合法值 */
+writeManifest({ version: 1, tools: [{ ...goodEntry, name: 'bad_mode', mode: 'weird' }] })
 const entryHandlers = []
 tk.apply(badCtx(entryHandlers), { usageEnabled: false })
 const entryDecision = await entryHandlers[0]({ agent: { id: 'sess-2' } }, async () => ({ kind: 'ok', messages: [] }))
 const entryText = (entryDecision.messages ?? []).map((m) => m.content?.[0]?.text ?? '').join('\n')
-check('条目问题：注入文本里有工具名和原因', entryText.includes('bad_mode') && entryText.includes('只允许 async'), entryText.slice(0, 300))
+check('条目问题：注入文本里有工具名和原因',
+  entryText.includes('bad_mode')
+  && entryText.includes('不被支持：合法值是')
+  && entryText.includes('"async"') && entryText.includes('"sync"')
+  && !entryText.includes('只允许'),
+  entryText.slice(0, 300))
 
 /* ------------------------------------------------------------------ *
  * 4. 异步：立刻返回 taskId / 后台跑完 followup / 超时 / 失败
@@ -266,7 +277,7 @@ function makeManagerWith(entryRaw) {
 {
   const { entry } = makeManagerWith({ ...goodEntry, name: 'fast_tool', script: SCRIPT_OK.replace(/\\/g, '/'), timeoutMs: 10000 })
   const startedAt = Date.now()
-  const handle = mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
+  const handle = await mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
   const elapsed = Date.now() - startedAt
   check('异步：立刻返回（<300ms，不等脚本跑完）', elapsed < 300, `${elapsed}ms`)
   check('异步：返回 status=started 且带 taskId', handle.status === 'started' && handle.taskId.startsWith('tk-'), JSON.stringify(handle))
@@ -283,7 +294,7 @@ function makeManagerWith(entryRaw) {
   followups.length = 0
   const { entry } = makeManagerWith({ ...goodEntry, name: 'slow_tool', script: SCRIPT_SLOW.replace(/\\/g, '/'), timeoutMs: 10000 })
   const startedAt = Date.now()
-  const handle = mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
+  const handle = await mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
   const elapsed = Date.now() - startedAt
   check('异步：慢脚本（1.5 秒）也是立刻返回', elapsed < 300 && handle.status === 'started', `${elapsed}ms`)
   check('异步：慢脚本此刻还没投递（证明没在等）', followups.length === 0, JSON.stringify(followups))
@@ -295,7 +306,7 @@ function makeManagerWith(entryRaw) {
 {
   followups.length = 0
   const { entry } = makeManagerWith({ ...goodEntry, name: 'hang_tool', script: SCRIPT_HANG.replace(/\\/g, '/'), timeoutMs: 1200 })
-  const handle = mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
+  const handle = await mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
   const record = await ta.waitForTask(handle.taskId)
   check('异步：超时任务记录 status=timeout', record.status === 'timeout', JSON.stringify({ status: record.status, error: record.error }))
   check('异步：超时投递正文写明超时上限', (record.summary ?? '').includes('超时') && (record.summary ?? '').includes('1200ms'), record.summary)
@@ -306,7 +317,7 @@ function makeManagerWith(entryRaw) {
 {
   followups.length = 0
   const { entry } = makeManagerWith({ ...goodEntry, name: 'fail_tool', script: SCRIPT_FAIL.replace(/\\/g, '/'), timeoutMs: 10000 })
-  const handle = mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
+  const handle = await mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
   const record = await ta.waitForTask(handle.taskId)
   check('异步：失败任务 status=error', record.status === 'error', JSON.stringify(record.status))
   check('异步：失败正文带退出码 7', (record.summary ?? '').includes('退出码 7'), record.summary)
@@ -317,7 +328,7 @@ function makeManagerWith(entryRaw) {
 {
   followups.length = 0
   const { entry } = makeManagerWith({ ...goodEntry, name: 'plain_tool', script: SCRIPT_BADJSON.replace(/\\/g, '/'), timeoutMs: 10000 })
-  const handle = mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
+  const handle = await mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
   const record = await ta.waitForTask(handle.taskId)
   check('异步：非 JSON 输出原样展示且判成功（退出码 0）', record.status === 'success' && (record.summary ?? '').includes('这不是 JSON'), record.summary)
 }
@@ -328,7 +339,7 @@ function makeManagerWith(entryRaw) {
   const { entry } = makeManagerWith({ ...goodEntry, name: 'vanish_tool', script: throwaway.replace(/\\/g, '/') })
   rmSync(throwaway)
   const before = ta.listTasks().length
-  const handle = mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
+  const handle = await mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
   check('预检：脚本没了 → 同步返回 error（不起后台任务）', handle.ok === false && handle.status === 'error' && handle.error.includes('脚本不存在'), JSON.stringify(handle))
   check('预检：task 表没多出记录', ta.listTasks().length === before)
 }
@@ -356,13 +367,38 @@ process.stdout.write(JSON.stringify({
     args: ['fixed-arg'],
     env: { AIYAYI_TEST_ENV: 'from-manifest' },
   })
-  const handle = mf.executeManifestTool(entry, { message: '你好' }, { exec: fakeExec, cfg: { __root: root, __manifestPath: manifestPath } })
+  const handle = await mf.executeManifestTool(entry, { message: '你好' }, { exec: fakeExec, cfg: { __root: root, __manifestPath: manifestPath } })
   const record = await ta.waitForTask(handle.taskId)
   const summary = record.summary ?? ''
   check('透传：AIYAYI_TOOLBOX_ARGS 带了工具名与调用参数', summary.includes('"tool": "echo_tool"') && summary.includes('你好'), summary)
   check('透传：固定 args 作为 argv 传入', summary.includes('fixed-arg'), summary)
   check('透传：清单 env 注入到脚本环境', summary.includes('from-manifest'), summary)
   check('透传：记忆根经 AIYAYI_TOOLBOX_ROOT 传入', summary.includes(root.replace(/\\/g, '\\\\')) || summary.includes(root), summary)
+}
+
+// 4h) sync 模式：阻塞等脚本跑完，结果直接当本轮工具结果返回（不 followup、不起后台任务）
+{
+  followups.length = 0
+  const { entry } = makeManagerWith({ ...goodEntry, name: 'sync_run_tool', mode: 'sync', script: SCRIPT_OK.replace(/\\/g, '/'), timeoutMs: 10000 })
+  const before = ta.listTasks().length
+  const out = await mf.executeManifestTool(entry, {}, { exec: fakeExec, cfg: {} })
+  check('sync：status=success（不是 started）且 ok=true', out.status === 'success' && out.ok === true, JSON.stringify(out))
+  check('sync：返回结构过 shape 归一（ok,status,text,tool，无 taskId/hint）',
+    Object.keys(out).join(',') === 'ok,status,text,tool', JSON.stringify(Object.keys(out)))
+  check('sync：没有 taskId', !('taskId' in out), JSON.stringify(out))
+  check('sync：正文在 text 字段（带退出码与脚本 stdout 内容）',
+    (out.text ?? '').includes('退出码 0') && (out.text ?? '').includes('脚本跑完了'), out.text)
+  check('sync：不起后台任务', ta.listTasks().length === before, JSON.stringify(ta.listTasks().length))
+  check('sync：不走 followup 投递（结果就地返回）', followups.length === 0, JSON.stringify(followups))
+
+  // sync 失败路径：非 0 退出码 → status=error，正文带退出码与 stderr 摘要
+  followups.length = 0
+  const failEntry = makeManagerWith({ ...goodEntry, name: 'sync_fail_tool', mode: 'sync', script: SCRIPT_FAIL.replace(/\\/g, '/'), timeoutMs: 10000 }).entry
+  const failOut = await mf.executeManifestTool(failEntry, {}, { exec: fakeExec, cfg: {} })
+  check('sync：失败 status=error 且 ok=false', failOut.status === 'error' && failOut.ok === false, JSON.stringify(failOut))
+  check('sync：失败正文带退出码 7 与 stderr 摘要',
+    (failOut.text ?? '').includes('退出码 7') && (failOut.text ?? '').includes('boom: 读不到配置文件'), failOut.text)
+  check('sync：失败也不 followup', followups.length === 0, JSON.stringify(followups))
 }
 
 /* ------------------------------------------------------------------ *
@@ -557,7 +593,7 @@ process.stdout.write(JSON.stringify({
     ...goodEntry, name: 'no_proc_tool', script: SCRIPT_OK.replace(/\\/g, '/'), capabilities: { process: false },
   }] }))
   const before = ta.listTasks().length
-  const handle = mf.executeManifestTool(parsed.entries[0], {}, { exec: fakeExec, cfg: {} })
+  const handle = await mf.executeManifestTool(parsed.entries[0], {}, { exec: fakeExec, cfg: {} })
   check('process:false：调用即同步拒绝且写明原因',
     handle.ok === false && handle.status === 'error' && handle.error.includes('process=false'), JSON.stringify(handle))
   check('process:false：不起后台任务', ta.listTasks().length === before, JSON.stringify(ta.listTasks().length))
@@ -573,7 +609,7 @@ process.stdout.write(JSON.stringify({
     capabilities: { paths: { write: [capRootSlash] } },
     cwd: sandbox.replace(/\\/g, '/'),
   }] }))
-  const badHandle = mf.executeManifestTool(badCwd.entries[0], {}, { exec: fakeExec, cfg: {} })
+  const badHandle = await mf.executeManifestTool(badCwd.entries[0], {}, { exec: fakeExec, cfg: {} })
   check('paths：cwd 越白名单 → 同步拒绝', badHandle.ok === false && badHandle.error.includes('cwd'), JSON.stringify(badHandle))
 
   const okCwd = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{
@@ -581,7 +617,7 @@ process.stdout.write(JSON.stringify({
     capabilities: { paths: { write: [capRootSlash] } },
     cwd: capRootSlash,
   }] }))
-  const okHandle = mf.executeManifestTool(okCwd.entries[0], {}, { exec: fakeExec, cfg: {} })
+  const okHandle = await mf.executeManifestTool(okCwd.entries[0], {}, { exec: fakeExec, cfg: {} })
   check('paths：cwd 在白名单内 → 正常受理', okHandle.status === 'started', JSON.stringify(okHandle))
   await ta.waitForTask(okHandle.taskId)
 
@@ -590,7 +626,7 @@ process.stdout.write(JSON.stringify({
     capabilities: { paths: { write: [capRootSlash] } },
     env: { EVIL_PATH: 'C:/Windows/not-allowed-by-capabilities.txt' },
   }] }))
-  const badEnvHandle = mf.executeManifestTool(badEnv.entries[0], {}, { exec: fakeExec, cfg: {} })
+  const badEnvHandle = await mf.executeManifestTool(badEnv.entries[0], {}, { exec: fakeExec, cfg: {} })
   check('paths：env 里声明的绝对路径越白名单 → 同步拒绝',
     badEnvHandle.ok === false && badEnvHandle.error.includes('env.EVIL_PATH'), JSON.stringify(badEnvHandle))
 
@@ -599,7 +635,7 @@ process.stdout.write(JSON.stringify({
     capabilities: { paths: { write: [capRootSlash] } },
     env: { GOOD_PATH: join(capRoot, 'out.txt').replace(/\\/g, '/') },
   }] }))
-  const okEnvHandle = mf.executeManifestTool(okEnv.entries[0], {}, { exec: fakeExec, cfg: {} })
+  const okEnvHandle = await mf.executeManifestTool(okEnv.entries[0], {}, { exec: fakeExec, cfg: {} })
   check('paths：env 绝对路径在白名单内 → 正常受理', okEnvHandle.status === 'started', JSON.stringify(okEnvHandle))
   await ta.waitForTask(okEnvHandle.taskId)
 }
