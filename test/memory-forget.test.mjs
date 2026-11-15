@@ -19,7 +19,7 @@
  * additionalProperties:false 时未声明的键会被拒；type 只收单个字符串（坑 #77）。
  *
  * 全部 fixture 在 %TEMP% 下造，用 AIYAYI_HOME + 指路文件双定向，
- * **绝不碰真实记忆库**（D:\阿依娅伊\记忆）。
+ * **绝不碰真实记忆库**（`<记忆根>`）。
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -37,7 +37,7 @@ process.env.AIYAYI_HOME = root
 const { apply } = await import(libUrl('index.js'))
 const { __testing: homeTesting, coreFile, treeDir } = await import(libUrl('home.js'))
 
-// 指路文件也搬进沙盘：真机上的 location.json 指向 D:\阿依娅伊\记忆，不隔离就会被它接管。
+// 指路文件也搬进沙盘：真机上的 location.json 指向真实记忆根，不隔离就会被它接管。
 homeTesting.setPointerPath(join(sandbox, 'pointer', 'location.json'))
 mkdirSync(join(sandbox, 'pointer'), { recursive: true })
 homeTesting.pointerCacheReset()

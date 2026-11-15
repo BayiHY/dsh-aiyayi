@@ -19,11 +19,11 @@
 ```json
 {
   "version": 1,
-  "root": "G:\\阿依娅伊\\记忆",
+  "root": "<旧记忆根>",
   "relocatedAt": "2026-11-08T21:30:00+08:00",
-  "from": "C:\\Users\\LH\\.dsh\\aiyayi",
+  "from": "<用户目录>/.dsh/aiyayi",
   "coreBytes": 6970,
-  "coreSha16": "E481501B53A14571"
+  "coreSha16": "<sha16>"
 }
 ```
 

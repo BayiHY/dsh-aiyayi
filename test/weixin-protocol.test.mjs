@@ -240,10 +240,10 @@ test('classifySendError：-3 永久失败、-14 凭证失效、其余 transient'
 })
 
 test('脱敏：maskSecret / fingerprint / maskId / clip 都不漏明文', () => {
-  const token = 'd4fbd2387360@im.bot:06000092867fa241b96a964736cb6ea3ddd023'
+  const token = '1234567890ab@im.bot:0123456789abcdef0123456789abcdef'
   const masked = maskSecret(token)
   assert.ok(masked.includes('len='))
-  assert.ok(!masked.includes('06000092867fa241'))
+  assert.ok(!masked.includes('0123456789abcdef'))
   assert.equal(maskSecret(''), '(empty)')
   assert.equal(maskSecret(null), '(none)')
 
@@ -254,7 +254,7 @@ test('脱敏：maskSecret / fingerprint / maskId / clip 都不漏明文', () => 
   // 同值同指纹（跨轮次可比对）
   assert.equal(fp, fingerprint(token))
 
-  assert.ok(!maskId('o9cq803ifYjGZC81vq6fwHyt6INE@im.wechat').includes('ifYjGZC81'))
+  assert.ok(!maskId('oXXXXXXXXXXXXXXXXXXXX@im.wechat').includes('XXXXXXXXXX'))
   assert.equal(maskId(''), '(none)')
 
   assert.equal(clip('abc', 10), 'abc')

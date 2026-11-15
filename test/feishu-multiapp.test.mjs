@@ -100,10 +100,10 @@ try {
 const root2 = mkdtempSync(join(tmpdir(), 'feishu-owners-test-'))
 try {
   assert.deepEqual(readChatOwners(root2), {}, 'missing file → empty owners')
-  writeChatOwners(root2, { 'oc_ed556d47': 'cli_aa7bd555a3ba5c09', 'oc_0348f9a2': 'cli_aa7864baf0bbdbf8' })
+  writeChatOwners(root2, { 'oc_ed556d47': 'cli_0000000000000001', 'oc_0348f9a2': 'cli_0000000000000002' })
   assert.deepEqual(readChatOwners(root2), {
-    'oc_ed556d47': 'cli_aa7bd555a3ba5c09',
-    'oc_0348f9a2': 'cli_aa7864baf0bbdbf8',
+    'oc_ed556d47': 'cli_0000000000000001',
+    'oc_0348f9a2': 'cli_0000000000000002',
   })
   // 覆盖写（writeChatOwners 原样写盘，不做条目过滤；过滤是读侧/调用方职责）。
   writeChatOwners(root2, { 'oc_x': 'cli_a', keep: 'junk', 'oc_y': 42 })
@@ -153,15 +153,15 @@ const root3 = mkdtempSync(join(tmpdir(), 'feishu-roundtrip-test-'))
 try {
   writeConfigFile(root3, {
     apps: [
-      { appId: 'cli_aa7bd555a3ba5c09', appSecret: 's1' },
-      { appId: 'cli_aa7864baf0bbdbf8', appSecret: 's2' },
+      { appId: 'cli_0000000000000001', appSecret: 's1' },
+      { appId: 'cli_0000000000000002', appSecret: 's2' },
     ],
   })
   const cfg = readConfigFile(root3)
   const apps = normalizeApps(cfg)
   assert.equal(apps.length, 2)
-  assert.equal(apps[0].appId, 'cli_aa7bd555a3ba5c09')
-  assert.equal(apps[1].appId, 'cli_aa7864baf0bbdbf8')
+  assert.equal(apps[0].appId, 'cli_0000000000000001')
+  assert.equal(apps[1].appId, 'cli_0000000000000002')
   assert.equal(apps.every((a) => typeof a.domain === 'string' || a.domain === null), true)
   // 迁移过的新格式文件再跑迁移 → already-multi（幂等闭环）。
   assert.deepEqual(migrateConfigFile(root3), { migrated: false, reason: 'already-multi' })

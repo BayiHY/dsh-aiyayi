@@ -53,12 +53,13 @@ writeFileSync(
 process.env.DSH_SCHEDULE_STORE = store
 process.env.AIYAYI_HOME = tmp
 
-const mod = pathToFileURL('G:/阿依娅伊/output/dsh-aiyayi-fix/lib/presence.js').href
+const PRESENCE = new URL('../lib/presence.js', import.meta.url)
+const mod = PRESENCE.href
 const { apply, name } = await import(mod)
 console.log('module loaded:', name)
 
 // 断言：文件里确实加了 protest 名称与调用点，避免"函数写了但没接线"
-const src = readFileSync('G:/阿依娅伊/output/dsh-aiyayi-fix/lib/presence.js', 'utf8')
+const src = readFileSync(PRESENCE, 'utf8')
 // 取 sections 那一行做"接线"判据，不把顺序写死：1.5.0 在中间插了 locationLine，
 // 用固定串 `clockLine, alarmLine, reunion` 断言的旧写法会假失败。
 const sectionsLine = (src.split(/\r?\n/).find((line) => /const sections = \[/.test(line)) ?? '')

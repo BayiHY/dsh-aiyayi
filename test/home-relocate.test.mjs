@@ -53,7 +53,7 @@ const altRoot = join(sandbox, 'alt-root')
 const relocateTarget = join(sandbox, 'target-memory')
 
 // 关键安全线：把**指路文件**也搬进沙盘。否则 relocateTo 会写真机上的
-// ~/.dsh/aiyayi/location.json，把正在运行的阿依娅伊的根临时改到测试目录。
+// ~/.dsh/aiyayi/location.json，把正在运行的记忆根的根临时改到测试目录。
 // 2026-11-08 已经踩过一次：临时指针把运行中的她指到了临时目录，必须由
 // "沙盘 + 指针双定向"兜住。指路文件放在**默认根（沙盘里的 old-root）内部**，
 // 与生产形态一致（生产也是 ~/.dsh/aiyayi/location.json）。
@@ -73,7 +73,7 @@ function seedRoot(root) {
   writeFileSync(
     join(root, 'memory.md'),
     [
-      '# 阿依娅伊的记忆',
+      '# 示例记忆',
       '',
       '- [2026-11-01 09:00] 用户｜他喜欢安静地聊，不喜欢被追问',
       '- [2026-11-02 10:00] 关系｜说好每天给他留一句状态',
@@ -219,10 +219,10 @@ const rejections = [
   ['6 剩余空间不足', join(sandbox, 'too-tight'), '剩余'],
   ['7 未展开的 ~', '~\\记忆', '未展开'],
   ['7b 未展开的 %VAR%', '%USERPROFILE%\\记忆', '未展开'],
-  ['8 前导空格', ' G:\\阿依娅伊\\记忆', '空白'],
-  ['8b 尾随空格', 'G:\\阿依娅伊\\记忆 ', '空白'],
-  ['9 零宽空格 U+200B', 'G:\\阿依娅伊\\记忆\u200b', '不可见字符'],
-  ['9b BOM U+FEFF', 'G:\\阿依娅伊\\记忆\ufeff', '不可见字符'],
+  ['8 前导空格', ' G:\\示例记忆根\\记忆', '空白'],
+  ['8b 尾随空格', 'G:\\示例记忆根\\记忆 ', '空白'],
+  ['9 零宽空格 U+200B', 'G:\\示例记忆根\\记忆\u200b', '不可见字符'],
+  ['9b BOM U+FEFF', 'G:\\示例记忆根\\记忆\ufeff', '不可见字符'],
   ['10 云同步目录 OneDrive', null, '云同步'],
 ]
 
@@ -250,7 +250,7 @@ delete process.env.OneDrive
 home.__testing.candidateCacheReset()
 check('拒绝文案互不相同（每种故障说自己的原因）', new Set(reasons).size >= 10, reasons)
 
-// 正例：合法目标必须放行（G:\阿依娅伊\记忆 只与包目录同盘，不属于包目录内）
+// 正例：合法目标必须放行（<记忆根> 只与包目录同盘，不属于包目录内）
 const okTarget = join(sandbox, 'legal-target')
 const legal = home.preflight(okTarget)
 check('合法目标放行（不在包目录内）', legal.ok === true && legal.target === resolve(okTarget), JSON.stringify(legal))
@@ -280,7 +280,7 @@ const effective = home.resolveRoot()
 check('迁移后 resolveRoot 指向新根（source:pointer）', effective.source === 'pointer' && effective.root === relocateTarget, JSON.stringify(effective))
 check(
   '新根 memory.md 首行**不是**空模板（判据 6）',
-  home.healthCheck().coreFirstLine === '# 阿依娅伊的记忆',
+  home.healthCheck().coreFirstLine === '# 示例记忆',
   JSON.stringify(home.healthCheck()),
 )
 check('新根 memory.md 内容逐字节一致', readFileSync(join(relocateTarget, 'memory.md'), 'utf8') === beforeCore)
@@ -377,7 +377,7 @@ rmSync(target2, { recursive: true, force: true })
 
 // 成功路径重跑一次，确认可重试；并单独造一个「同名备份已存在」的撞名场景验备份命名。
 mkdirSync(freshRoot, { recursive: true })
-writeFileSync(join(freshRoot, 'memory.md'), '# 阿依娅伊的记忆\n- [2026-11-01] 事情｜旧条目\n', 'utf8')
+writeFileSync(join(freshRoot, 'memory.md'), '# 示例记忆\n- [2026-11-01] 事情｜旧条目\n', 'utf8')
 // 先手动占住一个**同时间戳**的备份名之外还占住"上一轮的某个备份"：
 // 1.5.1 起备份名总带时间戳，所以这里占住的是"这一分钟对应的那个名字"，
 // 用来强制走 -2 后缀分支（同一分钟内撞名）。
@@ -418,7 +418,7 @@ check('枚举是只读的：候选目录没被创建', candidates.every((item) =
  * 9. systemDrive / driveOf
  * ------------------------------------------------------------------ */
 console.log('\n=== 9. 盘符判定 ===')
-check('driveOf 统一大写', home.driveOf('g:\\阿依娅伊') === 'G:', home.driveOf('g:\\阿依娅伊'))
+check('driveOf 统一大写', home.driveOf('g:\\示例记忆根') === 'G:', home.driveOf('g:\\示例记忆根'))
 check('driveOf 非盘符路径 → null', home.driveOf('/usr/local') === null, home.driveOf('/usr/local'))
 check('isSystemDrive 认系统盘', home.isSystemDrive('C:\\x') === true)
 check('isSystemDrive 不认非系统盘', home.isSystemDrive('G:\\x') === false)
@@ -623,7 +623,7 @@ const presence = await import(pathToFileURL(join(HERE, '..', 'lib', 'presence.js
 // AIYAYI_HOME 指到过已搬走的目录。所以这里造一个 C 盘（系统盘）上的临时根。
 const liveRoot = join(tmpdir(), `aiyayi-sysroot-${Date.now()}`)
 mkdirSync(liveRoot, { recursive: true })
-writeFileSync(join(liveRoot, 'memory.md'), '# 阿依娅伊的记忆\n- [2026-11-01] 事情｜x\n', 'utf8')
+writeFileSync(join(liveRoot, 'memory.md'), '# 示例记忆\n- [2026-11-01] 事情｜x\n', 'utf8')
 process.env.AIYAYI_HOME = liveRoot
 home.__testing.setOverride(undefined)
 // **必须清掉指路文件**：§12 之前段落写过 location.json（指向已搬走的 target3），
@@ -634,7 +634,7 @@ home.__testing.freezeBusTypes(true) // 冻结探测：否则后台 PowerShell �
 home.__testing.setBusTypeCache(null)
 home.__testing.candidateCacheReset()
 const unknownLine = presence.__testing.renderMemoryLocationLine({ firstOfSession: true })
-check('未知磁盘类型时**不点名**推荐某个盘', !/推荐\s*\S+:\\(阿依娅伊|dsh-aiyayi-memory)/.test(unknownLine), `line=${unknownLine} | root=${home.resolveRoot().root} | status=${home.memoryStatus(home.resolveRoot())}`)
+check('未知磁盘类型时**不点名**推荐某个盘', !/推荐\s*\S+:\\(示例记忆根|dsh-aiyayi-memory)/.test(unknownLine), `line=${unknownLine} | root=${home.resolveRoot().root} | status=${home.memoryStatus(home.resolveRoot())}`)
 check('未知时明说"磁盘类型还没确认"', /还没确认/.test(unknownLine), unknownLine)
 check('未知时仍要求她主动提一句', /主动提/.test(unknownLine), unknownLine)
 

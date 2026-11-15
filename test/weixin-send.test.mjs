@@ -44,7 +44,7 @@ const ACCOUNT = {
   accountId: 'acc@im.bot',
   stem: 'acc-im-bot',
   // 真实形态的 token（脱敏测试要用它确认不落明文）
-  token: 'd4fbd2387360@im.bot:06000092867fa241b96a964736cb6ea3ddd023',
+  token: '1234567890ab@im.bot:0123456789abcdef0123456789abcdef',
   baseUrl: 'http://127.0.0.1:1', // 必然连不上；发送失败路径也要能测
 }
 
@@ -234,5 +234,5 @@ test('sendText：请求头带 Bearer token 与 iLink 头，且日志里没有 to
 
   const allLogs = logger.lines.join('\n')
   assert.ok(!allLogs.includes(ACCOUNT.token), 'token 明文不得进日志')
-  assert.ok(!allLogs.includes('06000092867fa241'), 'token 片段也不该出现')
+  assert.ok(!allLogs.includes('0123456789abcdef'), 'token 片段也不该出现')
 })

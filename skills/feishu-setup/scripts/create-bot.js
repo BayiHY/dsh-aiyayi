@@ -20,7 +20,7 @@
  *    已存在则跳过（幂等）。CDP 不可用时不阻断主流程，只记 warn 并在最终汇总里列为「待人工确认」。
  * 5) 幂等：配权限 / 配事件 / 配回调 三步都先读现状再算差集，只补缺的；重复跑不报错。
  * 6) 新增子命令 configure —— 对**已存在**的应用补权限/事件/回调（不动版本、不发布），
- *    这是本次「给 cli_aa79b06a5638dcf4 补 im:resource」的实际用法。
+ *    这是本次「给 cli_xxxxxxxxxxxxxxxx 补 im:resource」的实际用法。
  * 7) 日志：每次运行在脚本同目录 logs/ 下写 create-bot-YYYYMMDD-HHmmss.log（含毫秒时间戳、每步开始/结束/结果）；
  *    失败处打印 http 状态码 + 飞书原始 code/msg + 原始 body 片段。
  * 8) --dry-run：只打印将要做的变更，不发任何写请求。
@@ -200,7 +200,7 @@ function parseTargets() {
   logLine('INFO', `目标事件(${EVENTS.length}): ${EVENTS.join(',')}`);
   logLine('INFO', `目标回调(${CALLBACKS.length}): ${CALLBACKS.join(',')}`);
 }
-const MEMBER = arg('member') || '7133153336450220036'; // 上次实锤的企业管理员 open_id（巴依浩爷，与 aiyayi-test 同账号），可用 --member 覆盖
+const MEMBER = arg('member') || ''; // 企业管理员 open_id（需自行填写，或用 --member 传入）；空值则不设可见范围成员
 const APP_VERSION = arg('app-version') || '1.0.0';
 const CHANGELOG = arg('changelog') || '首次发布：机器人能力+消息权限+长连接事件订阅';
 const ICON = arg('icon'); // 指定 PNG 路径；缺省自动生成一张 256x256 图标
@@ -1234,7 +1234,7 @@ async function cmdCreate() {
     appVersion: APP_VERSION,
     mobileDefaultAbility: 'bot', pcDefaultAbility: 'bot',
     changeLog: CHANGELOG,
-    visibleSuggest: { departments: [], members: [MEMBER], groups: [], isAll: 0 },
+    visibleSuggest: { departments: [], members: MEMBER ? [MEMBER] : [], groups: [], isAll: 0 },
     applyReasonConfig: {
       apiPrivilegeNeedReason: false, contactPrivilegeNeedReason: false, dataPrivilegeReasonMap: {},
       visibleScopeNeedReason: false, apiPrivilegeReasonMap: {}, contactPrivilegeReason: '',
@@ -1351,7 +1351,7 @@ async function cmdVerify() {
 
 // ============================================================================
 // v6.2 新增子命令 publish：给**已存在**的应用「建版本 → 提交发布」
-// 格式全部来自 2026-11-11 对 cli_aa79b06a5638dcf4 真实发布的抓包（报告-发布与权限抓包.md）：
+// 格式全部来自 2026-11-11 对某个真实应用的发布抓包（报告-发布与权限抓包.md）：
 //   ① POST /developers/v1/app_version/create/{appId}
 //      body: appVersion / mobileDefaultAbility:"bot" / pcDefaultAbility:"bot" / changeLog /
 //            visibleSuggest{...,isAll:0} / applyReasonConfig{...} / b2cShareSplitConfigSuggest{...} /
@@ -1372,7 +1372,7 @@ function buildVersionCreateBody(version, changelog) {
     mobileDefaultAbility: 'bot',
     pcDefaultAbility: 'bot',
     changeLog: changelog,
-    visibleSuggest: { departments: [], members: [MEMBER], groups: [], isAll: 0 },
+    visibleSuggest: { departments: [], members: MEMBER ? [MEMBER] : [], groups: [], isAll: 0 },
     applyReasonConfig: {
       apiPrivilegeNeedReason: false,
       contactPrivilegeNeedReason: false,

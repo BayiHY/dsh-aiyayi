@@ -33,7 +33,7 @@ const { fileHealth, renderCore, detectInjectedMarkers } = __testing
 
 /* ------------------------------------------------------------------ *
  * 沙盘隔离：只给 schema 测试里的 apply() 用。fileHealth 本身是纯函数，
- * fixture 一律走字符串，绝不读真实记忆库（D:\阿依娅伊\记忆）。
+ * fixture 一律走字符串，绝不读真实记忆库（`<记忆根>`）。
  * ------------------------------------------------------------------ */
 const sandbox = mkdtempSync(join(tmpdir(), 'aiyayi-memory-health-'))
 const root = join(sandbox, 'root')
@@ -328,7 +328,7 @@ test('G. schema 一致性：fileHealth 返回的每个键都在 HEALTH_SCHEMA.pr
 /* ------------------------------------------------------------------ *
  * 8. 1.6.3 新口径：结构行不算罪（核心记忆误报 71.6% 的根因）
  *
- * 起因：1.6.2 上线后实测 `D:\阿依娅伊\记忆\memory.md` 被报"非条目占 71.6%"，
+ * 起因：1.6.2 上线后实测 `<记忆根>\memory.md` 被报"非条目占 71.6%"，
  * 全是索引段 + 标题 + 引用行在充数。新口径：结构性行（# 标题 / > 引用 /
  * --- 分隔线 / 整段索引）既不算条目也不算非条目；核心阈值放宽到 50%。
  * ------------------------------------------------------------------ */
@@ -507,7 +507,7 @@ test('L2. fileHealth 把注入痕迹写成一条点名预警，且不改变非�
   const raw = [
     '- [2026-11-13 12:50] 用户住在杭州，口味清淡。',
     'Current runtime context',
-    'Working directory: /sdcard/1/dsh',
+    'Working directory: /sdcard/<测试工作目录>',
     '- [2026-11-13 13:05] 约定：每周日晚上一起复盘。',
   ].join('\n')
   const health = fileHealth(raw)

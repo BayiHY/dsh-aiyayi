@@ -28,7 +28,7 @@ import {
 import { bindUser, unbindUser, consumePendingBindIfAny } from '../lib/weixin/index.js'
 import { decideInbound } from '../lib/weixin/protocol.js'
 
-const USER = 'o9cq803ifYjGZC81vq6fwHyt6INE@im.wechat'
+const USER = 'oXXXXXXXXXXXXXXXXXXXX@im.wechat'
 const SESSION = 'weixin-11111111-2222-3333-4444-555555555555'
 
 function tempRoot(t) {

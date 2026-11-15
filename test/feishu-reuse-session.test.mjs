@@ -72,7 +72,7 @@ for (const count of [0, 1, 3]) {
   const fakeCandidates = Array.from({ length: count }, (_, i) => ({
     sessionId: `sess-x${i}`,
     title: `会话${i}`,
-    label: `会话${i}（工作区：G:\\阿依娅伊）`,
+    label: `会话${i}（工作区：<工作区>）`,
   }))
   const decision = routeMessage('随便聊一句', liveMappings, LIVE_CHAT)
   assert.equal(decision.action, 'route', `4d：候选 ${count} 个时已绑定 chat 仍 route`)
@@ -84,7 +84,7 @@ for (const count of [0, 1, 3]) {
 // 候选归一化：排除规则（每条都对应一个真实串味风险）
 // ═══════════════════════════════════════════════════════════════
 const rawSessions = [
-  { sessionId: 'sess-real-1', title: '陪聊', cwd: 'G:\\阿依娅伊', workspaceTitle: '阿依娅伊' },
+  { sessionId: 'sess-real-1', title: '陪聊', cwd: 'G:\\<工作区>', workspaceTitle: '示例工作区' },
   { sessionId: 'sess-unnamed', title: null, cwd: 'G:\\别的目录', workspaceTitle: '别的目录' },
   { sessionId: 'sess-sub', title: '子代理', origin: 'subagent' },
   { sessionId: 'sess-child', title: '孙代', parentSession: 'sess-real-1' },
@@ -115,7 +115,7 @@ assert.ok(unnamed.title.startsWith(UNNAMED_SESSION_LABEL), 'n2：未命名会话
 assert.ok(unnamed.title.includes(shortSessionId('sess-unnamed')), 'n2：占位名要带 ID 前 8 位，方便辨认')
 
 // n3：列表行格式 `会话名（工作区：xxx）`。
-assert.equal(normalized[0].label, '陪聊（工作区：阿依娅伊）', 'n3：有工作区名时按需求格式渲染')
+assert.equal(normalized[0].label, '陪聊（工作区：示例工作区）', 'n3：有工作区名时按需求格式渲染')
 assert.equal(
   unnamed.label,
   `${UNNAMED_SESSION_LABEL}（${shortSessionId('sess-unnamed')}）（工作区：别的目录）`,
@@ -154,9 +154,9 @@ assert.equal(decideUnboundChatRouting({ candidates: one }).action, 'reuse', '(1)
 // ═══════════════════════════════════════════════════════════════
 const many = normalizeSessionCandidates({
   sessions: [
-    { sessionId: 'sess-a', title: '会话甲', workspaceTitle: '阿依娅伊' },
+    { sessionId: 'sess-a', title: '会话甲', workspaceTitle: '示例工作区' },
     { sessionId: 'sess-b', title: '会话乙', workspaceTitle: '别的项目' },
-    { sessionId: 'sess-c', title: null, workspaceTitle: '阿依娅伊' },
+    { sessionId: 'sess-c', title: null, workspaceTitle: '示例工作区' },
   ],
 })
 const r2 = decideUnboundChatRouting({ reuseActiveSession: true, candidates: many })
@@ -169,10 +169,10 @@ assert.ok(!('sessionId' in r2), '(2)：choose 决策不得给出 sessionId（绝
 // (2b) 列表渲染：`1. 会话名（工作区：xxx）`，序号从 1 起。
 const rendered = renderSessionCandidateList(r2.candidates, r2.total)
 const renderedLines = rendered.split('\n')
-assert.equal(renderedLines[0], '1. 会话甲（工作区：阿依娅伊）', '(2b)：第 1 行格式')
+assert.equal(renderedLines[0], '1. 会话甲（工作区：示例工作区）', '(2b)：第 1 行格式')
 assert.equal(renderedLines[1], '2. 会话乙（工作区：别的项目）', '(2b)：第 2 行格式')
 assert.ok(renderedLines[2].startsWith('3. '), '(2b)：第 3 行带序号')
-assert.ok(renderedLines[2].includes('（工作区：阿依娅伊）'), '(2b)：未命名会话也要带工作区')
+assert.ok(renderedLines[2].includes('（工作区：示例工作区）'), '(2b)：未命名会话也要带工作区')
 
 // (2c) 超过上限时截断，并说明还有几个（不能让手机屏幕刷不完）。
 const lots = normalizeSessionCandidates({

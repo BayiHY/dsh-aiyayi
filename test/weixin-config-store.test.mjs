@@ -110,7 +110,7 @@ test('normalizeAccounts：支持字符串简写、去重、缺 accountId 丢弃'
 })
 
 test('safeFileStem：@im.bot 归一化，非法字符替换，不让路径成分混进来', () => {
-  assert.equal(safeFileStem('d4fbd2387360@im.bot'), 'd4fbd2387360-im-bot')
+  assert.equal(safeFileStem('1234567890ab@im.bot'), '1234567890ab-im-bot')
   assert.equal(safeFileStem('../../etc/passwd'), 'etc-passwd')
   assert.equal(safeFileStem('a/b\\c'), 'a-b-c')
   assert.equal(safeFileStem(''), '')

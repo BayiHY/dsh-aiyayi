@@ -29,7 +29,7 @@ process.env.AIYAYI_HOME = home
  * home.js 的解析优先级是 指路文件 > AIYAYI_HOME > 默认路径。真机上装了插件、
  * 搬过家的话 `~/.dsh/aiyayi/location.json` 是存在的——它会直接压掉环境变量，
  * 于是 writePwshState 就写到用户**真实的记忆根**里去了。
- * 2026-11-11 实测踩到：第一次跑这个测试就在 D:\阿依娅伊\记忆\ 下写出了 pwsh.json。
+ * 2026-11-11 实测踩到：第一次跑这个测试就在真实记忆根下写出了 pwsh.json。
  * 所以必须像 home-relocate.test.mjs 那样，连指路文件一起定向到沙盘。
  */
 const homeLib = await import('../lib/home.js')
