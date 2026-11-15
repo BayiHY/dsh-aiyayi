@@ -4,12 +4,12 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.7.3**（待发布；本轮只做清理与测试修复，`lib/` 业务逻辑零改动） | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.7.3**（待推送） | https://gitcode.com/BayiHY/dsh-aiyayi |
-| Gitee | **1.7.3**（待推送） | https://gitee.com/BayiHY/dsh-aiyayi |
-| GitHub | **1.6.3**（沿用上轮记录 `13479ec`；本机无 ssh 客户端、HTTPS 被 SNI 阻断、无 token，无法实测与推送，1.6.4/1.7.0/1.7.1/1.7.2/1.7.3 待补） | https://github.com/BayiHY/dsh-aiyayi |
+| npm | **1.7.4**（待发布；persona 四处修正 + 工具清单 mode 说明同步，`lib/` 仅 1 行 schema 描述） | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.7.4**（待推送） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.7.4**（待推送） | https://gitee.com/BayiHY/dsh-aiyayi |
+| GitHub | **1.6.3**（沿用上轮记录 `13479ec`；本机无 ssh 客户端、HTTPS 被 SNI 阻断、无 token，无法实测与推送，1.6.4/1.7.0/1.7.1/1.7.2/1.7.3/1.7.4 待补） | https://github.com/BayiHY/dsh-aiyayi |
 
-本次发版：**1.7.3**（清理测试与对外文档里的真实私人数据 + 修复一个在别人机器上必挂的测试（`test/alarm-inject.test.mjs` 硬编码本机绝对路径 → 从仓库自身解析）+ 线上验证测试改为环境变量驱动、未设置即 SKIP + persona 补「小伙伴」定义；见 CHANGELOG 1.7.3 条目）。上一版 **1.7.2**（修正 persona 设备归属误导 + 对外内容私人信息脱敏，见 CHANGELOG 1.7.2 条目）。
+本次发版：**1.7.4**（persona 四处修正：推荐盘判据去重、长篇分析语气统一、纠正"没有文件工具"的事实错误、工具清单 mode 说明从「只支持 async」更新为 async/sync；同一过期说明在 `lib/toolkit-manifest.js` schema 与 `docs/工具箱与本地清单.md` 一并修掉；见 CHANGELOG 1.7.4 条目）。上一版 **1.7.3**（清理测试与对外文档里的真实私人数据 + 修复一个在别人机器上必挂的测试 + persona 补「小伙伴」定义，见 CHANGELOG 1.7.3 条目）。
 
 **1.7.3 发布台账（2026-11-15 11:5x 本机 DSH-Go 手机 proot 完成）**：**清理测试与对外文档里的真实私人数据 + 修复一个在别人机器上必挂的测试 + persona 补「小伙伴」定义**。本版 `lib/` 业务逻辑**零改动**（仅两处注释改写）。
 
