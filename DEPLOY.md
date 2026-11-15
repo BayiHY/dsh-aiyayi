@@ -23,7 +23,7 @@
 
   **npm pack 对账**：`npm pack --dry-run` → **54 个文件**（`entryCount` 与 `files.length` 均为 54）、`dsh-aiyayi@1.7.5`、package size **515555 B（515.6 kB）**、`unpackedSize` **1427112**、shasum **`bc14f0aa7347ce73f7aef833c6936cce4c213e84`**、integrity `sha512-3ib+m/gficSXC3a/jdyIYxPMDnmqz5aIT2j3U+JZIoWXCy3OV+wcj1e4KZm6BoMT/WdxOVQ7Aw21lLWFSWEc1A==`。**文件数与 1.7.4 一致（54 个）**：本版虽然删了 2 个自证文件（`presence-midnight-proof.mjs`、`feishu-status-proof.mjs`），但它们在 `test/` 下、**本就不在 `files` 白名单、从未入包**，故包内文件数不变（属预期，非漏发）。`test/`、`docs/`、`MEMORY-MIGRATION.md` 照旧不入包。
 
-  **npm 发布（本轮经历特殊，如实记录）**：令牌从 `/root/.bashrc` 的 `NPM_KEY` 取值（`grep -oP '^export NPM_KEY=\K.*'`，**不 source .bashrc**——非交互 shell 取不到；实测非空、长度 40），只进**临时 userconfig** `/tmp/npmrc-pub`（`umask 077` + `chmod 600`），用完即 `rm`（复核 `ls` → No such file），不落 `~/.npmrc`、不入仓、不入台账、不打印。`npm whoami --userconfig /tmp/npmrc-pub --registry=https://registry.npmjs.org/` → **`bayihy`**（凭据有效，**非** 401/403/OTP 问题）。本机默认 registry 是 npmmirror（既有坑），照例显式 `--registry=https://registry.npmjs.org/`。
+  **npm 发布（本轮经历特殊，如实记录）**：令牌从**本地凭据管理器或 CI secret** 获取（**不写进仓库、不 source 含密钥的 shell 配置**），只进**临时 userconfig** `/tmp/npmrc-pub`（`umask 077` + `chmod 600`），用完即 `rm`（复核 `ls` → No such file），不落 `~/.npmrc`、不入仓、不入台账、不打印。`npm whoami --userconfig /tmp/npmrc-pub --registry=https://registry.npmjs.org/` → **`bayihy`**（凭据有效，**非** 401/403/OTP 问题）。本机默认 registry 是 npmmirror（既有坑），照例显式 `--registry=https://registry.npmjs.org/`。
 
   ⚠ **本轮踩到一个新坑，值得单独记：`E409 Cannot publish over previously staged version` 不等于发布失败。** 首次 `npm publish`（本地 12:28:38）**退出码 1**，报错原文：
   ```
