@@ -6,3 +6,6 @@ _tmp*
 work/
 *.bak-*
 *.tgz
+
+# 内部开发台账（不进公开仓；实际文件在 <开发台账>/dev-ledger/）
+DEPLOY.md
