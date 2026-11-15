@@ -11,6 +11,30 @@
 
 本次发版：**1.7.3**（清理测试与对外文档里的真实私人数据 + 修复一个在别人机器上必挂的测试（`test/alarm-inject.test.mjs` 硬编码本机绝对路径 → 从仓库自身解析）+ 线上验证测试改为环境变量驱动、未设置即 SKIP + persona 补「小伙伴」定义；见 CHANGELOG 1.7.3 条目）。上一版 **1.7.2**（修正 persona 设备归属误导 + 对外内容私人信息脱敏，见 CHANGELOG 1.7.2 条目）。
 
+**1.7.3 发布台账（2026-11-15 11:5x 本机 DSH-Go 手机 proot 完成）**：**清理测试与对外文档里的真实私人数据 + 修复一个在别人机器上必挂的测试 + persona 补「小伙伴」定义**。本版 `lib/` 业务逻辑**零改动**（仅两处注释改写）。
+
+  **改动清单（按 A/B/C/D 四类，详见 CHANGELOG 1.7.3 条目）**：A 修必挂测试（`test/alarm-inject.test.mjs` 硬编码本机绝对路径 → `new URL('../lib/presence.js', import.meta.url)`；`test/alarm-live.test.mjs` 硬编码 3 个真实 session id → `DSH_TEST_SESSION_ID` / `DSH_TEST_ARCHIVED_SESSION_ID` 环境变量，未设置即 SKIP exit 0）；B `test/` 真实私人数据 → 占位符（weixin token/openid、飞书 App ID、真实盘符路径、拟真 fixture，断言逐处同步）；C 公开文档与代码脱敏（`MEMORY-MIGRATION.md` 示例、`DEPLOY.md` 凭据来源与本机绝对路径、`docs/` 的 file_key、`lib/presence.js` 与 `lib/pwsh-check.js` 注释、`create-bot.js` 管理员 open_id 默认值、`cordis.patch.yml` 事故叙事）；D persona 补「【"小伙伴"指什么】」小节（`cordis.patch.yml` 原 L77 前插入，`【干活的规矩】` 由 L77 后移至 L81，文件 709 → 713 行；该文件本版 `+5 / −1`，其中「−1/+1」是推荐盘那句去重）。
+
+  **`create-bot.js` 的连带行为变更（有意为之，已核）**：`MEMBER` 默认值由硬编码真实 open_id 改为空串；同时把两处 `visibleSuggest.members: [MEMBER]` 改成 `MEMBER ? [MEMBER] : []`——否则空值会往请求体塞一个空字符串。`--member` 显式传入时与旧行为逐字一致；不传时原本是「把某个真实账号设为可见范围成员」，现在是「不设成员可见范围」，这正是脱敏要的语义。**全仓无其它地方依赖该默认值**（`MEMBER` 仅这两处引用，`SKILL.md` 的用法示例本就写 `[--member <open_id>]` 可选，无需改）。
+
+  **测试**：`node --test test/*.test.mjs` → **tests 196 / pass 192 / fail 4**（上一版基线 196 / 191 / 5）。**失败数 −1**：`alarm-inject` 由 fail 转 pass（本版修复项，单独跑 `ALL PASS`）。剩余 4 挂：`home-relocate`（`I:` 盘假设，内部 16 条，**按红线未动**）、`tools-surface`、`toolkit-manifest`、`pwsh-check`（Windows 盘符 / PowerShell 候选路径假设）。**断言条数逐文件核对**：被改的 12 个测试文件用 `assert.|check(|t.assert|test(` 计数，改动前后**逐文件完全一致（0 减少）**。
+
+  **脱敏复核（逐项 grep 实测，此处不写字面量以免台账自身带回）**：真实人名 = **0**；私有中文目录名（「阿依娅依」）仅剩 2 处以**历史坑条目**形式存在（`CHANGELOG.md` 坑 #57 与 `lib/presence.js` 同名注释，讲的是 `fs.cpSync` 对非 ASCII 路径崩溃这一技术事实，**不是私人数据**，属「历史条目不动」范围）；真实 Windows 用户目录名 = **0**；真实 token / openid / 飞书 App ID = 仅在 **1.6.0 历史台账**（`DEPLOY.md:102`）与 **CHANGELOG 历史条目**（`CHANGELOG.md:993`）各留 1 处，属「台账结构不动」红线，**已列入 1.8 待清清单**。署名 `巴依浩爷` / `bayihy` 保留 4 处（`package.json` author、`README`、`LICENSE`/仓库地址）。
+
+  **commit**：`3d7b50d`（`1.7.3：清理测试与文档中的真实数据、修复依赖本机路径的测试`，作者 `阿依娅伊 <aiyayi@local>`，**22 files / 133 insertions / 78 deletions**）。
+
+  **两远端推送**：推前 `git ls-remote` 实测两远端 `refs/heads/main` 均 = `418280b7d5c6cb7b3a4d5f7e00580f5fc5f1e370`（= 本地基线，无远端新提交、无需 ff）。凭据从**本地凭据管理器 / CI secret** 取值、一次性 `https://oauth2:<token>@…` 推送，**令牌不打印不入仓不改 remote**（推后 `.git/config` 里 `oauth2` 命中 = 0）。GitCode `418280b..3d7b50d main -> main`、Gitee `418280b..3d7b50d main -> main`；`git ls-remote` 实测两远端均 = **`3d7b50dee14f05b853baa7c658b44ac3ceae2ddb`**，与本地 HEAD 逐字一致。**GitHub 未推**（本机无 ssh 客户端、HTTPS 被 SNI 阻断、无 token），未尝试。
+
+  **tag**：`git tag -a v1.7.3 -m '…'`（附注 tag，与 v1.7.1 / v1.7.2 惯例一致）→ tag 对象 **`661fa5ca6742fe199c5d1cba6d77f8d327c90fa8`** 解引用 `3d7b50d…`；推两远端均 `* [new tag] v1.7.3 -> v1.7.3`；`git ls-remote --tags` 实测两远端均为 `661fa5ca… refs/tags/v1.7.3`，**两端逐字一致**。
+
+  **npm pack 对账**：`npm pack --dry-run` → **54 个文件**、`dsh-aiyayi@1.7.3`、package size 511.7 kB，**与 1.7.2 的 54 个文件集合一致**（本版只改已有文件内容、未增删文件；`test/`、`docs/`、`MEMORY-MIGRATION.md` 均不在 `files` 白名单，照旧不入包）。
+
+  **npm 发布**：令牌从**本地凭据管理器 / CI secret** 获取（`npm whoami` 实测 = `bayihy`），只进**临时 userconfig**（`umask 077`），用完即删、不落 `~/.npmrc`、不入仓不入台账。本机默认 registry 是 npmmirror（既有坑），显式 `--registry=https://registry.npmjs.org/`。t0 = 本地 **11:53:00** → `+ dsh-aiyayi@1.7.3`。registry 记录 `time["1.7.3"]` = **`2026-11-15T03:55:17.208Z`**（本地 11:55:17）；**客户端 `dist-tags` 可见 `latest: '1.7.3'` = 本地 11:55:40**（轮询 6 次，约 2.7 分钟），**全程未重发**（守「≥6 分钟内不重发」红线）。tarball shasum **`b274557aa1f1eaf3c3739f94732f21aed5c2fb81`**（registry `dist.shasum`、下载回 tgz 实算 SHA1 **两方逐字一致**；⚠ 本地 `npm pack --dry-run` 那次的 shasum `f8b90a38…` 与实际发布不同——dry-run 用临时缓存路径重打包，**不能当发布产物指纹**，以 registry 实测为准，此处如实记录口径差异）、integrity `sha512-tzwFzlikpBSxTuEg29arCN/Kpt3Co5td68Ysbf8F7JTInHnOH2snCo6Gl1BX7qjGPOm8lpF2rijFLbAQWO3Rig==`、**54 个文件**、`gitHead` = **`3d7b50dee14f05b853baa7c658b44ac3ceae2ddb`**（registry 元数据实测，与两远端 main 逐字一致）。
+
+  **发布后校验**：`npm view dsh-aiyayi@1.7.3 version dist.shasum dist.tarball dist.integrity` → `1.7.3` / `b274557a…` / `https://registry.npmjs.org/dsh-aiyayi/-/dsh-aiyayi-1.7.3.tgz` / 上述 integrity；`dist-tags` = `{ latest: '1.7.3' }`。下载 registry 的 tgz 解包：**54 个文件**、包内 `version` = 1.7.3、实算 SHA1 与 `dist.shasum` 一致；关键文件 SHA256 **包内 vs 源码仓 HEAD 逐字一致**：`cordis.patch.yml`、`lib/presence.js`、`lib/pwsh-check.js`、`package.json`、`CHANGELOG.md`。**未动 profile 安装副本**（`<profile>/node_modules/dsh-aiyayi` 仍是指向源码仓的软链，按红线保持）。**生效方式：重启 DSH**。
+
+  **留到 1.8 的私人痕迹清单**：① `DEPLOY.md:102`（1.6.0 历史台账）与 `CHANGELOG.md:993`（1.6.0 条目）各留 1 处真实飞书 App ID；② `CHANGELOG.md` 坑 #57 与 `lib/presence.js` 同名注释里的私有中文目录名（技术事实，非私人数据，倾向永久保留）；③ `test/feishu-attachment.test.mjs`、`test/feishu-image-download.test.mjs`、`test/alarm-content.test.mjs` 里仍有真实形态的 `om_…` 消息 id 与实测 file_name（已配虚构域名/工单号，但消息 id 是真实抓包值）；④ `test/home-relocate.test.mjs` 等 Windows 专用测试的盘符假设（按红线保留，需在真 Windows 机器上才能验证，不适合盲改）。
+
 **1.7.2 发布台账（2026-11-15 11:27–11:4x 本机 DSH-Go 手机 proot 完成）**：**修正 persona 设备归属误导 + 对外内容私人信息脱敏**。本版 `lib/` 业务逻辑**一行未改**。
 
   **四个 commit（本版全部，作者 `阿依娅伊 <aiyayi@local>`；为便于 review/回滚，主体认知、真名清理、私人信息清理、发版各自独立）**：`32e2a09` 清理对外内容中的真实人名（49 处 / 18 文件，纯文案）、`9774f0e` persona 主体认知修正（**1 file / 1 insertion / 1 deletion**）、`cdf6579` 清理私人信息改为通用示例（7 files / 23 / 23）、`f7b320a` 发版（`package.json` 1.7.1→1.7.2 + CHANGELOG 1.7.2 条目 + 本版本表，3 files / 37 / 7）。
