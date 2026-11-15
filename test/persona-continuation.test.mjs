@@ -113,18 +113,10 @@ const REQUIRED = {
     // 以及"对接默认落到发起对接的那个会话"这条固化准则。
     ['微信通道存在', '微信 ClawBot 机器人'],
     ['微信默认关闭要说实话', '默认关闭'],
-    ['微信二维码121秒寿命', '121 秒'],
     ['没有 weixin-setup 技能', '没有 weixin-setup 技能'],
     ['空白名单语义', '只放行'],
     ['对接默认落当前会话', '对接默认落在「发起对接的那个会话」'],
     ['不主动新建会话', '别给他新建'],
-    ['微信绑定同样落当前会话', '绑定同样默认落到「发起绑定的那个会话」'],
-    // 1.5.33：三档复用行为要写进 persona，否则她解释不了"为什么给我列表/为什么新建了"。
-    ['三档：1 个直接接过去', '恰好 1 个活跃真人会话'],
-    ['三档：多个给列表让用户选', '不绑不建'],
-    ['三档：不许替用户挑最近那个', '别替他挑"最近那个"'],
-    ['三档：0 个才新建', '0 个活跃 → 才新建'],
-    ['复用开关默认开', 'feishu.reuseActiveSession'],
     // 1.7.0：DSH-Go 手机操控适配——本体例外条款 + 不派小伙伴的纪律。
     ['手机操控是本体例外', 'mcp__phone__*'],
     ['手机活不派小伙伴（本体侧）', '接不住确认框'],
@@ -160,6 +152,58 @@ for (const [preset, checks] of Object.entries(REQUIRED)) {
 if (failures.length > 0) {
   console.error('FAIL persona 关键纪律缺失：')
   for (const line of failures) console.error('  ' + line)
+  process.exit(1)
+}
+
+/* ------------------------------------------------------------------ *
+ * 1.8.0 persona 渐进加载：飞书/微信操作手册类短语从 persona 搬进
+ * manuals/*.md（运行时由 aiyayi-manuals 按话题注入）。这里锁"搬走的那批"
+ * 仍在手册文件里——每条 needle 要么在 persona（上面 REQUIRED）要么在
+ * 手册（这里），去处明确，没有一条被删。
+ * ------------------------------------------------------------------ */
+const MANUALS = {
+  'manuals/feishu.md': [
+    ['三档：1 个直接接过去', '恰好 1 个活跃真人会话'],
+    ['三档：多个给列表让用户选', '不绑不建'],
+    ['三档：不许替用户挑最近那个', '别替他挑"最近那个"'],
+    ['三档：0 个才新建', '0 个活跃 → 才新建'],
+    ['复用开关默认开', 'feishu.reuseActiveSession'],
+    ['connected 实时状态语义', 'connected'],
+    ['healthy 综合健康度语义', 'healthy'],
+    ['warning 告警字段', 'warning'],
+    ['apps[] 逐应用明细', 'apps[]'],
+    ['绑定会话指令', '绑定会话 <会话名>'],
+    ['feishu_bind 使用时机', 'feishu_bind'],
+  ],
+  'manuals/weixin.md': [
+    ['微信二维码121秒寿命', '121 秒'],
+    ['微信绑定同样落当前会话', '绑定同样默认落到「发起绑定的那个会话」'],
+    ['enabled 显式 true', 'weixin.enabled'],
+    ['accounts 形状', 'credentialRef'],
+    ['扫码登录工具', 'weixin_login'],
+    ['白名单语义', 'weixin.allowlist'],
+  ],
+}
+
+const manualFailures = []
+for (const [rel, checks] of Object.entries(MANUALS)) {
+  let body
+  try {
+    body = readFileSync(join(ROOT, rel), 'utf8')
+  } catch {
+    manualFailures.push(`${rel}: 手册文件不存在`)
+    continue
+  }
+  if (Buffer.byteLength(body) > 8 * 1024) manualFailures.push(`${rel}: 超过 8KB（toolkit_read 默认上限）`)
+  if (!body.includes('persona 渐进加载的操作手册')) manualFailures.push(`${rel}: 缺开头说明行`)
+  for (const [name, needle] of checks) {
+    if (!body.includes(needle)) manualFailures.push(`${rel}: 缺「${name}」（找不到 "${needle}"）`)
+  }
+}
+
+if (manualFailures.length > 0) {
+  console.error('FAIL 操作手册关键内容缺失：')
+  for (const line of manualFailures) console.error('  ' + line)
   process.exit(1)
 }
 
