@@ -4,12 +4,39 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.7.2**（已发布，latest；详见下方 1.7.2 发布台账） | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.7.2**（已推送，详见下方 1.7.2 发布台账） | https://gitcode.com/BayiHY/dsh-aiyayi |
-| Gitee | **1.7.2**（已推送，详见下方 1.7.2 发布台账） | https://gitee.com/BayiHY/dsh-aiyayi |
+| npm | **1.7.2**（已发布，latest；publish 本地 `2026-11-15 11:37:20`（+08:00）接受 → registry 记录 `time["1.7.2"]` = `2026-11-15T03:41:38.013Z`（本地 11:41:38）→ 客户端 `dist-tags.latest` + `versions` 双值可见本地 11:42:18（轮询 10 次未重发）；shasum `337b7f4a…`，54 文件，`gitHead` `f7b320a`） | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.7.2**（commit `f7b320a`，origin=gitcode 已推，`git ls-remote` 实测 = `f7b320a5f6ff30d00dcd0ed657a79b34c533f525`；tag `v1.7.2` 已推） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.7.2**（`git ls-remote` 实测 main = `f7b320a5f6ff30d00dcd0ed657a79b34c533f525`，与 GitCode 逐字一致；tag `v1.7.2` 已推） | https://gitee.com/BayiHY/dsh-aiyayi |
 | GitHub | **1.6.3**（沿用上轮记录 `13479ec`；本机无 ssh 客户端、HTTPS 被 SNI 阻断、无 token，无法实测与推送，1.6.4/1.7.0/1.7.1/1.7.2 待补） | https://github.com/BayiHY/dsh-aiyayi |
 
 本次发版：**1.7.2**（修正 persona 设备归属误导——「住在这台电脑里」改为看记忆路径与手上工具判断；核查确认版本号注入本就是 package.json 现读、非写死常量；对外内容清理真实人名 49 处；见 CHANGELOG 1.7.2 条目）。上一版 **1.7.1**（百宝袋脚本路径跟着记忆根走——相对路径支持 + 绝对路径失效按 basename 自动重定位 + 健康度注入痕迹检测，见 CHANGELOG 1.7.1 条目）。上一版 **1.7.0**（DSH-Go 手机操控适配——`mcp__phone__*` 放行 + `[手机]` 守则注入 + worker 人格闸，见 CHANGELOG 1.7.0 条目）。上一版 **1.6.4**（worker persona 增补交卷纪律——上下文见顶先交卷 + 收尾必交卷；另含发布前扫包补漏，清掉 `lib/index.js` 两处 1.6.3 遗留的本机绝对路径；见 CHANGELOG 1.6.4 条目）。上一版 **1.6.3**（档案健康度误报修复——结构行不再当垃圾 + 阈值按档案类型分开，见 CHANGELOG 1.6.3 条目）。上一版 **1.6.2**（precompact_run 输出修复 + memory_organize 档案健康度与 forget 精确定位，见 CHANGELOG 1.6.2 条目）。上一版 **1.6.1**（能力声明最小闭环 + `toolbox_remove` + 沉淀过滤修复（坑 #81）+ 飞书 pending 切换提示 + persona 三条 + README 瘦身；commit `a948608`，2026-11-13T04:41:37.374Z，shasum `64c51a3f…`）；**1.6.0**（工具箱自主成长开放给所有用户；commit `7c6b7dc`，2026-11-13T01:05:35.003Z，shasum `c2b25e57…`，55 文件）；**1.5.43** 是**破坏性变更**（三个私有工具移出工具面），**从 1.5.42 或更早升级的用户必须连读 1.5.43 与 1.5.44 两条 CHANGELOG**。1.5.42 那条历史说明保留在下方。
+
+**1.7.2 发布台账（2026-11-15 11:27–11:4x 本机 DSH-Go 手机 proot 完成）**：**修正 persona 设备归属误导 + 对外内容私人信息脱敏**。本版 `lib/` 业务逻辑**一行未改**。
+
+  **四个 commit（本版全部，作者 `阿依娅伊 <aiyayi@local>`；为便于 review/回滚，主体认知、真名清理、私人信息清理、发版各自独立）**：`32e2a09` 清理对外内容中的真实人名（49 处 / 18 文件，纯文案）、`9774f0e` persona 主体认知修正（**1 file / 1 insertion / 1 deletion**）、`cdf6579` 清理私人信息改为通用示例（7 files / 23 / 23）、`f7b320a` 发版（`package.json` 1.7.1→1.7.2 + CHANGELOG 1.7.2 条目 + 本版本表，3 files / 37 / 7）。
+
+  **① 设备归属去假设（核心改动）**：persona 首句原写「你是阿依娅伊，住在这台电脑里…」，与 DSH-Go 手机版运行时注入的「`[手机]` 你现在住在他的 Android 手机里（DSH-Go）」（`lib/phone.js:59`，判定 = `/opt/dsh-app` 存在）在同一段上下文里**互相矛盾**。改为不带设备假设 + 给判断依据：看记忆根实际路径与手上工具（`mcp__phone__*` → Android 手机；pwsh 相关工具 → Windows 电脑）。**只给依据、不加限制**；`lib/phone.js` 那行注入**保留不动**（环境实测后的真话）。**行为约束一字未动**，diff 仅 1 行。
+
+  **② 版本号"写死"核查：非 bug，未改代码**。`lib/presence.js` L80-91 的 `readLocalVersion()` 自 **1.6.4（`c225ce5`）** 起就是 `readFileSync(PKG_DIR/package.json)` **现读 + 进程内缓存** `cachedVersion`；全仓**无**写死版本常量。「仍显示 1.7.0」= 进程内缓存 + 装完未重启（同坑 #13），升级后重启即显示 1.7.2。**本版未动该段代码**。
+
+  **③ 身份认知不在 persona（只核查，未新增）**：persona 全段无「我只有一个／在设备间瞬移」类断言；身份认知归 `memory.md` 核心 + `memories/我/基线`，本版**不新增**、也无该类误导可删。
+
+  **④ 真名清理**：**49 处 / 18 文件**真实人名 →「用户」（必要时「维护者」），覆盖 CHANGELOG 20、DEPLOY 10、`cordis.patch.yml` 3（persona 自主决策准则 + 两处注释）、`docs/` 2、`lib/` 8、`skills/` 1、`test/` 6。**已核实测试断言里无真名（命中全在注释）**。时间戳、版本号、commit hash、事实经过**一律未改**。
+
+  **⑤ 私人信息审计**：包内文件（`files` 白名单）**凭证字面值扫描 = 0 命中**；`lib/presence.js:759` 注释私人项目名 → 通用示例；`test/alarm-content.test.mjs` fixture 真实工单号 + 真实院校名/域名 → 虚构示例（**断言同步，条数与逻辑未变，单测 pass 1/fail 0**）；`docs/` 与 `test/` 注释里的发版方本机绝对路径 → 占位符；CHANGELOG/DEPLOY 历史路径与私人项目名**只脱敏不重构**（`C:\Users\<用户名>`、`<工作区>`、`<记忆根>`、`<工具目录>`、某漏洞平台、TICKET-xxxx），**条目/坑号/台账结构一个字未删、数字时间未改**。保留不动：`package.json` author 与 README 署名（发布者公开署名）、飞书 App ID（非密钥且在断言里）、`test/` 的盘符示例（不进包、非人名，动它要改断言）。**全仓真实人名、真实姓名拼写、用户目录名、发版方工作区路径名、私人项目名、真实工单号 = 0 命中**（逐项 grep 实测；此处不写字面量，免得台账自身又把它们带回来）。
+
+  **测试**：`node --test test/*.test.mjs` → **tests 196 / pass 191 / fail 5**，与基线**逐字相同**（5 个失败为 Android 环境历史遗留——假设 Windows 盘符/PowerShell：`alarm-inject`、`home-relocate`、`pwsh-check`、`toolkit-manifest`、`tools-surface`，**未修**）。改动前后各实跑一遍，无新增失败。
+
+  **两远端推送**：GitCode `a8db124..f7b320a main -> main`、Gitee `a8db124..f7b320a main -> main`；`git ls-remote` 实测两远端 `refs/heads/main` 均 = **`f7b320a5f6ff30d00dcd0ed657a79b34c533f525`**，与本地 HEAD 逐字一致。凭据按既有踩坑做法：`grep -oP '^export GITCODE_KEY=\K.*' /root/.bashrc` 取值、一次性 `https://oauth2:<token>@…` 推送，**令牌不打印不入仓不改 remote**（推后 `.git/config` 仍是不带凭据的裸 URL，`/root/.git-credentials` 不存在）。**GitHub 未推**（本机无 ssh、HTTPS 被 SNI 阻断、无 token），未尝试。
+
+  **tag**：`git tag -a v1.7.2 -m '…'`（附注 tag，与 v1.7.1 惯例一致）→ tag 对象 `3af07267…` 解引用 `f7b320a…`；推两远端均 `* [new tag] v1.7.2 -> v1.7.2`；`git ls-remote --tags` 实测两远端均为 `3af07267746474ee3bbc7e97a003ba3754a10e8e refs/tags/v1.7.2` + `f7b320a5f6ff30d00dcd0ed657a79b34c533f525 refs/tags/v1.7.2^{}`，**两端逐字一致**。
+
+  **npm pack 对账**：`npm pack --dry-run` → **54 个文件**、`dsh-aiyayi@1.7.2`、package size 509.4 kB、unpackedSize 1.4 MB，**与 1.7.1 的 54 个文件集合一致**（本次只改已有文件内容、未增删文件；`test/`、`docs/` 照旧不入包）。
+
+  **npm 发布**：令牌从 `/root/.bashrc` 的 `NPM_KEY` grep 取值（`whoami` 实测 = `bayihy`），只进**临时 userconfig**（`/tmp/npmrc-pub-172`，`umask 077`），用完即删、不落 `~/.npmrc`、不入仓不入台账。本机默认 registry 是 npmmirror（既有坑），显式 `--registry=https://registry.npmjs.org/`。t0 = 本地 **11:37:20** → `+ dsh-aiyayi@1.7.2`。registry 记录 `time["1.7.2"]` = **`2026-11-15T03:41:38.013Z`**（本地 11:41:38，距 t0 约 4.3 分钟）；**客户端 `dist-tags.latest` + `versions` 双值可见本地 11:42:18**（轮询 10 次，第 10 次前到位），**全程未重发**（守「≥6 分钟内不重发」红线）。tarball shasum **`337b7f4a6c083075ee11af22c0f949aac7f1fe46`**（本地 dry-run、registry `dist.shasum`、下载回 tgz 实算 SHA1 **三方逐字一致**）、integrity `sha512-NyqOqiGw+lnt+s1JhBM5WV/y1/rkZofpfb/YV7VtuVL6SjKfjz3OjdqWP9SyWRiZ29y5QqnIOwOacWeK8wK6/g==`、**54 个文件**、`gitHead` = **`f7b320a5f6ff30d00dcd0ed657a79b34c533f525`**（registry 元数据实测，与两远端 main 逐字一致）。
+  ⚠ 记录一处口径澄清：`gitHead` 是 **registry 元数据**，不写进 tarball 内的 `package.json`（解包后 grep `gitHead` = 0 属正常，不是漏发）；早期台账未区分这点，此处明确。
+
+  **发布后校验**：`npm view dsh-aiyayi@1.7.2 version dist.shasum dist.tarball dist.integrity` → `1.7.2` / `337b7f4a…` / `https://registry.npmjs.org/dsh-aiyayi/-/dsh-aiyayi-1.7.2.tgz` / 上述 integrity；`dist-tags` = `{ latest: '1.7.2' }`。下载 registry 的 tgz 解包：**54 个文件**、包内 `version` = 1.7.2、实算 SHA1 与三方一致；关键文件 SHA256 **包内 vs 源码仓 HEAD 逐字一致**：`cordis.patch.yml`、`lib/presence.js`、`lib/phone.js`、`package.json`、`CHANGELOG.md`（本版回填前即已一致）。**未动 profile 安装副本**（`/root/.dsh/profiles/web/node_modules/dsh-aiyayi` 仍是指向源码仓的软链，按红线保持）。**生效方式：重启 DSH**。
 
 **1.7.1 发布台账（2026-11-15 11:0x–11:2x 本机 DSH-Go 手机 proot 完成）**：**百宝袋脚本路径跟着记忆根走**。分两段做：源码改动 `478fa3a`（含测试）+ 台账 `092a98b` 先推两远端，本轮发版只动版本号与文档，**业务代码一行没动**。
 
