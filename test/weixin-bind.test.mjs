@@ -1,7 +1,7 @@
 /**
  * weixin_bind / weixin_unbind 后端回归测试（1.5.28 新增）。
  *
- * 覆盖李浩要的「把微信接进指定会话」语义：
+ * 覆盖用户要的「把微信接进指定会话」语义：
  *   1. bindUser direct 模式（给 userId）→ 立即绑定 + 落盘 + 可覆盖改绑
  *   2. bindUser autoNext 模式（不给 userId）→ 落待绑定目标（pending-bind.json），30 分钟 TTL
  *   3. consumePendingBindIfAny → 下一条消息的发送者自动绑到目标会话（幂等，绑定失败不影响投递）

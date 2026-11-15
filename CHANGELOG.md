@@ -61,7 +61,7 @@
 - **设计取舍（为什么手机活本体亲手做、不派小伙伴）**：手机操控是**强交互**通道——每步动作返回新屏幕、元素编号只在本屏有效、敏感动作弹**原生确认框给他看**。小伙伴在后台跑：看不见屏幕、接不住确认、handoff 也到不了它手里。所以放行、守则、例外条款都只给本体，worker 侧用人格闸拦。
 - **验证**：`node --check` 三个改动 JS 全过；`cordis.patch.yml` 用带 `!!js` tag 的 schema 实测可解析（insert 3 条、三 preset 齐全、本体 13 插件含 `aiyayi-phone` 指向 `dsh-aiyayi/phone`、`!!js` 行为行未受影响）；新增 `test/phone.test.mjs` **36 断言全过**（前缀放行/真实报错形状解析/首轮完整守则/次轮短行/step≠1 不注入/解析失败降级/桌面静默/不可用提示每会话一次/注入消息形状与 source 标注）；`persona-continuation.test.mjs` 闸新增 4 条手机纪律断言（本体 2：`mcp__phone__*` 例外 / 接不住确认框；worker 2：手机工具不属于你 / 这活得娅伊自己来），实测本体 34/34、worker 5/5 全在位）；全量 `node --test` 与基线一致（184 pass / 5 fail，失败均为 Windows 盘符与 PowerShell 环境假设，非本版引入）；无 BOM（no-bom 闸覆盖新文件）。
 
-- **GitCode/npm 发布与核对实测（2026-11-14 02:2x–02:3x 回填）**：commit `6a15d9f`（源码 + 文档 + 测试一个 commit，10 files / 453 insertions / 8 deletions）。**版本号 1.7.0 为李浩当轮拍板**：按 1.6.0 立的规则（向下兼容的新功能涨 MINOR），新设备适配不按 PATCH 惯性走 1.6.5（源码一度写成 1.6.5，发布前全仓替换）。**GitCode**：本机（DSH-Go 手机 proot）无 GitCode 凭据，`git push origin` 报无法读用户名；李浩当轮提供访问令牌，一次性 URL 推送（令牌不落任何配置）→ `c225ce5..6a15d9f main -> main`，`git ls-remote origin` 实测 = `6a15d9f…`；Gitee 实测 main = `c225ce5`（1.6.4 台账 commit 已在，1.7.0 待补）；GitHub 本机 443 直连不通无法实测。**npm**：令牌走临时 userconfig（用完即删，不落 `~/.npmrc` 不入仓），显式 `--registry=https://registry.npmjs.org/`（npmmirror 默认坑照 1.6.3 规避），t0 ≈ 本地 02:21:35 → `+ dsh-aiyayi@1.7.0`；registry `time["1.7.0"]` = **`2026-11-13T18:24:14.134Z`**（本地 02:24:14），轮询 7 次约 4 分钟后 `dist-tags.latest` = 1.7.0，**全程未重发**；shasum **`06c784e6…`**（本地 pack dry-run、registry dist.shasum、下载回 tgz 实算三方逐字一致）、**54 个文件**（与 1.6.4 下载解包 diff 实测恰差 `lib/phone.js` 一个）、package size 493.8 kB、unpackedSize 1368847、`gitHead` = **`6a15d9f…`**（先推后发，与 origin main 逐字一致）。**发布后核对**：关键文件 tar/仓 SHA256 逐字一致（`lib/phone.js`=`fdcb3f5b…`、`lib/own-tools.js`=`00e06d2d…`、`lib/restrict.js`=`4e21eb26…`、`cordis.patch.yml`=`6bcb4661…`、`package.json`=`cfc6e0e1…`），tarball 内 `lib/phone.js` 可 import（导出 `PHONE_TOOL_PREFIX/__testing/apply/inject/name`）。**profile 装版本轮未执行**（本机为 DSH-Go 手机 profile，现装 1.5.44）：待 `cd ~/.dsh/profiles/web && pnpm add dsh-aiyayi@1.7.0 --save-exact --registry=https://registry.npmjs.org/`，**装完重启 DSH 生效**。完整台账见 DEPLOY 1.7.0 节。
+- **GitCode/npm 发布与核对实测（2026-11-14 02:2x–02:3x 回填）**：commit `6a15d9f`（源码 + 文档 + 测试一个 commit，10 files / 453 insertions / 8 deletions）。**版本号 1.7.0 为用户当轮拍板**：按 1.6.0 立的规则（向下兼容的新功能涨 MINOR），新设备适配不按 PATCH 惯性走 1.6.5（源码一度写成 1.6.5，发布前全仓替换）。**GitCode**：本机（DSH-Go 手机 proot）无 GitCode 凭据，`git push origin` 报无法读用户名；用户当轮提供访问令牌，一次性 URL 推送（令牌不落任何配置）→ `c225ce5..6a15d9f main -> main`，`git ls-remote origin` 实测 = `6a15d9f…`；Gitee 实测 main = `c225ce5`（1.6.4 台账 commit 已在，1.7.0 待补）；GitHub 本机 443 直连不通无法实测。**npm**：令牌走临时 userconfig（用完即删，不落 `~/.npmrc` 不入仓），显式 `--registry=https://registry.npmjs.org/`（npmmirror 默认坑照 1.6.3 规避），t0 ≈ 本地 02:21:35 → `+ dsh-aiyayi@1.7.0`；registry `time["1.7.0"]` = **`2026-11-13T18:24:14.134Z`**（本地 02:24:14），轮询 7 次约 4 分钟后 `dist-tags.latest` = 1.7.0，**全程未重发**；shasum **`06c784e6…`**（本地 pack dry-run、registry dist.shasum、下载回 tgz 实算三方逐字一致）、**54 个文件**（与 1.6.4 下载解包 diff 实测恰差 `lib/phone.js` 一个）、package size 493.8 kB、unpackedSize 1368847、`gitHead` = **`6a15d9f…`**（先推后发，与 origin main 逐字一致）。**发布后核对**：关键文件 tar/仓 SHA256 逐字一致（`lib/phone.js`=`fdcb3f5b…`、`lib/own-tools.js`=`00e06d2d…`、`lib/restrict.js`=`4e21eb26…`、`cordis.patch.yml`=`6bcb4661…`、`package.json`=`cfc6e0e1…`），tarball 内 `lib/phone.js` 可 import（导出 `PHONE_TOOL_PREFIX/__testing/apply/inject/name`）。**profile 装版本轮未执行**（本机为 DSH-Go 手机 profile，现装 1.5.44）：待 `cd ~/.dsh/profiles/web && pnpm add dsh-aiyayi@1.7.0 --save-exact --registry=https://registry.npmjs.org/`，**装完重启 DSH 生效**。完整台账见 DEPLOY 1.7.0 节。
 
 
 
@@ -183,7 +183,7 @@
 
   **七、persona 三条 + 口径改句（批 D）**
   - **分工口径加例外判据**：原文"动手的活一件都不亲手做"太绝对，实际她连 `feishu_status` 都不该派人查。加例外：插件自带的**轻量查询工具**（`feishu_status` / `toolbox_list` / `recall` / `toolkit_cmd` 白名单内的只读命令 / `toolkit_read` 这类几秒出结果、输出短的）本体直接调，**这不算动手**；`toolkit_write` 受限写入（白名单目录 + 64KB 上限 + 自动备份）和自己工具箱的**清单维护**也算例外；**要翻文件堆、抓网页、提炼归纳、长任务，照旧派人**。
-  - **新增自主决策准则**：李浩只提线索和要点；先验证拿证据，**证据充分、方案合理就自主决策执行，别拿请示当挡箭牌**；缺证据就去查或如实说。**有代价的决定——删有价值的数据、花钱、对外发布——仍然先问**。
+  - **新增自主决策准则**：用户只提线索和要点；先验证拿证据，**证据充分、方案合理就自主决策执行，别拿请示当挡箭牌**；缺证据就去查或如实说。**有代价的决定——删有价值的数据、花钱、对外发布——仍然先问**。
   - **思考纪律补证据纪律句**：遇到不确定、有冲突、有歧义的内容，**第一动作在实际环境找证据**（读实际文件、查实际状态、直接问他本人），不在已有歧义的上下文里继续推演。
   - 代码侧口径同步：`lib/toolkit.js` 头注释、`lib/own-tools.js` 的 `toolkit_*` 注释、`cordis.patch.yml` 的 toolkit 段注释都改成同款表述（"简单状态型"→"轻量查询"），避免 persona 与代码注释两套口径。
 
@@ -199,7 +199,7 @@
 ## 1.6.0（2026-11-13：工具箱自主成长开放给所有用户）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
-- **版本号说明**：本版原按修订号定为 1.5.46（源码 commit `031ab55` 的提交信息与 README 标记即写作 1.5.46），发布前娅伊自主决策改为 **1.6.0**——功能性发版（新能力开放 + examples 分发）按 semver 涨次版本，同时也兑现从 1.5.43 起欠下的规矩（那次破坏性变更本就该跳版本）。李浩授权模式：证据 + 合理方案 → 自决。源码内容不变，README 标记随本条目统一为 1.6.0。
+- **版本号说明**：本版原按修订号定为 1.5.46（源码 commit `031ab55` 的提交信息与 README 标记即写作 1.5.46），发布前娅伊自主决策改为 **1.6.0**——功能性发版（新能力开放 + examples 分发）按 semver 涨次版本，同时也兑现从 1.5.43 起欠下的规矩（那次破坏性变更本就该跳版本）。用户授权模式：证据 + 合理方案 → 自决。源码内容不变，README 标记随本条目统一为 1.6.0。
 - **版本号规则（自 1.6.0 起）**：向下兼容的新功能涨次版本（MINOR）；纯修 bug 涨修订号（PATCH）；破坏性变更涨主版本（MAJOR）并在条目首行写 ⚠ 迁移说明。
 - **动机（为什么发这版）**：工具箱的"攒工具"能力 1.5.44 就在了（`<记忆根>/toolbox.json` 清单 + `toolbox_list` / `toolbox_reload`），但**怎么攒只写在 README 里，persona 引导段一字未提**。实证：新装用户的娅伊根本不知道自己有一份可以自己长的工具清单——persona 对此**零命中**（她不会主动提这回事，公开用户会话里从没出现过"让小伙伴写个脚本注册进清单"这种路子），1.5.44 发版时"装完不会自动出现它们，要自己写清单"的说明只落在台账和 README，等于能力没真正开放。本版把"工具箱可攒工具"写进 persona 本体引导，并把示例脚本随包分发，让所有用户（不只是发版方本机）从第一次对话就知道、也真能用上。
 - **改了什么（`cordis.patch.yml` / `package.json` / 新增 `examples/` 两文件 / `README.md`；源码 commit `031ab55` 先行，版本号另提交）**：
@@ -215,9 +215,9 @@
 ## 1.5.45（2026-11-13：飞书引导误触发三连修 + 插件注入身份自标注）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
-- **实锤现象（2026-11-13 深夜，李浩报告）**：
+- **实锤现象（2026-11-13 深夜，用户报告）**：
   - **00:13:46** 用户在飞书发「不用你看着点，我们先回测，需要交易的时候你写脚本工具，之后就只管填参数，让脚本自…」——开头恰好是"不用"，被旧版 `matchSkipIntent` 的**开头锚定正则**（`^(?:不用|不需要|不接|算了|跳过|暂时不用|先不用)`，`lib/feishu-logic.js`）误判成「放弃接入」→ **00:14:43** 会话里出现一条无关的 bot 口吻确认「好的，不接入也没关系。需要时随时说「接入飞书」或「接入微信」，我会再给你扫码步骤。」（日志 `desktop-next-2026-11-12.0.jsonl` UTC 16:13:46.723 收到消息 → UTC 16:14:4x 注入，链路完整）。
-  - 该注入走 `agent.followup` + `source:{kind:'user'}`——宿主 `Agent.followup(message: UserMessage)` 的三个注入通道（followup/steer/inject）**只收 `UserMessage`**（role 恒为 `'user'`，asar Agent 接口声明），插件**没有**系统身份注入 API——于是 bot 口吻文案在会话里"以用户身份"出现。**00:20** 李浩再报：「理论上提醒应该是你（bot）的消息，但实际会莫名其妙冒出一条以我的身份推出的消息，但不是我发的」。
+  - 该注入走 `agent.followup` + `source:{kind:'user'}`——宿主 `Agent.followup(message: UserMessage)` 的三个注入通道（followup/steer/inject）**只收 `UserMessage`**（role 恒为 `'user'`，asar Agent 接口声明），插件**没有**系统身份注入 API——于是 bot 口吻文案在会话里"以用户身份"出现。**00:20** 用户再报：「理论上提醒应该是你（bot）的消息，但实际会莫名其妙冒出一条以我的身份推出的消息，但不是我发的」。
   - 引导文案本身含「接入飞书」「不用」等关键词，一旦被再送进检测（用户粘贴引用、上下文压缩剥掉零宽 `GUIDE_PREFIX`），引导会自我维持地再触发——"引导误触发已知问题"的新变体。
 - **改了什么（`lib/feishu-logic.js` / `lib/feishu.js` / `lib/toolkit-async.js`；新增 `test/feishu-guide-no-retrigger.test.mjs`；`test/toolkit-async.test.mjs` 两处断言同步）**：
   1. **`matchSkipIntent` 整句化**：只认整句放弃（「不用/不用了/算了/跳过/暂时不用/先不用/先不接了」等，允许尾随语气词"了/啦/吧"与标点），不再认开头前缀。实锤样本「不用你看着点，我们先回测…」不再触发；真正的放弃短句照常触发（首次引导结尾教的正是"回复「不用」即可跳过"）。
@@ -238,7 +238,7 @@
 - **⚠ 升级路径提示（必须先读这一条）**：**如果你从 1.5.42 或更早升级，请连读 1.5.43 与 1.5.44 两条。** 1.5.43 是**破坏性变更**：`watch_read` / `mem_sync` / `pkg_stats` 三个工具从工具面移除（不再注册、不再进白名单），`memPushRemotes` 默认改空数组、`memBranch` 默认改空串（不配置=不推也不提交）；1.5.44 把这三个私有能力接回来，但**改由本机清单 `<记忆根>/toolbox.json` 按需注册**——装完 1.5.44 不会自动出现它们，要自己写清单（清单里指向本机脚本，脚本不进包）。1.5.43 条目里那两条破坏性变更的完整说明仍然有效，此处不重复。
 - **改了什么（新增 `lib/toolkit-manifest.js` + `test/toolkit-manifest.test.mjs`；改 `lib/toolkit.js` / `lib/own-tools.js` / `package.json` / `README.md` / `cordis.patch.yml` 注释 / 三个既有测试的注册面断言；本机新增三个脚本与 `toolbox.json`）**：
 
-  **一、设计依据（李浩 2026-11-12 定调）**
+  **一、设计依据（用户 2026-11-12 定调）**
   - 工具箱存在的目的是让本体**异步执行命令和工具**、不阻断对话：**每个工具都必须立刻返回 taskId，后台跑完用 followup 推回会话**。同步工具一旦卡住整轮就堵死，那还不如不用。
   - **npm 安装包里只留简单通用的能力**（toolkit_cmd / toolkit_read / toolkit_write）。其他工具走**本地清单**：清单与脚本都在本机，清单引用本机脚本绝对路径，**脚本不进 npm 包**。这样普通用户装插件不会看到一堆用不上的工具（1.5.42 时 6 个工具实测约 1334 token/轮）。
 
@@ -374,7 +374,7 @@
   - `test/toolkit.test.mjs` / `test/toolkit-async.test.mjs` 因工具数 5→6 同步更新了注册断言（"五个工具已注册"→"六个"、"list 变 6"→"list 变 7" 等）。
   - 全量 `node --test`（显式传 **37** 个 `test/*.test.mjs` 文件）：**165 项，162 过 3 挂**（挂 = alarm-inject / home-relocate / tools-surface 环境基线，与 1.5.35/1.5.39/1.5.40/1.5.41 条目同基线），**零新增失败**。基线 36 个文件 / 164 项 / 161 过 3 挂，本版 +1 个文件（165 项 / 162 过 / 3 挂），零新增失败。
 - **实网实测（不是 mock，2026-11-12 15:33 本机）**：`executePkgStats({})` 耗时 **2434ms**，`ok=true`，`version=1.5.41`，`lastDay=744`（11-10）/`lastWeek=4549`/`lastMonth=4851`，`versionPublishedAt=2026-11-12T07:17:11.900Z`，`github.source="gh-proxy"`（直连确实不通），`gitee.watchers=1`，`gitcode.unavailable` 带 400 与 `private-token` 原话；输出过 schema 校验（无缺字段、无多余键）。
-- 打包与 npm publish **已完成（2026-11-12 第二段发版）**。三远端 push 到 `98ee5f8`（gitcode/gitee/github，ls-remote 三路核对一致）；npm publish 到 `https://registry.npmjs.org/`（显式 `--registry`，`.npmrc` 默认指 npmmirror），tarball sha1 `9c6dbf5980e233c34f33cb2b0ecbc04c4b1f63d2`、integrity `sha512-fuLDKcHaqCBNo0c013QNkZs9G2GW1/LhjyZoHfsyqX3lzZImtSCF8APeXAMn45p89nnSaEPmCjKL0qiLAwt5Hw==`、**52 个文件**（比 1.5.41 的 51 个多 1 个 = `lib/pkg-stats.js`），发布时刻 **2026-11-12T07:46:35Z**，registry `gitHead=98ee5f8e0c3ed88b8525781655d6264f4852a823`；desktop profile 已 `pnpm add --save-exact dsh-aiyayi@1.5.42`，52 个包内文件与 tarball 比对 **51/52 MATCH**，唯一差异是 `cordis.patch.yml`——pnpm 重装把 `watchDir` 那行覆盖回注释态，**已手工恢复成生效态**。**未重启 DSH**（李浩自己重启后实机验货）。
+- 打包与 npm publish **已完成（2026-11-12 第二段发版）**。三远端 push 到 `98ee5f8`（gitcode/gitee/github，ls-remote 三路核对一致）；npm publish 到 `https://registry.npmjs.org/`（显式 `--registry`，`.npmrc` 默认指 npmmirror），tarball sha1 `9c6dbf5980e233c34f33cb2b0ecbc04c4b1f63d2`、integrity `sha512-fuLDKcHaqCBNo0c013QNkZs9G2GW1/LhjyZoHfsyqX3lzZImtSCF8APeXAMn45p89nnSaEPmCjKL0qiLAwt5Hw==`、**52 个文件**（比 1.5.41 的 51 个多 1 个 = `lib/pkg-stats.js`），发布时刻 **2026-11-12T07:46:35Z**，registry `gitHead=98ee5f8e0c3ed88b8525781655d6264f4852a823`；desktop profile 已 `pnpm add --save-exact dsh-aiyayi@1.5.42`，52 个包内文件与 tarball 比对 **51/52 MATCH**，唯一差异是 `cordis.patch.yml`——pnpm 重装把 `watchDir` 那行覆盖回注释态，**已手工恢复成生效态**。**未重启 DSH**（用户自己重启后实机验货）。
 
 ## 1.5.41（2026-11-12 新增：Toolbox 真异步能力 + `watch_read` 异步工具、`mem_sync` 同步工具）
 
@@ -398,7 +398,7 @@
   - **单测当场抓出一个真 bug，已修（坑 #80）**：`git status --porcelain` 默认 `core.quotepath=true`，非 ASCII 路径输出成 C 风格转义（`?? "\346\226\260\347\254\224\350\256\260.md"`），拿它 join 目录拼不出真文件 → 读不到 → **静默跳过 → 带 `token=` 的文件被 `add -A` 提交了**。修法两层：git 调用统一加 `-c core.quotepath=false`，status 改 `--porcelain -z`（NUL 分隔、路径原样），`untrackedFiles()` 同时容忍 `-z` 与换行两种形态。修前该断言（"未跟踪文件里的 token= 也拒绝"）实测 FAIL，修后 PASS。
   - 全量 `node --test`（显式传 36 个 `test/*.test.mjs` 文件）：**164 项，161 过 3 挂**（挂 = alarm-inject / home-relocate / tools-surface 环境基线，与 1.5.35/1.5.39/1.5.40 条目同基线），**零新增失败**。`test/toolkit.test.mjs` 因工具数 3→5 同步更新了注册断言（原"三个工具已注册"/"list 变 4"按新数量改写，并加一行显式盯住五件套）。
 - 文档：`docs/经验-工具真异步与宿主同步await.md`（新建，四条：宿主同步 await 的事实与源码位置 / 两条异步路子与为何选 followup / 坑 #65+#68 的具体规避写法 / 本 helper 的使用范式 + 坑 #80）。
-- 打包与 npm publish：**2026-11-12 李浩拍板后已完成发版第二段**。三远端 push 到 `6d5448a`（gitcode/gitee/github，ls-remote 三路核对一致）；npm publish 到 `https://registry.npmjs.org/`（显式 `--registry`，`.npmrc` 默认指 npmmirror），tarball sha1 `d8c96ead92d69568cac564dcea4cb2e10feea4d4`、integrity `sha512-7ih7JTMf2CXN63VTCZwUKh6RukDBuK3x1nrhJQarVRWaiG623l6911Lzz6S4URdf/JnSRAWMIJ3vrr786S8rLg==`、**51 个文件**（比 1.5.40 的 49 个多 2 个 = 两个新文件），发布时刻 **2026-11-12T07:17:11Z**，registry `gitHead=6d5448a`；desktop profile 已 `pnpm add --save-exact dsh-aiyayi@1.5.41`，51 个包内文件与 tarball **逐个 SHA256 全部一致（0 diff）**。**未重启 DSH**（李浩自己重启后实机验货）。
+- 打包与 npm publish：**2026-11-12 用户拍板后已完成发版第二段**。三远端 push 到 `6d5448a`（gitcode/gitee/github，ls-remote 三路核对一致）；npm publish 到 `https://registry.npmjs.org/`（显式 `--registry`，`.npmrc` 默认指 npmmirror），tarball sha1 `d8c96ead92d69568cac564dcea4cb2e10feea4d4`、integrity `sha512-7ih7JTMf2CXN63VTCZwUKh6RukDBuK3x1nrhJQarVRWaiG623l6911Lzz6S4URdf/JnSRAWMIJ3vrr786S8rLg==`、**51 个文件**（比 1.5.40 的 49 个多 2 个 = 两个新文件），发布时刻 **2026-11-12T07:17:11Z**，registry `gitHead=6d5448a`；desktop profile 已 `pnpm add --save-exact dsh-aiyayi@1.5.41`，51 个包内文件与 tarball **逐个 SHA256 全部一致（0 diff）**。**未重启 DSH**（用户自己重启后实机验货）。
 
 ## 1.5.40（2026-11-12 修复：toolkit_cmd / toolkit_write 执行输出不符 output.schema——宿主对工具输出也做 schema 校验，条件性返回字段必须与 schema 对齐，坑 #78）
 
@@ -410,7 +410,7 @@
   - **留痕口径不变**：`usage.jsonl` 的 `exitCode` 仍是 `null`（= 没有真实退出码），约定值只在输出端用，不污染统计。
 - **为什么**：①调用方（本体/模型）会把校验失败当"操作失败"，而**底层其实已经执行**——write 的目标文件真实写入了完整内容，cmd 的命令也跑了只是结果被吞，属"bug 兼 UX 问题"；②"条件性返回"这种写法天生与 required 冲突，只要 schema 声明了字段就永远无法安全省略。
 - **测试**：`test/toolkit.test.mjs` 新增 6c 节（**真实调用注册出来的 execute**，不是只测纯函数）：复刻宿主 `validateJsonSchemaValue` 为守门员（单类型/required/additionalProperties:false/items/oneOf），先自检能抓出今天三种真实失败形态（缺 `truncated`、`exitCode:null`、`backupPath:null`），再逐路断言——`cmd` 成功（exitCode=0）/失败（exitCode=3 透传）/超时（-1 + timedOut）/拒绝（-1 + denied）四路、`write` 新建（backupPath 空串）/覆盖（非空且 .bak 真实存在）/拒绝（空串）三路、`read` 不存在路径（mtime 空串）；另加归一函数对脏输入（全 null / 空对象）的兜底断言。**同时把 1.5.39 遗留的「exitCode/mtime/backupPath 不在 required」三条断言反向改写**——那是 1.5.39 用"缺省"表达可空的旧口径，与本版新口径直接冲突，留着就是错的。全量 `node --test`（显式传 35 个 `test/*.test.mjs` 文件——`test/` 下另有 `feishu-status-proof.mjs` / `presence-midnight-proof.mjs` 两个非 `*.test.mjs` 的取证脚本，不参与 `node --test`）：**163 项，160 过 3 挂**（挂 = alarm-inject / home-relocate / tools-surface 环境基线，非本次引入，与 1.5.35/1.5.21/1.5.22/1.5.39 条目同基线），零新增失败。
-- 打包与 npm publish **不在本次范围**：本版只做版本号对齐 + 本地提交（不 push、不 publish、不动 profile），发版节奏等李浩定。
+- 打包与 npm publish **不在本次范围**：本版只做版本号对齐 + 本地提交（不 push、不 publish、不动 profile），发版节奏等用户定。
 
 ## 1.5.39（2026-11-12 修复 + 改造：toolkit 三件套注册失败修复；feishu_bind 自动绑定一步接入）
 
@@ -533,7 +533,7 @@
 ## 1.5.33（2026-11-11 行为变更：「对接默认落到当前会话」从准则落成代码——未绑定 chat 三档复用）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
-- 需求（李浩 2026-11-11 原话）：「对接机器人都默认当前对话的会话吧，别新建会话了，除非用户主动要求」；澄清后语义 = **绑定的对象是「发起对接的那个会话」**，不是「新建一个会话再绑过去」。后续追加：「这个默认机器人会话对接规则需要固化到 aiyayi 安装包里」。
+- 需求（用户 2026-11-11 原话）：「对接机器人都默认当前对话的会话吧，别新建会话了，除非用户主动要求」；澄清后语义 = **绑定的对象是「发起对接的那个会话」**，不是「新建一个会话再绑过去」。后续追加：「这个默认机器人会话对接规则需要固化到 aiyayi 安装包里」。
 - 1.5.32 只把这条写进 persona 准则与文档（零代码），**本版落成实际代码行为**。
 - **改动落点**：`lib/feishu.js` 的 `onIncomingMessage()` 里 `action === 'new'` 分支原先「无条件新建会话并接入」，现改为三档决策；决策逻辑抽在纯函数 `lib/feishu-logic.js` 的 `decideUnboundChatRouting()`，候选采集在 `collectActiveSessionCandidates()`。
 - **三档（零歧义才自动，绝不瞎猜）**：
@@ -566,7 +566,7 @@
 ## 1.5.32（2026-11-11 行为变更：首次提示同时告知微信 ClawBot 能力；「对接默认落到发起对接的会话」固化为准则）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
-- 需求（李浩 2026-11-11 原话）：「首次会话提醒飞书对接的同时，也提醒一下我们有微信 clawbot 机器人对接能力，如果用户需要我们可以指导用户对接微信机器人」；后续追加「这个默认机器人会话对接规则需要固化到 aiyayi 安装包里」。
+- 需求（用户 2026-11-11 原话）：「首次会话提醒飞书对接的同时，也提醒一下我们有微信 clawbot 机器人对接能力，如果用户需要我们可以指导用户对接微信机器人」；后续追加「这个默认机器人会话对接规则需要固化到 aiyayi 安装包里」。
 - **本次只做文案 + persona 准则 + 文档，零路由代码改动**（路由改动拆到 1.5.33，见文末）。理由：路由是消息投递核心，一旦出问题会把现有 `oc_f327…` 正常绑定搞坏；文案与准则改完立刻见效，不需要碰路由。
 - 改动：
   1. **首次会话提示加微信一句（147→210 字，上限 220）**：`lib/feishu.js` 的 `maybeGuideNewSession()` 原先硬编码一段 147 字文案，现改为调 `lib/feishu-logic.js` 的 `buildNewSessionGuideText()`。飞书原有内容**一字未删**（安装 app / open.feishu.cn 扫码 / 单聊自动接入），中间插入一句「另外我还能接微信 ClawBot 机器人（腾讯官方 iLink 协议），这条默认没开启；需要的话跟我说，我带你一步步接。」，结尾「如果不需要，回复「不用」即可跳过，我不会再提示。」原样保留在最后。
@@ -638,7 +638,7 @@
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
 - git：本次 commit（2026-11-11，阿依娅伊）1.5.28：首次对话检测里加 PowerShell 版本检查，低于 7 建议用户升级；新增 31 个单测。（后追加一个 commit：ENOENT 时补绝对路径兜底探测，修掉"PATH 未刷新导致已装 pwsh 误报为没装"的坑 #75，单测扩到 38 项。）
-- 需求（李浩 2026-11-11 原话）："首次对话检测里加上：如果当前用户是 windows 环境就检查 PowerShell 版本，如果低于 PowerShell 7 就建议用户自己可以协助升级 PowerShell，以便日后更好的协助用户。"
+- 需求（用户 2026-11-11 原话）："首次对话检测里加上：如果当前用户是 windows 环境就检查 PowerShell 版本，如果低于 PowerShell 7 就建议用户自己可以协助升级 PowerShell，以便日后更好的协助用户。"
 - **挂点选择**：插件里没有名为"首次对话检测"的独立模块。实际承担这件事的是 `lib/presence.js` 的 `agent/pre-step`（`step===1`）注入器——它已经在做同一类事：新会话首轮检查"关闭思考建议"、记忆搬家待办、闹钟异常，"每个会话只提醒一次"的节拍全在这条钩子上，提示也统一走"往消息尾部追加一条 snapshot"的范式。把检测挂在这里，**不新增 ctx.on、不抢消息顺序**（与 L1276 原有注释同一条纪律）。
   - 没选 `feishu.js` 的 `maybeGuideNewSession`：那是"飞书未绑定会话"的引导，跟平台体检无关，且挂了会把检测绑死在飞书通道上。
   - 没选 `updates.js`：它做的是插件版本，且本需求要与 presence 的 `step===1` 节拍共用"只提一次"纪律。
@@ -729,7 +729,7 @@
   - **坑 9：`setTimeout` 被 `unref()` 会让轮询循环静默停摆。** 退避 sleep 里的定时器一旦 unref，事件循环没有其它 ref 工作时定时器被丢弃，`await sleep()` 永不返回、循环永久挂起，**且没有任何日志**。是单测（业务错误退避那条）抓出来的。结论：轮询循环里的 sleep **一律不 unref**，退出靠 abort 打断。
   - **坑 10：`ctx.get('tools')` 在部分宿主上对未提供的服务直接抛，不是返回 null。** 只写 `if (!tools?.register)` 会漏掉抛错分支。两路都要接。同理，`ctx.effect` 的回调不是 `apply` 里同步执行的——单测里必须显式触发 effect 才能验证异步启动路径（否则会误以为"没日志"是实现问题）。
   - **坑 11：账号 ID 归一化要用官方的 `[^A-Za-z0-9_-] → -`。** 只替换 `@` 而保留 `.` 会得到 `d4f...-im.bot`，与官方 `-im-bot` 布局不一致（探针/store 文件名跟着漂）。本版按官方口径：`@` 和 `.` 都变 `-`，顺带挡住 `../` 路径成分。
-- 发布后状态：1.5.27 已发布；profile 装版后 **`weixin.enabled` 仍保持 `false`**（先确认宿主启动/热重载日志无异常、飞书通道照常，再由李浩显式开启）。
+- 发布后状态：1.5.27 已发布；profile 装版后 **`weixin.enabled` 仍保持 `false`**（先确认宿主启动/热重载日志无异常、飞书通道照常，再由用户显式开启）。
 
 ## 1.5.26（2026-11-11 修复：回发攒批覆盖式 set——多文本段 turn 丢失前段文本，坑 #73）
 
@@ -752,9 +752,9 @@
 ## 1.5.24（2026-11-11 修复 1.5.23 遗漏 import + 禁用宿主 ask_user_question 选项组件）
 
 - 环境：DSH-执行智能体（DeepSeek Harness 子会话，模型名未确证）
-- git：本次 commit（2026-11-11，阿依娅伊）1.5.24：装版静态断言抓到的运行时 ReferenceError 修复 + 李浩拍板的工具禁用。
+- git：本次 commit（2026-11-11，阿依娅伊）1.5.24：装版静态断言抓到的运行时 ReferenceError 修复 + 用户拍板的工具禁用。
 - **修：`lib/feishu.js` `resolveChannelForChat` 里 `extractFeishuErrorCode is not defined`**——1.5.23 的 230001 判定在 catch 块里调用了 `extractFeishuErrorCode`（定义在 `feishu-logic.js`），但忘了加进 import；任何 probe 抛错（含 230001/网络错）都会 ReferenceError。`node --check` 查不出运行时引用错误，multiapp 测试够不到这条 SDK+网络路径，是装版静态断言（伪造 chatId 实测）抓出来的。修法：import 列表补 `extractFeishuErrorCode`。
-- **禁用宿主工具 `ask_user_question`（选项组件）**：`cordis.patch.yml` 两处挂载（preset-aiyayi 约 :236-240、preset-aiyayi-worker 约 :361-365）加 `disabled: true`——李浩 2026-11-11 拍板「提问一律纯文本，别折腾组件」：该工具在飞书侧没有交互载体，他点不了会卡死对话。工具定义在本体 `@deepseek-ai/dsh-tool-ask-user`，禁用挂载即从模型侧消失。
+- **禁用宿主工具 `ask_user_question`（选项组件）**：`cordis.patch.yml` 两处挂载（preset-aiyayi 约 :236-240、preset-aiyayi-worker 约 :361-365）加 `disabled: true`——用户 2026-11-11 拍板「提问一律纯文本，别折腾组件」：该工具在飞书侧没有交互载体，他点不了会卡死对话。工具定义在本体 `@deepseek-ai/dsh-tool-ask-user`，禁用挂载即从模型侧消失。
 - **连带废弃（预期内，死代码不删）**：1.5.18 引入的「飞书点选作答」链路（`buildQuestionCard`/`onCardAction`/`registerQuestionAnswerer` 等，见 1.5.18 条目「修四（D）」）随宿主工具禁用不再被触发；`tryAnswerByText` 文字兜底仍在（问答语义未消失，只是不再发卡片）。启动不受影响（相关代码仅在收到卡片回调/问题请求时执行）。
 
 ## 1.5.23（2026-11-11 修复：feishu_bind 对无效 chatId 的确定性拒绝——230001 与 230002 同判 not-member）
@@ -811,7 +811,7 @@
   - ✅ 只动**首尾**空白（`\n` / 空格 / 制表符）。
   - ✅ 带附件标记的路径行为**逐字节不变**（它原本就 trim 过，修复后结果与 1.5.20 一致）。
   - ✅ **中间**空行保持原样——「中间三连空行折叠」（`.replace(/\n{3,}/g,'\n\n')`）是**另一个需求**，
-    那条规则目前只在**有附件标记**时生效；要不要扩大范围要李浩点头，本次**不顺手改**。
+    那条规则目前只在**有附件标记**时生效；要不要扩大范围要用户点头，本次**不顺手改**。
 - 测试：新增 `test/feishu-trim.test.mjs`（跑真实链路 `extractText → stripAttachmentMarkers →
   markdownToLarkMd / splitMarkdownForCard` 的可导出函数，只 mock SDK 的 `channel.sender.send` 以观察最终 payload），覆盖：
   (a) 无附件标记的纯文本回复 → 首尾无空白；
@@ -1014,8 +1014,8 @@
 
 - 环境：DSH-创造模式-DeepSeek Harness 执行智能体（娅伊派出，模型名未确证）
 - git：本次 commit（2026-11-10，阿依娅伊）1.5.16：feishu-setup 技能脚本补进包内 `skills/feishu-setup/scripts/`（create-bot.js v5 扫码前置 + save-secret.js + get-csrf.js + get-cookies.js）+ 版本号 1.5.16
-- 发版：李浩指示把技能脚本补完整再发一版；package.json `files` 含 `"skills"` 整目录通配，脚本放进仓库即自动入包。npm pack 预演核对 scripts/ 4 文件齐全、无 .bak / credential / 密钥文件；敏感扫描通过（无硬编码 token/appSecret/密码/cookie，会话均运行时从 CDP 取；create-bot.js 默认 member open_id 属应用维度公开标识、非凭证，与 SKILL.md 已有 cli_ appId 先例同级，保留并注明）
-- 说明：1.5.15 条目曾记「create-bot.js v5 本体不入 npm 包」，本版按李浩指示改为入包；本地 `~/.dsh/skills/feishu-setup/scripts/` 与包内脚本同源（SHA256 一致），`syncBundledSkills` 覆盖无害
+- 发版：用户指示把技能脚本补完整再发一版；package.json `files` 含 `"skills"` 整目录通配，脚本放进仓库即自动入包。npm pack 预演核对 scripts/ 4 文件齐全、无 .bak / credential / 密钥文件；敏感扫描通过（无硬编码 token/appSecret/密码/cookie，会话均运行时从 CDP 取；create-bot.js 默认 member open_id 属应用维度公开标识、非凭证，与 SKILL.md 已有 cli_ appId 先例同级，保留并注明）
+- 说明：1.5.15 条目曾记「create-bot.js v5 本体不入 npm 包」，本版按用户指示改为入包；本地 `~/.dsh/skills/feishu-setup/scripts/` 与包内脚本同源（SHA256 一致），`syncBundledSkills` 覆盖无害
 
 ---
 
