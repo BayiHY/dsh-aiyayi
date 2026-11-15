@@ -37,9 +37,26 @@ mkdirSync(join(sandbox, 'pointer'), { recursive: true })
 homeTesting.pointerCacheReset()
 
 let ok = true
+/**
+ * 下面「[记忆] 待办行」那组断言要求沙盘被判定为**系统盘**，也就是依赖
+ * `isSystemDrive()` → `systemDrive()`：后者在非 win32 上直接返回 null
+ * （见 lib/home.js:374-378，跨平台设计如此），而 `driveOf()` 也认不出
+ * POSIX 路径里的盘符。**注 SystemDrive 环境变量改变不了**（门在 platform 上）。
+ * 所以这组按平台跳过并打印 SKIP，不伪造断言；在 Windows 上跑照常有意义。
+ */
+const WIN_ONLY = process.platform !== 'win32'
+let skipped = 0
 const check = (label, cond, extra = '') => {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}${cond ? '' : `\n        ${String(extra)}`}`)
   if (!cond) ok = false
+}
+const checkWin = (label, cond, extra = '') => {
+  if (WIN_ONLY) {
+    skipped++
+    console.log(`SKIP  ${label}（系统盘判定依赖 Windows 盘符语义，POSIX 上不适用）`)
+    return
+  }
+  check(label, cond, extra)
 }
 
 const toolDefs = []
@@ -203,11 +220,11 @@ check('pre-step 注入了 [时间] 行', text.includes('[时间] 现在'), text)
 // 断言不再写死路径（那太脆），验的是这次真正修好的行为：
 // 首轮给出待办、后续不再重复、文案要求她"主动提"而不是把"正常"当无事。
 const locLine = text.split('\n').find((line) => line.includes('[记忆]'))
-check('首轮 pre-step 带 [记忆] 待办行（系统盘且未搬家）', locLine !== undefined, text)
-check('文案是待办口吻而不是"正常"（1.5.3 修的就是这个）', locLine !== undefined && /该跟他说一句/.test(locLine), locLine)
-check('文案明确要求"主动提一句"', locLine !== undefined && /主动提/.test(locLine), locLine)
-check('提示行给了推荐盘线索', locLine !== undefined && /推荐/.test(locLine), locLine)
-check(
+checkWin('首轮 pre-step 带 [记忆] 待办行（系统盘且未搬家）', locLine !== undefined, text)
+checkWin('文案是待办口吻而不是"正常"（1.5.3 修的就是这个）', locLine !== undefined && /该跟他说一句/.test(locLine), locLine)
+checkWin('文案明确要求"主动提一句"', locLine !== undefined && /主动提/.test(locLine), locLine)
+checkWin('提示行给了推荐盘线索', locLine !== undefined && /推荐/.test(locLine), locLine)
+checkWin(
   '提示行不再声称"正常"（否则她又会当成不用管）',
   locLine !== undefined && !/未搬家（正常）/.test(locLine),
   locLine,

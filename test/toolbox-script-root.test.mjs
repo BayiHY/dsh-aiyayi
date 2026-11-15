@@ -18,7 +18,7 @@
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = resolve(fileURLToPath(new URL('.', import.meta.url)))
@@ -232,8 +232,23 @@ check('端到端：toolbox_list 里 relative / absolute / relocated 三种来源
   && inspected.find((t) => t.name === 'relocated_tool')?.scriptSource === 'relocated',
   JSON.stringify(inspected.map((t) => [t.name, t.scriptSource])))
 check('端到端：toolbox_list 的 script 都是绝对路径（相对路径已拼好）',
-  inspected.filter((t) => t.scriptSource !== 'absolute' || true).every((t) => t.script.startsWith('/') || /^[A-Za-z]:/.test(t.script)),
+  inspected.every((t) => t.script.startsWith('/') || /^[A-Za-z]:/.test(t.script)),
   JSON.stringify(inspected.map((t) => t.script)))
+
+// 上一行只保证"都是绝对路径"。三种来源各自的**解析口径**还得分开锁：
+// 相对进来的落到当前记忆根下；重定位的落到当前记忆根（不是旧根）；绝对路径进来的原样保留。
+// 原写法 `filter(... || true)` 让 filter 恒真、这条退化成"全是绝对路径"，等于没测分档。
+const byName = (name) => inspected.find((t) => t.name === name)
+check('端到端：relative 条目拼到当前记忆根下',
+  typeof byName('rel_tool')?.script === 'string'
+  && byName('rel_tool').script.endsWith(`tools${sep}vision_ask.js`)
+  && byName('rel_tool').script.startsWith(resolve(sandbox)),
+  JSON.stringify(byName('rel_tool')?.script))
+check('端到端：absolute 条目原样保留（不被记忆根改写）',
+  typeof byName('abs_tool')?.script === 'string'
+  // 原样 = 等于清单里写进去的那个绝对路径（asSlash 后的形式），而不是被拼成新根下的路径。
+  && resolve(byName('abs_tool').script) === resolve(toolScript),
+  `${JSON.stringify(byName('abs_tool')?.script)} vs 原始 ${toolScript}`)
 
 // 搬家演练：root 换到新目录（旧目录改名），清单一个字不改，仍能全注册
 const movedRoot = join(sandbox, 'moved-memory')

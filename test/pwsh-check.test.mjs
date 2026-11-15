@@ -326,7 +326,13 @@ test('降级：其他 error 也是 major:null，不抛', async (t) => {
  * 3b. 绝对路径兜底（坑 #75：PATH 没刷新但 pwsh 已装）
  * ------------------------------------------------------------------ */
 
-test('候选清单：pwshPathCandidates 覆盖已知安装位置', () => {
+// 本用例断言的是 **Windows 路径拼接**的结果（`C:\Users\test\AppData\Local\Microsoft\WindowsApps\pwsh.exe`）。
+// `pwshPathCandidates` 内部用 `path.join` 拼盘符路径，而 POSIX 上 `path.join` 用的是正斜杠、
+// 且把 `C:\...` 当普通字符 → 拼出 `C:\Users\test\AppData\Local/Microsoft/WindowsApps/pwsh.exe`。
+// 这是 **Windows 专用函数的 Windows 语义专用测试**：该函数只在 win32 上被调用
+// （detectPwshVersion 的 win32 分支），POSIX 上跑出这个形状不影响任何真实用户。
+// 所以按平台跳过，不伪造断言、也不去为测试改生产代码。
+test('候选清单：pwshPathCandidates 覆盖已知安装位置', { skip: process.platform !== 'win32' ? 'Windows 盘符路径拼接语义，POSIX 上不适用' : false }, () => {
   const env = {
     LOCALAPPDATA: 'C:\\Users\\test\\AppData\\Local',
     ProgramFiles: 'C:\\Program Files',

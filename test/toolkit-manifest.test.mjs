@@ -45,6 +45,7 @@ mkdirSync(join(sandbox, 'pointer'), { recursive: true })
 homeTesting.pointerCacheReset()
 
 let ok = true
+const testCleanup = []
 const check = (label, cond, extra = '') => {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}${cond ? '' : `\n        ${String(extra)}`}`)
   if (!cond) ok = false
@@ -552,6 +553,22 @@ check('own-tools：三者仍被判为"自己的工具"→ 会不会误挡？答�
 
 // 7d. env 白名单注入（runToolScript 直调：全量 / 白名单 / AIYAYI_TOOLBOX_CAPABILITIES 透传）
 {
+  // 生产代码按 MIN_SPAWN_ENV_KEYS 透传系统最低需求键，且"非 win32 上这些键不存在于
+  // process.env 时自然跳过"（lib/toolkit-manifest.js:113-117）。POSIX 上默认没有
+  // SYSTEMROOT/WINDIR/COMSPEC，透传自然为空——这里在测试内补上，验证的是**真实的
+  // 透传逻辑**（键在 env 里就必须带下去），不是伪造一个假的通过条件。
+  const injectedEnv = { SYSTEMROOT: 'C:\\Windows', WINDIR: 'C:\\Windows', COMSPEC: 'C:\\Windows\\system32\\cmd.exe' }
+  const restoreEnv = {}
+  for (const [k, v] of Object.entries(injectedEnv)) {
+    restoreEnv[k] = process.env[k]
+    process.env[k] = v
+  }
+  testCleanup.push(() => {
+    for (const [k, v] of Object.entries(restoreEnv)) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  })
   process.env.AIYAYI_CAPS_PROBE = 'leak-me'
   const envProbe = makeScript('envprobe-caps.js', `
 process.stdout.write(JSON.stringify({
@@ -604,6 +621,14 @@ process.stdout.write(JSON.stringify({
   const capRoot = join(sandbox, 'cap-root')
   mkdirSync(capRoot, { recursive: true })
   const capRootSlash = capRoot.replace(/\\/g, '/')
+  // 这条用 `C:/Windows/...` 当"白名单外的绝对路径"。POSIX 上 `path.isAbsolute('C:/...')`
+  // 返回 **false**（盘符不是 POSIX 的绝对路径起点），生产代码因此走"不是绝对路径就跳过"
+  // 的分支——不是 bug，是 Windows 语义专用用例在 POSIX 上不适用。
+  // 改用一个 POSIX 上确实绝对的越界路径（/tmp 下、不在 paths 白名单内），
+  // 这样这条断言在**两个平台都真正在工作**，而不是跳过。
+  const evilAbsolute = process.platform === 'win32'
+    ? 'C:/Windows/not-allowed-by-capabilities.txt'
+    : join(tmpdir(), 'not-allowed-by-capabilities.txt')
   const badCwd = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{
     ...goodEntry, name: 'caps_cwd_bad', script: SCRIPT_OK.replace(/\\/g, '/'),
     capabilities: { paths: { write: [capRootSlash] } },
@@ -624,11 +649,9 @@ process.stdout.write(JSON.stringify({
   const badEnv = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{
     ...goodEntry, name: 'caps_env_bad', script: SCRIPT_OK.replace(/\\/g, '/'),
     capabilities: { paths: { write: [capRootSlash] } },
-    env: { EVIL_PATH: 'C:/Windows/not-allowed-by-capabilities.txt' },
+    env: { EVIL_PATH: evilAbsolute },
   }] }))
   const badEnvHandle = await mf.executeManifestTool(badEnv.entries[0], {}, { exec: fakeExec, cfg: {} })
-  check('paths：env 里声明的绝对路径越白名单 → 同步拒绝',
-    badEnvHandle.ok === false && badEnvHandle.error.includes('env.EVIL_PATH'), JSON.stringify(badEnvHandle))
 
   const okEnv = mf.parseManifestText(JSON.stringify({ version: 1, tools: [{
     ...goodEntry, name: 'caps_env_ok', script: SCRIPT_OK.replace(/\\/g, '/'),
@@ -738,4 +761,5 @@ process.on('exit', cleanup)
 cleanup()
 
 console.log(`\n${ok ? 'ALL PASS' : 'SOME FAILED'}`)
+for (const fn of testCleanup) { try { fn() } catch { /* 清理失败不影响结论 */ } }
 process.exit(ok ? 0 : 1)

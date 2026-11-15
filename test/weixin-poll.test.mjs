@@ -14,7 +14,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { test } from 'node:test'
+import { test, mock } from 'node:test'
 
 import { ensureWeixinDirs, loadCursor, saveCursor } from '../lib/weixin/accounts.js'
 import { pollLoop, sleepInterruptible } from '../lib/weixin/poll.js'
@@ -294,7 +294,13 @@ test('pollLoop：网络异常连续 3 次退避 30s，且 30s 退避可被 abort
     throw new Error('ECONNRESET')
   }
 
-  const startedAt = Date.now()
+  // 退避时长是生产代码里的硬编码常量（lib/weixin/poll.js:BACKOFF_DELAY_MS = 30_000），
+  // 不为测试加可配置参数（那会为了测试污染生产 API）。改用 node:test 的 mock.timers
+  // 接管 setTimeout：测试代码一行不改生产逻辑，只是把"等 2s / 等 30s"压缩成立即快进，
+  // 断言的对象仍是**真实的退避数值与 abort 打断行为**，不是伪造。
+  mock.timers.enable({ apis: ['setTimeout'] })
+  t.after(() => mock.timers.reset())
+
   const promise = pollLoop({
     ctx: { logger },
     root,
@@ -302,17 +308,25 @@ test('pollLoop：网络异常连续 3 次退避 30s，且 30s 退避可被 abort
     signal: controller.signal,
     deps: { getUpdatesImpl },
   })
-  // 前两次退避各 2s；第三次退避 30s 期间 abort
-  await new Promise((r) => setTimeout(r, 4600))
+
+  // 让轮询循环真正跑起来，再逐段快进：前两次退避各 2s，第三次退避 30s 期间 abort。
+  const flush = () => new Promise((r) => setImmediate(r))
+  await flush()
+  mock.timers.tick(2000) // 第 1 次退避结束
+  await flush()
+  mock.timers.tick(2000) // 第 2 次退避结束
+  await flush()
+  // 此刻应已进入第 3 次 30s 退避；推进一点点但不到 30s，然后 abort。
+  mock.timers.tick(1000)
+  await flush()
   controller.abort()
   const result = await promise
-  const elapsed = Date.now() - startedAt
+
   assert.equal(result.reason, 'aborted')
   assert.ok(
     logger.lines.some((l) => l.includes('退避 30000ms')),
     `第 3 次失败应退避 30s，日志: ${logger.lines.join(' | ')}`,
   )
-  assert.ok(elapsed < 10000, `abort 应能打断 30s 退避，实测 ${elapsed}ms`)
 })
 
 test('pollLoop：onMessages 抛错不终止轮询', async (t) => {

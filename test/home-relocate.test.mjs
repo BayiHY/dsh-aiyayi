@@ -28,9 +28,33 @@ const home = await import(libHome)
 const memory = await import(libIndex)
 
 let ok = true
+/**
+ * Windows 盘符语义专用：这些用例断言的是 `driveOf` / `systemDrive` / `isSystemDrive`
+ * 以及「外置盘探测按盘符归属」的行为，**全部依赖 Windows 的盘符路径模型**。
+ *
+ * 在 POSIX 上这个模型压根不存在：`node:path` 的 resolve/join 是 POSIX 实现，
+ * `resolve('I:\\x')` 会变成 `/root/.../I:\x`（相对路径），`driveOf` 取不到盘符，
+ * 而 `systemDrive()` 在非 win32 上直接返回 null（见 lib/home.js:374-378，这是有意的
+ * 跨平台设计，不是 bug）。**注入 SystemDrive/SYSTEMROOT 等环境变量改变不了这一点**——
+ * 门在 `process.platform` 判断上，不在环境变量上。
+ *
+ * 所以这里按平台跳过并打印 SKIP（不计入 PASS/FAIL），而不是伪造断言让它"变绿"。
+ * 在 Windows 上跑这套测试，这些用例照常执行、照常有意义。
+ */
+const WIN_ONLY = process.platform !== 'win32'
+let skipped = 0
 const check = (label, cond, extra = '') => {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}${cond ? '' : `\n        ${String(extra)}`}`)
   if (!cond) ok = false
+}
+/** 仅 Windows 有意义的断言：POSIX 上跳过并计数。 */
+const checkWin = (label, cond, extra = '') => {
+  if (WIN_ONLY) {
+    skipped++
+    console.log(`SKIP  ${label}（Windows 盘符语义专用，POSIX 上不适用）`)
+    return
+  }
+  check(label, cond, extra)
 }
 
 const sandboxBase = join(tmpdir(), `aiyayi-home-${Date.now()}`)
@@ -244,7 +268,11 @@ for (const [label, target, expect] of rejections) {
   const opts = label.startsWith('6') ? { freeBytes: 1024, sourceBytes: 20 * 1024 } : {}
   const pre = home.preflight(actual, opts)
   reasons.push(pre.reason)
-  check(`preflight 拒绝 ${label}`, pre.ok === false && pre.reason.includes(expect), `${pre.ok} / ${pre.reason}`)
+  // '2 系统盘' 依赖 systemDrive()（POSIX 恒 null）、'4 父目录不存在' 依赖 `Z:\` 盘符
+  // 被 POSIX path 识别——两条都是 Windows 盘符语义专用。
+  const driveSemantics = label.startsWith('2') || label.startsWith('4')
+  const assertFn = driveSemantics ? checkWin : check
+  assertFn(`preflight 拒绝 ${label}`, pre.ok === false && pre.reason.includes(expect), `${pre.ok} / ${pre.reason}`)
 }
 delete process.env.OneDrive
 home.__testing.candidateCacheReset()
@@ -410,7 +438,7 @@ home.__testing.candidateCacheReset()
 const { candidates, excluded } = home.listCandidatePaths()
 check('候选里没有系统盘', candidates.every((item) => !home.isSystemDrive(item.path)), candidates)
 check('候选按剩余空间降序', candidates.every((item, i) => i === 0 || candidates[i - 1].freeGb >= item.freeGb), candidates.map((c) => c.freeGb))
-check('系统盘在 excluded 里且写明原因', excluded.some((item) => item.drive === (home.systemDrive() ?? ''), ), excluded)
+checkWin('系统盘在 excluded 里且写明原因', excluded.some((item) => item.drive === (home.systemDrive() ?? ''), ), excluded)
 check('每个候选都带 path/freeGb/reason', candidates.every((item) => typeof item.path === 'string' && typeof item.freeGb === 'number' && typeof item.reason === 'string'), candidates)
 check('枚举是只读的：候选目录没被创建', candidates.every((item) => !existsSync(item.path)), candidates.map((c) => c.path))
 
@@ -420,7 +448,7 @@ check('枚举是只读的：候选目录没被创建', candidates.every((item) =
 console.log('\n=== 9. 盘符判定 ===')
 check('driveOf 统一大写', home.driveOf('g:\\示例记忆根') === 'G:', home.driveOf('g:\\示例记忆根'))
 check('driveOf 非盘符路径 → null', home.driveOf('/usr/local') === null, home.driveOf('/usr/local'))
-check('isSystemDrive 认系统盘', home.isSystemDrive('C:\\x') === true)
+checkWin('isSystemDrive 认系统盘', home.isSystemDrive('C:\\x') === true)
 check('isSystemDrive 不认非系统盘', home.isSystemDrive('G:\\x') === false)
 
 /* ------------------------------------------------------------------ *
@@ -525,20 +553,20 @@ home.__testing.setBusTypeCache(
 )
 
 const extPre = home.preflight(join('I:\\', 'memory-probe'), { freeBytes: 200 * 1024 ** 3, sourceBytes: 20 * 1024 })
-check('外置盘目标**放行**（只警告不拦截）', extPre.ok === true, JSON.stringify(extPre))
-check('外置盘目标带 external:true', extPre.external === true, extPre.external)
-check('外置盘目标带 busType', extPre.externalBusType === 'USB', extPre.externalBusType)
-check('警告条数 ≥ 1 且文案讲清后果与可拔风险', (extPre.warnings ?? []).length > 0 && /可拔|不可达/.test(extPre.warnings[0]), JSON.stringify(extPre.warnings))
+checkWin('外置盘目标**放行**（只警告不拦截）', extPre.ok === true, JSON.stringify(extPre))
+checkWin('外置盘目标带 external:true', extPre.external === true, extPre.external)
+checkWin('外置盘目标带 busType', extPre.externalBusType === 'USB', extPre.externalBusType)
+checkWin('警告条数 ≥ 1 且文案讲清后果与可拔风险', (extPre.warnings ?? []).length > 0 && /可拔|不可达/.test(extPre.warnings[0]), JSON.stringify(extPre.warnings))
 
 const intPre = home.preflight(join('F:\\', 'memory-probe'), { freeBytes: 200 * 1024 ** 3, sourceBytes: 20 * 1024 })
 check('内置盘目标**不**带警告', (intPre.warnings ?? []).length === 0, JSON.stringify(intPre.warnings))
-check('内置盘目标 external:false', intPre.external === false, intPre.external)
+checkWin('内置盘目标 external:false', intPre.external === false, intPre.external)
 
 // 关键：探测不可用（=别人的机器没 PowerShell / 非 Windows）→ 照常放行、无警告、不抛错。
 home.__testing.setBusTypeCache(null)
 const unknownPre = home.preflight(join('I:\\', 'memory-probe'), { freeBytes: 200 * 1024 ** 3, sourceBytes: 20 * 1024 })
-check('探测不可用时**照常放行**（不影响别人机器）', unknownPre.ok === true, JSON.stringify(unknownPre))
-check('探测不可用时 external 是 null（明确"不知道"）', unknownPre.external === null, unknownPre.external)
+checkWin('探测不可用时**照常放行**（不影响别人机器）', unknownPre.ok === true, JSON.stringify(unknownPre))
+checkWin('探测不可用时 external 是 null（明确"不知道"）', unknownPre.external === null, unknownPre.external)
 check('探测不可用时不产生警告', (unknownPre.warnings ?? []).length === 0, JSON.stringify(unknownPre.warnings))
 
 // 非 Windows：探测直接返回 null，且绝不抛错。
@@ -606,7 +634,7 @@ check(
   unknownSorted.candidates.every((item) => /未知/.test(item.reason)),
   unknownSorted.candidates.map((c) => c.reason),
 )
-check('探测不可用时 busKnown 标 false', unknownSorted.busKnown === false, unknownSorted.busKnown)
+checkWin('探测不可用时 busKnown 标 false', unknownSorted.busKnown === false, unknownSorted.busKnown)
 
 /* ------------------------------------------------------------------ *
  * 13. 首轮注入行不许在"类型未知"时点名某个盘（1.5.3）
@@ -635,8 +663,8 @@ home.__testing.setBusTypeCache(null)
 home.__testing.candidateCacheReset()
 const unknownLine = presence.__testing.renderMemoryLocationLine({ firstOfSession: true })
 check('未知磁盘类型时**不点名**推荐某个盘', !/推荐\s*\S+:\\(示例记忆根|dsh-aiyayi-memory)/.test(unknownLine), `line=${unknownLine} | root=${home.resolveRoot().root} | status=${home.memoryStatus(home.resolveRoot())}`)
-check('未知时明说"磁盘类型还没确认"', /还没确认/.test(unknownLine), unknownLine)
-check('未知时仍要求她主动提一句', /主动提/.test(unknownLine), unknownLine)
+checkWin('未知时明说"磁盘类型还没确认"', /还没确认/.test(unknownLine), unknownLine)
+checkWin('未知时仍要求她主动提一句', /主动提/.test(unknownLine), unknownLine)
 
 home.__testing.setBusTypeCache(
   new Map([
@@ -650,8 +678,8 @@ home.__testing.setBusTypeCache(
 )
 home.__testing.candidateCacheReset()
 const knownLine = presence.__testing.renderMemoryLocationLine({ firstOfSession: true })
-check('已知磁盘类型时给出推荐', /推荐/.test(knownLine), knownLine)
-check('推荐的**必须是内置盘**（不能是 I:/J:/D: 这些外置盘）', /推荐 [FGE]:\\/.test(knownLine) && !/推荐 [IJD]:\\/.test(knownLine), knownLine)
+checkWin('已知磁盘类型时给出推荐', /推荐/.test(knownLine), knownLine)
+checkWin('推荐的**必须是内置盘**（不能是 I:/J:/D: 这些外置盘）', /推荐 [FGE]:\\/.test(knownLine) && !/推荐 [IJD]:\\/.test(knownLine), knownLine)
 check('非首轮不出现（只在会话首轮念一次）', presence.__testing.renderMemoryLocationLine({}) === '', JSON.stringify(presence.__testing.renderMemoryLocationLine({})))
 
 
