@@ -12,7 +12,7 @@
  *   8) listCandidatePaths 排除系统盘、按空间降序、给「与插件同盘」加权说明
  *
  * 全部在临时目录里造沙盘，用 AIYAYI_HOME 定向 + __testing.setOverride 切根，
- * **绝不碰真实记忆目录** C:\Users\LH\.dsh\aiyayi。
+ * **绝不碰真实记忆目录** <记忆根>。
  */
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'

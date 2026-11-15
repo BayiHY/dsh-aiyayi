@@ -577,7 +577,7 @@ function humanPauseReason(json) {
   if (json && json.code === 9499) return '参数校验失败（code 9499，msg="' + msg + '"）：接口契约可能变了，请对照抓包核对 body 字段';
   if (json && json.code === 99991641) return 'session 失效（code 99991641）：浏览器登录态过期，重新登录 open.feishu.cn 后重跑';
   if (json && json.code === 99991672) return '缺 im:resource 权限（code 99991672）：本脚本 configure 子命令会自动补，或后台手工开通后重新发布版本';
-  if (/验证|风控|频繁|captcha|slide/i.test(msg)) return '疑似人机验证/风控触发（msg=' + msg + '）：请用户在浏览器里手动完成验证后重跑';
+  if (/验证|风控|频繁|captcha|slide/i.test(msg)) return '疑似人机验证/风控触发（msg=' + msg + '）：请在浏览器里手动完成验证后重跑';
   return null;
 }
 

@@ -41,7 +41,7 @@ writeFileSync(store, JSON.stringify({
       cronKind: mk('d', 'cron 周期', '2026-11-08T07:30:00.000Z', { kind: 'cron', expression: '*/30 1-8 * * *' }),
       withPrompt: mk('e', '带详细 prompt', '2026-11-08T09:30:00.000Z', {
         kind: 'at',
-        prompt: '到点了，该查补天平台的 mh 单了：QTVA-2026-11332391（乐山师范学院 mh.lsnu.edu.cn 未提供 HTTPS）。做法：派一个 subagent 用 aiyayi_cdp 去查。',
+        prompt: '到点了，该查某平台的工单了：TICKET-2026-000123（示例站点 example.com 未提供 HTTPS）。做法：派一个 subagent 用 aiyayi_cdp 去查。',
       }),
     },
   },
@@ -70,7 +70,7 @@ check('kind=cron 判为重复', byTitle['cron 周期'].recurring === true, byTit
 const text = renderAlarms(SESSION, NOW)
 console.log('\n--- 渲染（只列前 3 个，含摘要） ---\n' + text + '\n--------------------------\n')
 // 关键：带单号那条 prompt 排在 shown 之外（第 5 个），摘要必须仍能挑到它
-check('摘要从全部任务里挑有内容的（未被 shown 截断挤掉）', text.includes('QTVA-2026-11332391'), text)
+check('摘要从全部任务里挑有内容的（未被 shown 截断挤掉）', text.includes('TICKET-2026-000123'), text)
 check('摘要按长度截断并加省略号', /…$|\…/m.test(text) || text.length < 240, `len=${text.length}`)
 
 // 代理对安全：标题含 emoji 且 prompt 超长，截断后不应出现孤立代理
