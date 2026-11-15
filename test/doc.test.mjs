@@ -12,7 +12,7 @@
  *
  * 覆盖：
  *  - schema 闸：工具名/参数 schema/output.schema/render/own-tools 放行；
- *  - docx：段落提取与"第N段"定位、XML 实体解码、tab 折叠、range 区间与非法 range；
+ *  - docx：段落提取与"第N段"定位、XML 实体解码、tab/br 转空格、range 区间与非法 range；
  *  - xlsx：多工作表、A1 坐标、共享字符串、数值/布尔/内联串/错误四种单元格类型、
  *    sheet 选表与不存在的表、range 单元格区域；
  *  - pptx：按页提取、页码按**数字**排序（slide10 不能排到 slide2 前面）、range 取页；
@@ -300,24 +300,31 @@ test('docx：按段落提取，带"第N段"定位，实体解码，空白折叠'
   assert.equal(out.totalUnits, 3)
   assert.equal(out.returnedUnits, 3)
   assert.equal(out.truncated, false)
-  assert.equal(out.text, '第1段｜第一段 & 实体 <tag>\n第2段｜制表后面\n第3段｜多 空格')
+  assert.equal(out.text, '第1段｜第一段 & 实体 <tag>\n第2段｜制表 后面\n第3段｜多 空格')
 })
 
-test('docx：<w:tab/> 被丢弃（记下现状：doc.js 的 tab/br 替换是死代码）', async () => {
+test('docx：<w:tab/> / <w:br/> 转成空格，不再粘词', async () => {
   /*
-   * 这一条是"钉住现状"，不是"钉住理想行为"。
-   * lib/doc.js 的 extractDocx() 先把 <w:tab\b…> / <w:br\b…> 替换成 \t 和 \n，
-   * 但紧接着只从 <w:t>…</w:t> 里收集文本——tab/br 是 <w:t> 的**兄弟元素**，
-   * 替换出来的字符落在 <w:t> 外面，最后被丢掉。结果是"制表"和"后面"直接粘连。
-   * 生产代码没动（红线），已写进汇报的"生产代码问题"一节；哪天修了，这条会红，
-   * 那时把它改成断言 '制表\t后面' 即可。
+   * extractDocx() 按文档顺序遍历段落内部元素：<w:t> 取文本，<w:tab/> 和 <w:br/>
+   * 各补一个分隔空格（它们是 <w:t> 的兄弟元素，不能只从 <w:t> 里收集，否则
+   * "制<tab/>表"会粘成"制表"）。多余空格由 tidyText() 折叠，段落首尾的空白被 trim。
    */
   const p = writeTemp(
     'tab.docx',
-    makeDocx('<w:p><w:r><w:t>制表</w:t><w:tab/><w:t>后面</w:t><w:br/><w:t>换行后</w:t></w:r></w:p>').buffer,
+    makeDocx(
+      '<w:p><w:r><w:t>制表</w:t><w:tab/><w:t>后面</w:t><w:br/><w:t>换行后</w:t></w:r></w:p>' +
+        // 边界：tab/br 落在段落开头、结尾，以及连续多个。
+        '<w:p><w:r><w:tab/><w:t>开头是tab</w:t></w:r></w:p>' +
+        '<w:p><w:r><w:t>结尾是tab</w:t><w:tab/><w:tab/></w:r></w:p>' +
+        '<w:p><w:r><w:t>甲</w:t><w:tab/><w:br/><w:tab/><w:t>乙</w:t></w:r></w:p>',
+    ).buffer,
   )
   const out = await doc.execute({ path: p })
-  assert.equal(out.text, '第1段｜制表后面换行后')
+  assert.equal(
+    out.text,
+    '第1段｜制表 后面 换行后\n第2段｜开头是tab\n第3段｜结尾是tab\n第4段｜甲 乙',
+  )
+  assert.equal(out.totalUnits, 4)
 })
 
 test('docx：空段落不占编号（编号以非空段落连续计，range 也按这个编号）', async () => {
