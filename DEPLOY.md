@@ -4,12 +4,44 @@
 
 | 渠道 | 版本 | 位置 |
 |---|---|---|
-| npm | **1.7.5**（待发布；测试收口，fail 4 → 0，`lib/` 零改动） | https://www.npmjs.com/package/dsh-aiyayi |
-| GitCode | **1.7.5**（待推送） | https://gitcode.com/BayiHY/dsh-aiyayi |
-| Gitee | **1.7.5**（待推送） | https://gitee.com/BayiHY/dsh-aiyayi |
+| npm | **1.7.5**（已发布，`latest`；测试收口，fail 4 → 0，`lib/` 零改动） | https://www.npmjs.com/package/dsh-aiyayi |
+| GitCode | **1.7.5**（已推送 `861617f`） | https://gitcode.com/BayiHY/dsh-aiyayi |
+| Gitee | **1.7.5**（已推送 `861617f`） | https://gitee.com/BayiHY/dsh-aiyayi |
 | GitHub | **1.6.3**（沿用上轮记录 `13479ec`；本机无 ssh 客户端、HTTPS 被 SNI 阻断、无 token，无法实测与推送，1.6.4/1.7.0/1.7.1/1.7.2/1.7.3/1.7.4/1.7.5 待补） | https://github.com/BayiHY/dsh-aiyayi |
 
 本次发版：**1.7.5**（测试收口：4 个 Windows 环境失败按平台归位后 **fail 4 → 0**，一条断言未删；修掉 `toolbox-script-root` 的恒真 filter；4.6 秒真等改用 `mock.timers`；删 2 个从未被执行的自证文件。`lib/` 生产代码零改动，见 CHANGELOG 1.7.5 条目）。上一版 **1.7.4**（persona 四处修正 + 工具清单 mode 说明同步，见 CHANGELOG 1.7.4 条目）。
+
+**1.7.5 发布台账（2026-11-15 12:18 制作提交 / 12:44:22 发布 / 12:4x 回填，本机 DSH-Go 手机 proot 完成）**：**测试收口——Windows 环境用例按平台归位、fail 4 → 0**，且**没有删除任何一条断言**；另修一处恒真 filter、一处 4.6 秒真等改 `mock.timers`、删 2 个从未被执行的自证文件。本版 **`lib/` 生产代码一行未动**（纯测试与文档改动）。
+
+  **四个 commit（`git log --oneline` 实测）**：`4c53058`（同期另一路：`1.8 测试补口：lib/doc.js 与 lib/net.js 从零覆盖`，2 files / 1194 insertions，`test/doc.test.mjs` +575、`test/net.test.mjs` +619）→ `a8de423`（本版主体：`1.7.5 测试收口：Windows 环境用例按平台跳过、修 toolbox-script-root 恒真 filter`，**6 files / 136 insertions / 32 deletions**：`home-relocate` +58、`tools-surface` +27、`toolkit-manifest` +30、`weixin-poll` +26、`toolbox-script-root` +19、`pwsh-check` +8）→ `309c0ad`（`删除不匹配 test glob 的自证文件（从未被执行）`，2 files / 241 deletions，单独一个 commit 便于将来单独回滚）→ `861617f`（发版：`package.json` 1.7.4 → 1.7.5、`CHANGELOG.md` +64、`DEPLOY.md` 版本表，3 files / 70 / 6）。
+
+  **测试（发布前置核验，实跑）**：`node --test test/*.test.mjs` → **tests 264 / pass 263 / fail 0 / skipped 1**（duration 9344.689111ms），与预期逐字相符。⚠ **口径**：`tests 264` 里含 `4c53058` 那路带来的用例，**1.7.5 本身只把 fail 4 → 0**，未新增功能测试。
+
+  **两远端（实名实测，均在位、本轮机推即已一致）**：`git ls-remote origin refs/heads/main` → `861617f655372bfe2f22ee568d549292dd8a0117`（origin = gitcode）；`git ls-remote gitee refs/heads/main` → **同一 hash 逐字一致**。推前无需 push（上一轮已推齐），本轮只做台账回填后的增量推送。
+
+  **tag**：`v1.7.5` 为**附注 tag**（`git cat-file -t v1.7.5` = `tag`，与 v1.7.1/v1.7.2/v1.7.3 惯例一致），tag 对象 `be2854b2b5ffe8a3bc3ccea4a17e046aefc0cd5e` → 解引用 `861617f655372bfe2f22ee568d549292dd8a0117`（= HEAD，正确）。两远端 `git ls-remote --tags` 实测均为 `be2854b2… refs/tags/v1.7.5` + `861617f… refs/tags/v1.7.5^{}`，**两端逐字一致，已推齐**。
+
+  **npm pack 对账**：`npm pack --dry-run` → **54 个文件**（`entryCount` 与 `files.length` 均为 54）、`dsh-aiyayi@1.7.5`、package size **515555 B（515.6 kB）**、`unpackedSize` **1427112**、shasum **`bc14f0aa7347ce73f7aef833c6936cce4c213e84`**、integrity `sha512-3ib+m/gficSXC3a/jdyIYxPMDnmqz5aIT2j3U+JZIoWXCy3OV+wcj1e4KZm6BoMT/WdxOVQ7Aw21lLWFSWEc1A==`。**文件数与 1.7.4 一致（54 个）**：本版虽然删了 2 个自证文件（`presence-midnight-proof.mjs`、`feishu-status-proof.mjs`），但它们在 `test/` 下、**本就不在 `files` 白名单、从未入包**，故包内文件数不变（属预期，非漏发）。`test/`、`docs/`、`MEMORY-MIGRATION.md` 照旧不入包。
+
+  **npm 发布（本轮经历特殊，如实记录）**：令牌从 `/root/.bashrc` 的 `NPM_KEY` 取值（`grep -oP '^export NPM_KEY=\K.*'`，**不 source .bashrc**——非交互 shell 取不到；实测非空、长度 40），只进**临时 userconfig** `/tmp/npmrc-pub`（`umask 077` + `chmod 600`），用完即 `rm`（复核 `ls` → No such file），不落 `~/.npmrc`、不入仓、不入台账、不打印。`npm whoami --userconfig /tmp/npmrc-pub --registry=https://registry.npmjs.org/` → **`bayihy`**（凭据有效，**非** 401/403/OTP 问题）。本机默认 registry 是 npmmirror（既有坑），照例显式 `--registry=https://registry.npmjs.org/`。
+
+  ⚠ **本轮踩到一个新坑，值得单独记：`E409 Cannot publish over previously staged version` 不等于发布失败。** 首次 `npm publish`（本地 12:28:38）**退出码 1**，报错原文：
+  ```
+  npm error code E409
+  npm error 409 Conflict - PUT https://registry.npmjs.org/dsh-aiyayi - Cannot publish over previously staged version "1.7.5".
+  ```
+  栈显示确实走到了**正式 PUT**路径（`libnpmpublish/lib/publish.js:54` ← `otplease` ← `Publish.#publish`），debug 日志有 `http fetch PUT 409 https://registry.npmjs.org/dsh-aiyayi 2031ms` 与完整 tarball 上传记录（54 files / 515.6 kB / shasum `bc14f0aa…`）。**按「不重试超过 2 次」约束又跑了一次（12:29:58），同样 E409、退出码 1，随即停手。**
+  当时据以下证据**误判为"发布被拒"**：①`npm stage list dsh-aiyayi` → `No staged versions of package name "dsh-aiyayi".`；②直接打 API `GET /-/stage?package=dsh-aiyayi&perPage=100`（带 Bearer）→ `{"items":[],"page":0,"perPage":10,"total":0}`；③不带 `package` 过滤查全部 staged → 同样 `total: 0`；④`registry.npmjs.com` / cache-bust 参数 / `state=all` / `status=pending` / `include=all` 各变体全空；⑤`/-/stage/package/dsh-aiyayi` 对 GET 返回 **405 MethodNotAllowed**（只收 POST），`/-/stage/package/dsh-aiyayi/1.7.5` 返回 **404**；⑥`npm view dsh-aiyayi@1.7.5 version` → **E404**、tarball `/-/dsh-aiyayi-1.7.5.tgz` → **HTTP 404**、`dist-tags` 仍 `{latest:'1.7.4'}`。因拿不到 `stageId`，`npm stage approve|reject` 都用不了（缺 UUID 时报 `stage-id must be a valid UUID`），故当时**停手等人工决策**，未改版本号、未动 tag、未回填台账（发布没成功就写台账等于造假）。
+
+  **真实结果：那次 publish 其实已经成功送进 staged，随后被放行。** 实测 `time["1.7.5"]` = **`2026-11-15T04:44:22.586Z`**（本地 12:44:22）、`modified` = **`04:44:22.733Z`**；用户也收到 npm 发布成功邮件。**即 CLI 把响应当错误抛出，但服务端已受理——E409 的语义是"已有同版本 staged 记录在途"，不是"被拒绝"。**
+
+  **下次遇到 E409 的正确判断顺序（写进规矩）**：①**先 `npm view dsh-aiyayi@<版本> version dist.shasum` + 看 npm 后台 Pending/Staged 列表**，别先当成失败；②查 `/-/stage` 列表为空**不代表没有 staged 记录**（本轮实证：列表 `total: 0` 却有记录挡住 PUT，属 registry 侧可见性缺口）；③**不要立刻重发**，更不要换版本号绕开——换号会让 tag 与 npm 版本永久不一致，比等更麻烦；④拿到 npm 后台的 stageId 后走 `npm stage approve <uuid>`（放行）或 `npm stage reject <uuid>`（清掉后重发），这是唯一干净的处置路径。
+
+  **发布后验证（真下载，不只看元数据）**：`npm pack dsh-aiyayi@1.7.5 --registry=https://registry.npmjs.org/` 到干净目录 `/tmp/verify175` → **下载成功、exit 0**、`dsh-aiyayi-1.7.5.tgz` **515555 字节**；本地实算 **SHA1 = `bc14f0aa7347ce73f7aef833c6936cce4c213e84`**，与 registry `dist.shasum` **逐字一致**；实算 sha512 base64 = `sha512-3ib+m/gficSXC3a/jdyIYxPMDnmqz5aIT2j3U+JZIoWXCy3OV+wcj1e4KZm6BoMT/WdxOVQ7Aw21lLWFSWEc1A==`，与 `dist.integrity` **逐字一致**；且与**发布前 `npm pack --dry-run` 的 shasum 四方一致**（dry-run / registry `dist.shasum` / 下载回 tgz 实算 / 台账，本次 dry-run 指纹有效——与 1.7.3 那次 dry-run 指纹失效的情形不同）。解包实测 **54 个文件**、包内 `version` = **1.7.5**、`test/`+`docs/` 零命中；**包内 54 个文件 vs 源码仓 HEAD 逐文件 SHA256 比对：缺失 0、内容不一致 0**。`npm view dsh-aiyayi version dist-tags` → `version = '1.7.5'`、`dist-tags = { latest: '1.7.5' }`；`gitHead` = **`861617f655372bfe2f22ee568d549292dd8a0117`**（registry 元数据实测，与两远端 main 逐字一致）；`_npmVersion` = `11.19.1`、`_nodeVersion` = `24.22.1`；`versions` 数组 **63 项**、末三位 `1.7.3, 1.7.4, 1.7.5`。关键文件 SHA256（包内 vs 源码仓 HEAD 一致）：`cordis.patch.yml`=`F8ABC74D6DA89DECA3ED4E18913B603BEB9D4E0400C6EF0A3A2F698F8137DC62`、`lib/index.js`=`2C2CC8099532F3A2B66902803EF967F1BD6C3AA6345703FC30E350B322E0B4E4`、`package.json`=`459E4C05436694FAB7EBE8F3B1F538954F6E347E90647CFE1E4EC020BFC49877`、`CHANGELOG.md`=`2711A4D1C6920A7FC554BF2690C9BBEB60BFC4167CC554DB3EE41A415FD2F113`、`README.md`=`CC877BB5BF5A4A5E915C9DF53631B66A586937698D88FA4E003B5AC0883B3E59`（`CHANGELOG.md` 为发布时快照；本台账回填改的是 `DEPLOY.md`，**不在 `files` 白名单、不入包**，不引入差异）。
+
+  **回查 1.7.4 未受影响（此前有过 404 误判）**：`curl https://registry.npmjs.org/dsh-aiyayi/-/dsh-aiyayi-1.7.4.tgz` → **HTTP 200 / 513329 字节**；`npm pack dsh-aiyayi@1.7.4` 亦成功，实算 SHA1 = **`f0faf37cda92bfba1947041f32de099d00347b61`**，与 `npm view dsh-aiyayi@1.7.4 dist.shasum` **逐字一致**；`time["1.7.4"]` = `2026-11-15T04:05:43.940Z` 未被改动。
+
+  **红线复核**：真实人名 grep 全仓（排除 `.git`）→ **0 命中**（此处不写字面量，免得台账自身又把它们带回来——**本台账初稿曾误将查询串写进正文，导致该 grep 自命中 1，已改写为不带字面量的表述，复核复归 0**）；未改业务代码、未改测试、未改版本号（保持 1.7.5）、未强推、未 rebase、未推 GitHub（本机无 ssh）。**未动 profile 安装副本**（`<profile>/node_modules/dsh-aiyayi` 仍是指向源码仓的软链，按红线保持）。**生效方式：重启 DSH**。
 
 **1.7.3 发布台账（2026-11-15 11:5x 本机 DSH-Go 手机 proot 完成）**：**清理测试与对外文档里的真实私人数据 + 修复一个在别人机器上必挂的测试 + persona 补「小伙伴」定义**。本版 `lib/` 业务逻辑**零改动**（仅两处注释改写）。
 
