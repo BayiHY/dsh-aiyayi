@@ -29,7 +29,7 @@ import { after, test } from 'node:test'
 import { apply, __testing } from '../lib/index.js'
 import { __testing as homeTesting } from '../lib/home.js'
 
-const { fileHealth, renderCore } = __testing
+const { fileHealth, renderCore, detectInjectedMarkers } = __testing
 
 /* ------------------------------------------------------------------ *
  * 沙盘隔离：只给 schema 测试里的 apply() 用。fileHealth 本身是纯函数，
@@ -483,6 +483,65 @@ test('K2. 结构豁免不能放太宽：`#号方案…` / `-> 指向…` 这类�
   assert.equal(health.entries, 1)
   assert.equal(health.nonEntry, 2, '两行都该算非条目（结构豁免宁可少放、不能多放）')
   assert.ok(health.ratio > 0.5)
+})
+
+/* ------------------------------------------------------------------ *
+ * L. 1.7.1 注入痕迹检测：整篇提示词被灌进档案时要**点名**，不能只报模糊比例
+ * ------------------------------------------------------------------ */
+test('L1. 灌进整段系统提示词 → 命中明确标记并带行号（不做模糊比例）', () => {
+  const raw = [
+    '- [2026-11-13 12:50] 用户住在杭州，口味清淡。',
+    '',
+    '## MCP resource servers',
+    '下面是一堆跟本档案无关的服务器说明。',
+    '【你是谁】',
+    '你是阿依娅伊。',
+  ].join('\n')
+  const hits = detectInjectedMarkers(raw)
+  assert.equal(hits.length, 2, '命中 `## MCP resource servers` 与 `【你是谁】` 两行')
+  assert.deepEqual(hits.map((h) => h.line), [3, 5], '行号是 1-based 的真实行号')
+  assert.ok(hits[0].sample.includes('MCP resource servers'), '样例文本给出原文，便于人工核对')
+})
+
+test('L2. fileHealth 把注入痕迹写成一条点名预警，且不改变非条目口径', () => {
+  const raw = [
+    '- [2026-11-13 12:50] 用户住在杭州，口味清淡。',
+    'Current runtime context',
+    'Working directory: /sdcard/1/dsh',
+    '- [2026-11-13 13:05] 约定：每周日晚上一起复盘。',
+  ].join('\n')
+  const health = fileHealth(raw)
+  // 口径没动：非条目仍是那两行（比例阈值这条路完全不受影响）。
+  assert.equal(health.entries, 2)
+  assert.equal(health.nonEntry, 2)
+  const injectedWarning = health.warnings.find((w) => w.includes('整段注入痕迹'))
+  assert.ok(injectedWarning, '必须有一条点名注入痕迹的预警')
+  assert.match(injectedWarning, /Current runtime context/, '预警里直接写出命中的标记')
+  assert.match(injectedWarning, /第 2 行/, '预警里带首个命中的行号')
+  assert.match(injectedWarning, /不是"多行条目的续行"/, '明确区分"续行"与"真被灌进来了"')
+})
+
+test('L3. 正常内容不误报：多行条目的续行 / 正文里提到这些词都不算注入', () => {
+  const raw = [
+    '- [2026-11-13 12:50] 今天聊到了系统提示词的写法。',
+    '  续行：这一段是上一条的正文，写着【底线】两个字但不是段标题。',
+    '  续行二：还在讲 ## MCP 这种东西在正文中间出现不算标记。',
+  ].join('\n')
+  assert.deepEqual(detectInjectedMarkers(raw), [], '正文中间出现不算；只有行首/整行才算')
+})
+
+test('L4. 核心记忆里的 `<!-- 索引 -->` 是骨架，不算注入；分类档案里出现才是污染', () => {
+  const raw = ['- [2026-11-13 12:50] 一条记忆。', '<!-- 索引 -->', '事情/经验：单向沉淀', '<!-- /索引 -->'].join('\n')
+  assert.deepEqual(detectInjectedMarkers(raw, { isCore: true }), [], '核心记忆自带索引段，不报')
+  const hits = detectInjectedMarkers(raw, { isCore: false })
+  assert.equal(hits.length, 1, '分类档案里冒出来就是被灌的痕迹')
+  assert.equal(hits[0].marker, '<!-- 索引 -->')
+})
+
+test('L5. 干净档案完全不受影响（零误报是第一原则）', () => {
+  const health = fileHealth(CLEAN)
+  assert.deepEqual(health.warnings, [], '干净档案一条预警都不能有')
+  assert.deepEqual(detectInjectedMarkers(CLEAN), [])
 })
 
 test('K3. 结构行口径与 renderCore 一致：索引段/标题/引用/分隔线都不进注入正文', () => {

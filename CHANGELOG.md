@@ -10,6 +10,40 @@
 
 ---
 
+## 1.7.1（2026-11-15：百宝袋脚本路径跟着记忆根走——相对路径支持 + 绝对路径失效自动重定位）
+
+- 环境：DSH-Go（dsh-app Android proot，Ubuntu 24.04）· 执行智能体会话（DSH-执行智能体）
+- **本版定位**：纯代码修复，`lib/` 三处（`toolkit-manifest.js` / `index.js`）+ 新测试。**不发版**：版本号仍是 1.7.0，npm publish 与 `package.json` 版本号留给发版阶段单独做（硬规矩：改代码和 publish 不混在一条任务里）。
+- **起因（实锤 bug）**：`toolbox.json` 每个条目的 `script` 存的是**绝对路径**（如 `/root/.dsh/aiyayi/tools/vision_ask.js`）。2026-11-15 记忆根从 `/root/.dsh/aiyayi` 搬到 `/sdcard/1/dsh/aiyayi-memory`、旧目录改名后，**11 条工具的脚本路径立刻全部悬空、全部注册失败**（用真实加载器 `loadManifest({root:'/sdcard/1/dsh/aiyayi-memory'})` 实跑，problems 11 条，每条都是「xxx 的脚本不存在：/root/.dsh/aiyayi/tools/xxx.js」）。而 `location.json` 已经在正确指路，加载器**压根没利用它**，只展开 `~` 和 `%VAR%`。
+- **根因三条**（另一路在 1.7.0 装版上实测补充，均已纳入本版）：
+  1. 解析链路只有 `expandPath`（`~` / `%VAR%` / `${VAR}`），**没有"相对记忆根解析"**，且非绝对路径一律被拒；
+  2. `AIYAYI_TOOLBOX_ROOT` 只在 `buildSpawnEnv`（脚本**已经在跑**时）注入，**清单解析（注册阶段，早于执行）拿不到它**——所以 `script: "${AIYAYI_TOOLBOX_ROOT}/tools/x.js"` 这种最省事的写法直接撞「必须是绝对路径」；
+  3. `location.json` 的搬家自检只校验 `coreBytes` / `coreSha16`（= `memory.md`），**不看 `toolbox.json`**，所以全盘悬空时搬家工具一声不吭。
+- **改了什么**：
+  1. **新增 `resolveManifestPath()`**（给 `script` 与 `cwd` 共用一条解析链）：① `expandPath` 展开照旧，且 `${AIYAYI_TOOLBOX_ROOT}` / `%AIYAYI_TOOLBOX_ROOT%` 在**解析阶段**就预置成当前记忆根（与执行阶段注入的是同一个值）；② 展开后是绝对路径 → **原样返回**（向后兼容，老清单照旧能用）；③ 是相对路径（`tools/x.js` / `./tools/x.js`）时 → **相对记忆根 root 解析**；④ 没拿到 root → 标 `no-root` 不瞎拼；⑤ 展开后仍残留变量 → 标 `undefined-var` 并带回变量名。
+  2. **新增 `locateScript()`**：解析 + 存在性 + **搬家兜底重定位**。绝对路径已不存在时，把 basename 拿到 `<root>/tools/` 下再找一次；找到就用（`scriptSource: 'relocated'`）并记一条 warning「清单里写的是旧绝对路径，已按记忆根重定位到 …；建议改成相对路径 tools/xxx.js」，**不判失败**——救所有搬家后没改清单的人。找不到才报"脚本不存在"。
+  3. **报错文案分情况**（原来「写了相对路径」和「变量没定义」都报同一句「script 必须是绝对路径，收到"…"」，把真实病因盖住）：现在分别是 `… 的 script 里的变量 XXX 没有定义` / `… 的 script 是相对路径 "…"，但这份清单没有可用的记忆根来拼绝对路径` / `… 的脚本不存在：<解析后的路径>（清单写的是相对路径 "…"，已按记忆根 <root> 解析；也按 basename 找过 <root>/tools/xxx.js，同样不存在）` / `… 的脚本不是普通文件（是目录？）`。
+  4. **`root` 一路透传**：`validateEntry` / `parseManifestText` / `readManifestFile` 全部接 `root`（`loadManifest` 早已解析出来，只是没往下传）。
+  5. **`toolbox_list` 新增 `scriptSource` 字段**（`absolute` / `relative` / `relocated`）并在 render 里标出「已按记忆根重定位；建议改成相对路径」——让"靠兜底才活下来"的条目显形，别把技术债藏起来。
+  6. **新增 `auditManifestPaths()` + 接入 `memory_location`**（补第 3 条根因）：只读判断"清单里哪些脚本路径一搬家就会悬空"——相对路径永远健康；落在当前记忆根内的绝对路径点名为风险（带"搬到 X 后会悬空"与"改成相对路径 tools/xxx.js"的具体建议）；根外的绝对路径（如 `~/tools/…`）不误报。`memory_location` 输出新增 `toolboxPathWarnings` 数组 + `detail` 里一行「百宝袋脚本路径：…」。**只提示、不改清单文件**（清单是运行时数据，归用户管）。
+  7. 模块头注释的清单示例与解析链说明同步更新（`script` / `cwd` 都改成相对写法示例）。
+  8. **顺带修一条相关的老问题（任务派单中途补入的实测需求）：健康度加"注入痕迹检测"**。起因是 2026-11-15 两件事同时发生——①`memories/事情/经验.md` 被灌进 410 行系统提示词，健康度只报"非条目占比高、可能被污染"这种模糊话，没人拦；②反过来，多行条目（条目头 + 后面一大段正文）的续行被当成"非条目垃圾"，`事情/经验.md` 报 84%、`手机操控.md` 60%、`手表.md` 38%，**全是误报**，差点按提示把真内容删了。本版做的是**低成本那一半**：新增 `detectInjectedMarkers()`（`INJECTED_MARKERS` 常量，14 条已知骨架标记：`## MCP resource servers` / `Current runtime context` / `Your parent agent id is` / `Tokens prefixed with @ are paths` / `【你是谁】` / `【底线】` / `【思考纪律】` / `【断点可续】` / `【收尾必交卷】` / `【联网规矩】` / `【手机工具不属于你】` / `【你的记忆】` / `【干活的规矩】` / `<!-- 索引 -->`），**只按行首匹配**（正文中间提到这些词不算），命中就写一条点名预警（带行号 + 原文样例 + 明确说"这不是多行条目的续行"）。核心记忆的 `<!-- 索引 -->` 是骨架、不算污染（`isCore` 排除）。**非条目占比口径一个字没动**（`entries` / `nonEntry` / `ratio` 全部保持原样，19 条既有健康度断言逐条复跑仍全过）——续行识别是**算法口径变更**，会动到 1.6.2/1.6.3 两次事故修出来的阈值语义，本版不碰，留给 1.7.2 单独做（方案与风险见下）。
+- **同类硬编码路径审计（任务书第 3 项）**：`lib/toolkit.js` / `lib/toolkit-async.js` 逐处查过——`toolkit_write` 默认白名单、`usageFilePath()`、清单默认路径都走 `resolveRoot()` 动态解析（无写死盘符）；`watchDir` 默认 `null`、按插件位置推导（注释里明写"不写死盘符"）；`toolkit-async.js` 完全不碰记忆根。**结论：这两支文件没有需要改的硬编码路径假设**，故本版未动它们。
+- **测试**：新增 `test/toolbox-script-root.test.mjs`（**51 条断言**），覆盖任务书 ①②③④：①相对路径（`tools/x.js` / `./tools/x.js` / 子目录）在 root 下解析、`${AIYAYI_TOOLBOX_ROOT}` 写法通过；②老绝对路径照旧可用且不被改写、不传 root 也能用；③旧绝对路径失效 + `<root>/tools/<basename>` 存在 → 重定位成功、`scriptSource: 'relocated'`、warning 进清单级 warnings 与 manager 的 issue 队列；④两者都不存在 → problems 有正确报错（分情况：变量没定义 / 没有记忆根 / 相对路径不存在 / 绝对路径不存在 / 是目录）；另覆盖 cwd 同链、`toolbox_list` 的 `scriptSource` 标位、加载器端到端、**搬家演练**（清单一个字不改、root 换新目录后仍全解析）、`auditManifestPaths` 四种场景。
+- **测试结果**：`node --test test/*.test.mjs` → **tests 196 / pass 191 / fail 5**，新文件 51 条全过、`memory-health` 新增 5 条（L1–L5）全过。5 个失败与本次改动前的基线**逐字一致**（改动前实测同样 5 条）：`alarm-inject`（硬编码 `G:\阿依娅伊\...\lib/presence.js`）、`home-relocate`（测试假设 Windows 盘符 `I:` 存在）、`tools-surface`（5 条，假设记忆根在系统盘）、`pwsh-check`（假设 Windows `msstore` alias）、`toolkit-manifest`（2 条，Windows `SYSTEMROOT` 与 `C:/Windows` 路径假设）——全是本机（Android proot）无盘符/无 PowerShell 的环境基线，**零新增失败**。
+- **未做（明确留给后续）**：
+  1. `package.json` 版本号与 npm publish（发版阶段，另一人做）；`/sdcard/1/dsh/aiyayi-memory/toolbox.json` 这个运行时清单一个字没动（另一路已把它改成新绝对路径、百宝袋已恢复 7 启用 4 关闭、problems=0）。
+  2. **多行条目的续行识别**（健康度假警报的根治）——**方案与风险如下，留给 1.7.2**：
+     - 现状：`fileHealth` 逐行判定，`parseLine()` 解析不出 `- [时间] …` 的行一律进 `nonEntry`。所以"条目头 + 后面一大段正文"的写法里，正文每一行都被算成非条目 → 占比虚高 → 假警报。
+     - 方案：在 `fileHealth` 的逐行循环里加"归属"状态机——遇到能解析的条目行就进入"条目正文"状态；后续行**缩进 ≥ 2 空格**、或非空且不以 `- [` / 结构行开头，就归为**上一条的续行**（计入条目、不计入 nonEntry）；遇到空行或下一条条目行则退出状态。同时把续行字节并进 `entryBytes`（否则 `avgEntryBytes` 会被拉低、`HEALTH_BYTES_FACTOR` 的膨胀判据会误触发）。
+     - 风险：①**会改变 1.6.2/1.6.3 两次事故修出来的口径**——`test/memory-health.test.mjs` 里 `DIRTY` / `HUGE` / `GARBAGE_ONLY` 三个 fixture 的期望值全部要重算（尤其 `HUGE` 那条：一段无缩进的注入垃圾如果紧跟在条目后面，会被新模式误判成续行，**膨胀判据反而失效**，需要"续行必须缩进"这条硬约束兜住）；②"空行分段归属"更宽松也更危险，建议不做；③阈值（0.3 / 0.5）要不要跟着重调，得拿真实记忆库跑一遍再定，不能拍脑袋。
+     - 结论：**本版不做**（会把已收尾的一轮拖长、还可能动到刚修好的假警报逻辑），1.7.2 单独做，届时要把上述 19 条既有断言 + 真实档案的实测数字一起核对。
+  3. `location.json` 的搬家自检**没有**把 `toolbox.json` 嵌进 `relocateTo` 的拒绝/警告链——本版只在 `memory_location` 里加了只读的 `auditManifestPaths()` 提示（`toolboxPathWarnings`），**没有**改 `preflight` 的 9 条拒绝规则（改那里会动到 `home-relocate` 一大批既有断言，风险与收益不成比例）。要更早拦截（搬之前就拦住），可在 1.7.2 里把 `auditManifestPaths` 接进 `preflight` 的 warnings（**警告不拦截**，与"外置盘只警告"同款）。
+
+---
+
+---
+
 ## 1.7.0（2026-11-14：DSH-Go 手机操控适配——`mcp__phone__*` 放行 + `[手机]` 守则注入 + worker 人格闸）
 
 - 环境：DSH-Go（dsh-app Android proot，Ubuntu 24.04）· 团队 Lead 会话
