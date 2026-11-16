@@ -1,6 +1,6 @@
 # 阿依娅伊（aiyayi）
 
-一个装在 DSH 里的**对话伙伴 preset**：有独立人格、有自己长期的记忆、说话像人；她本人只负责聊天，动手的活全部派给子智能体（自建"小伙伴"全量预设，还能往下派"检索员"），纯查资料的活直接派轻量的检索员（能解析 Office/PDF 文档，小伙伴侧自动收到检索员的失败断因）。
+一个装在 DSH 里的**对话伙伴 preset**：有独立人格、有自己长期的记忆、说话像人；她本人只负责聊天和拿主意，动手的活全部派给子智能体（自建"小伙伴"全量预设，还能往下派"检索员"），纯查资料的活直接派轻量的检索员（能解析 Office/PDF 文档，小伙伴侧自动收到检索员的失败断因），跑工具跑命令的机械活派"百宝袋"（1.9.0 新增：照单执行、依赖自然成链、逐任务流式回执，本体派发即返回继续陪聊）。
 
 > 文中「坑 #N」均指 [更新日志（CHANGELOG.md）](./CHANGELOG.md)「已知坑」清单的编号。
 
@@ -12,7 +12,7 @@
 | 长期记忆 | 自写插件 `aiyayi-memory`（本包 `lib/index.js`），两层结构 | **核心记忆** `~\.dsh\aiyayi\memory.md` 每轮自动注入 + **分类档案** `~\.dsh\aiyayi\memories\` 按需加载；工具与整理细节见详解文档 |
 | 记忆路径可迁移 | 自写插件 `aiyayi-home`（本包 `lib/home.js`） | **唯一路径出口**：优先级 `location.json` 指路文件 > 环境变量 `AIYAYI_HOME` > 默认 `~/.dsh/aiyayi`；整棵记忆一起搬、失败即中止不静默回退 |
 | 跟随会话模型 | 无需插件行（1.0.1 起移除 agent-default-model 行） | 本体模型直接跟随用户会话模型；旧版"preset 作用域挂 `@deepseek-ai/dsh-agent-default-model` + `isolate: {agentDefaultModel: true}`"的写法在新版 DSH 过不了 schema 校验（见坑 #13），已删除 |
-| 干活的子智能体 | `@deepseek-ai/dsh-tool-subagent`（delegation 组，isolate workflowEngine；两个实例 toolName 不同） | `subagent`→`aiyayi-worker`（自建"小伙伴"预设，全量工具 + 原生自动压缩，见坑 #14）；`retriever`→`aiyayi-retriever`（1.3.0 新增检索员：只读摘文件/Office/PDF 文档/网页内容、带路径/URL/页码交回，本体直接派）；子代模型跟随用户会话模型，如需钉死可在 `agentOptions` 配置 provider/model |
+| 干活的子智能体 | `@deepseek-ai/dsh-tool-subagent`（delegation 组，isolate workflowEngine；多个实例 toolName 不同） | `subagent`→`aiyayi-worker`（自建"小伙伴"预设，全量工具 + 原生自动压缩，见坑 #14）；`retriever`→`aiyayi-retriever`（1.3.0 新增检索员：只读摘文件/Office/PDF 文档/网页内容、带路径/URL/页码交回，本体直接派）；`bag`→`aiyayi-bag`（1.9.0 新增百宝袋：专职工具执行叶子预设，本体与小伙伴都能派，模式与纪律内置在提示词里）；子代模型跟随用户会话模型，如需钉死可在 `agentOptions` 配置 provider/model |
 | 文档解析（检索员专属） | 自写插件 `aiyayi-doc`（本包 `lib/doc.js`，1.4.0，挂检索员 preset） | docx/xlsx/pptx 结构化提取（docx 按段落、xlsx 按工作表+单元格、pptx 按页，都带定位），pdf 渲染成页图（`read_image` 逐页看）；旧版 doc/xls 尽力转 txt/csv（无精确定位）；加密/损坏明确报错。**纯只读**：不改文件不落工作区，临时页图/转换产物写系统临时目录、读完即清（见坑 #32）。基于 shipped `@deepseek-ai/libreoffice-kit`（用法约束见坑 #30） |
 | 检索员断因透传 | 自写插件 `aiyayi-presence-worker`（本包 `lib/presence-worker.js`，1.4.0，挂小伙伴 preset） | 坑 #22 的断因透传原本只覆盖本体→小伙伴一层；1.4.0 起小伙伴侧也挂监听：检索员（孙代）失败时，真实断因（error.message 优先）自动注入小伙伴下一步消息（`⚠ [检索员]` 开头），它能自己判断续派还是重派；同时把本体路由变化同步给名下检索员（模型跟随，同坑 #24 机制层层传导） |
 | 工具白名单 | 自写插件 `aiyayi-restrict`（本包 `lib/restrict.js`）+ `lib/own-tools.js` 单一真源 | 每个会话第一步前用探针解析当刻继承面全集，收敛到她自己的工具——宿主漏进的杂工具自动隐藏、自动适应增减 |
@@ -40,9 +40,9 @@
 
 ## 使用
 
-GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她说"我让人去弄"就是在派子智能体（干活的叫小伙伴，查资料/读文档的叫检索员），进展和结果她会转述。
+GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她说"我让人去弄"就是在派子智能体（干活的叫小伙伴，查资料/读文档的叫检索员，跑工具跑命令的叫百宝袋），进展和结果她会转述。
 
-- **续接（continuable）**：本体、小伙伴、检索员都是 continuable——DSH 重启后 `send_message` 一条消息即可冷唤醒续接；续接前 `list_agents` 现查 ID，别凭记忆敲（详见[更新日志](./CHANGELOG.md) 1.4.4 条目）。
+- **续接（continuable）**：本体、小伙伴、检索员、百宝袋都是 continuable——DSH 重启后 `send_message` 一条消息即可冷唤醒续接；续接前 `list_agents` 现查 ID，别凭记忆敲（详见[更新日志](./CHANGELOG.md) 1.4.4 条目）。百宝袋常驻复用：首派带任务清单，之后零散活直接发消息续同一实例。
 
 ## 调整
 
@@ -51,13 +51,14 @@ GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她
 - **子代模型/思考**：默认跟随用户会话模型；如需钉死，在 delegation 组 `tool-subagent`（本体和小伙伴的 delegation 组各有一个）的 `agentOptions` 配置 provider/model。本体切模型会自动层层传导：本体→小伙伴（`aiyayi-presence`，坑 #24）、小伙伴→检索员（`aiyayi-presence-worker`，1.4.0）。
 - **本体思考**：本体模型跟随用户会话模型，preset 自 1.0.1 起不再内置 agent-default-model 行（原因见坑 #13），`reasoningEffort` 由会话模型选择器控制；「关闭思考」在讯飞上游不生效见坑 #10。
 
-## 架构：本体 → 小伙伴 → 检索员
+## 架构：本体 → 小伙伴 → 检索员 / 百宝袋
 
-三层委派，层级到检索员封顶（检索员是叶子节点，不挂委派组）：
+三层委派，层级到叶子预设封顶（检索员与百宝袋都是叶子节点，不挂委派组）：
 
-- **本体**（preset-aiyayi）：人格、两层长期记忆、重逢感知、体检单、闹钟；挂两个委派工具——`subagent`（→小伙伴）与 `retriever`（→检索员，纯查资料直派、不惊动小伙伴）。
-- **小伙伴**（`aiyayi-worker` 预设，蓝本 standard）：全量工具 + 原生自动压缩；1.3.0 起可再往下派检索员（派生工具显式 `maxDepth: 2`，见坑 #29）。
+- **本体**（preset-aiyayi）：人格、两层长期记忆、重逢感知、体检单、闹钟；挂三个委派工具——`subagent`（→小伙伴）、`retriever`（→检索员，纯查资料直派、不惊动小伙伴）与 `bag`（→百宝袋，跑工具跑命令的机械活，派发即返回）。
+- **小伙伴**（`aiyayi-worker` 预设，蓝本 standard）：全量工具 + 原生自动压缩；1.3.0 起可再往下派检索员（派生工具显式 `maxDepth: 2`，见坑 #29）；1.9.0 起也可派自己的百宝袋（协调模式下它调度执行子代）。
 - **检索员**（`aiyayi-retriever` 预设）：只读叶子，摘文件/Office/PDF/网页、带路径/页码交回；文档解析走 `aiyayi-doc`。
+- **百宝袋**（`aiyayi-bag` 预设，1.9.0）：执行叶子，照单批量跑工具/命令/搬运落盘；依赖自然成链、只读可并行、逐任务流式回执、结果落盘只报摘要；实例不共享——谁拉起谁续接，兄弟会话互不可达。
 - **模型跟随**：子代 spawn 时跟随用户会话模型；本体切模型经 `aiyayi-presence` / `aiyayi-presence-worker` 层层传导到小伙伴与检索员。
 - **断因透传**：子代失败时真实断因注入上级下一步消息（`⚠ [小伙伴]` / `⚠ [检索员]`），上级自己判断续接还是重派。
 
@@ -78,7 +79,7 @@ npm 包内置五个同步小工具（下表）；另有**本机工具清单** `<
 npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内容提到包根即可）：
 
 - `package.json` — bundle 清单（`dsh.bundle.patch` 指向 cordis.patch.yml）
-- `cordis.patch.yml` — preset-aiyayi / preset-aiyayi-worker / preset-aiyayi-retriever 三 preset 声明 + 人格 + 全部插件配置
+- `cordis.patch.yml` — preset-aiyayi / preset-aiyayi-worker / preset-aiyayi-retriever / preset-aiyayi-bag 四 preset 声明 + 人格 + 全部插件配置
 - `lib/index.js` — aiyayi-memory 记忆插件（两层记忆的存取/检索/整理，零依赖）
 - `lib/home.js` — aiyayi-home 记忆根解析与迁移插件（唯一拼记忆路径的地方，零依赖）
 - `lib/restrict.js` — aiyayi-restrict 工具白名单插件（零依赖）
@@ -130,7 +131,7 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
 
 ## 更新日志
 
-[更新日志](./CHANGELOG.md) —— 面向使用者的升级说明：版本条目（新 → 旧）、每条「升级后能感知到什么」、以及踩坑清单（坑 #1–#82）。只记使用者关心的事；发布台账（commit、校验值、测试条数、同步耗时）在维护者本地的开发台账目录里，不入公开仓。版本事实以 npm registry 为准。
+[更新日志](./CHANGELOG.md) —— 面向使用者的升级说明：版本条目（新 → 旧）、每条「升级后能感知到什么」、以及踩坑清单（坑 #1–#83）。只记使用者关心的事；发布台账（commit、校验值、测试条数、同步耗时）在维护者本地的开发台账目录里，不入公开仓。版本事实以 npm registry 为准。
 
 ## 署名与许可
 
