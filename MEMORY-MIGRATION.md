@@ -33,8 +33,8 @@
 
 | 工具 | 性质 | 干什么 |
 |---|---|---|
-| `memory_location` | 只读 | 报当前根、**状态**（见下表）、来源、是否系统盘、体检（核心记忆首行+字节数、分类档案数）、**正向自检**（`relocateSupported` / `codeVersion` / `layoutVersion`）、非系统盘候选（按剩余空间排，标"与插件同盘"）。不建目录不写文件 |
-| `memory_relocate` | 写，须 `confirm: true`；`dryRun: true` 不需要 | `dryRun` 只报计划（将复制 N 个文件 / X 字节 / 目标盘剩余 / 是否跨盘）不碰磁盘；`confirm` 真搬；`stay: true` 记录"留在原处"。搬完整棵记忆：`memory.md`、`memories/`、`presence.json`、`state.md`、`wishes.json`、`updates.json` 一个不落 |
+| `memory_location` | 只读 | 报当前根、**状态**（见下表）、来源、是否系统盘、体检（核心三文件 memory.md/rules.md/index.md 各报字节数 + 核心首行、分类档案数）、**正向自检**（`relocateSupported` / `codeVersion` / `layoutVersion`）、非系统盘候选（按剩余空间排，标"与插件同盘"）。不建目录不写文件 |
+| `memory_relocate` | 写，须 `confirm: true`；`dryRun: true` 不需要 | `dryRun` 只报计划（将复制 N 个文件 / X 字节 / 目标盘剩余 / 是否跨盘）不碰磁盘；`confirm` 真搬；`stay: true` 记录"留在原处"。搬完整棵记忆：核心三文件 `memory.md`/`rules.md`/`index.md`、`memories/`、`presence.json`、`state.md`、`wishes.json`、`updates.json` 一个不落 |
 
 **状态与来源是两个维度**（1.5.1 拆开，这是 2026-11-08 那次误判的直接修正）：
 
@@ -44,7 +44,7 @@
 | `migrated` | 已按 `location.json` 搬到别处 | 不是 |
 | `stayed` | 已决定留在原处（不再提示） | 不是 |
 | `unreachable` | 根不存在 / 不是目录 / 指路文件坏了 | **是**，唯一真故障 |
-| `core-missing` | 根在但 `memory.md` 不在 | 是（首次使用也长这样） |
+| `core-missing` | 根在但 `memory.md` 不在 | 是（首次使用也长这样）。判据仍只看 `memory.md`：`rules.md` / `index.md` 缺失**不算故障**——每次注入/记忆读写时 `ensureCore` 会自动补建空模板（已在的绝不覆盖） |
 
 > 只看 `source: default` 就断定"改造没生效"是错的：它只说明**没搬过家**。判代码活没活，看 `relocateSupported: true` 和 `codeVersion`（代码里的正向自检），别拿 `package.json` 版本号推。
 

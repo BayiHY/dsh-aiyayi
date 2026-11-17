@@ -9,7 +9,7 @@
 | 能力 | 实现 | 说明 |
 |---|---|---|
 | 人格 | `@deepseek-ai/dsh-persona`（preset 作用域 prefix） | 完整人格文本写在 `bundle/cordis.patch.yml` 的 persona 行里 |
-| 长期记忆 | 自写插件 `aiyayi-memory`（本包 `lib/index.js`），两层结构 | **核心记忆** `~\.dsh\aiyayi\memory.md` 每轮自动注入 + **分类档案** `~\.dsh\aiyayi\memories\` 按需加载；工具与整理细节见详解文档 |
+| 长期记忆 | 自写插件 `aiyayi-memory`（本包 `lib/index.js`），核心三文件+分类树 | **核心记忆** `~\.dsh\aiyayi\memory.md`（条目）+ **行为规则** `rules.md` + **记忆索引** `index.md`，三文件每轮自动注入；**分类档案** `~\.dsh\aiyayi\memories\` 按需加载。工具与整理细节见详解文档 |
 | 记忆路径可迁移 | 自写插件 `aiyayi-home`（本包 `lib/home.js`） | **唯一路径出口**：优先级 `location.json` 指路文件 > 环境变量 `AIYAYI_HOME` > 默认 `~/.dsh/aiyayi`；整棵记忆一起搬、失败即中止不静默回退 |
 | 跟随会话模型 | 无需插件行（1.0.1 起移除 agent-default-model 行） | 本体模型直接跟随用户会话模型；旧版"preset 作用域挂 `@deepseek-ai/dsh-agent-default-model` + `isolate: {agentDefaultModel: true}`"的写法在新版 DSH 过不了 schema 校验（见坑 #13），已删除 |
 | 干活的子智能体 | `@deepseek-ai/dsh-tool-subagent`（delegation 组，isolate workflowEngine；多个实例 toolName 不同） | `subagent`→`aiyayi-worker`（自建"小伙伴"预设，全量工具 + 原生自动压缩，见坑 #14）；`retriever`→`aiyayi-retriever`（1.3.0 新增检索员：只读摘文件/Office/PDF 文档/网页内容、带路径/URL/页码交回，本体直接派）；`bag`→`aiyayi-bag`（1.9.0 新增百宝袋：专职工具执行叶子预设，本体与小伙伴都能派，模式与纪律内置在提示词里）；子代模型跟随用户会话模型，如需钉死可在 `agentOptions` 配置 provider/model |
@@ -47,7 +47,7 @@ GUI 新建会话 → agent preset 选「**阿依娅伊**」。聊天即可；她
 ## 调整
 
 - **改人格**：编辑 `cordis.patch.yml`（包根）的 persona `prefix` → `plugin_manager` remove+install 重装生效（ESM 模块缓存，patchReload 不刷新插件 JS；实测它也不拾取包内 yml 变化，改完要重启 DSH）。
-- **改记忆**：直接编辑 `memory.md`，或对话里直接跟她说"记一下…"。
+- **改记忆**：直接编辑 `memory.md`（条目）/ `rules.md`（规则）/ `index.md`（索引，一行一个二级分类），或对话里直接跟她说"记一下…"。
 - **子代模型/思考**：默认跟随用户会话模型；如需钉死，在 delegation 组 `tool-subagent`（本体和小伙伴的 delegation 组各有一个）的 `agentOptions` 配置 provider/model。本体切模型会自动层层传导：本体→小伙伴（`aiyayi-presence`，坑 #24）、小伙伴→检索员（`aiyayi-presence-worker`，1.4.0）。
 - **本体思考**：本体模型跟随用户会话模型，preset 自 1.0.1 起不再内置 agent-default-model 行（原因见坑 #13），`reasoningEffort` 由会话模型选择器控制；「关闭思考」在讯飞上游不生效见坑 #10。
 
@@ -101,7 +101,9 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
 - `skills/feishu-setup/` — 内置技能（随包同步到 DSH 技能根）：飞书机器人安装/验证/排障全流程（脚本 `scripts/create-bot.js` v6 由技能同步维护）
 - `README.md` — 本文档
 - `icon.svg` — 头像
-- `~\.dsh\aiyayi\memory.md` — 她的**核心记忆**（可直接编辑，删掉文件她会自动重建）
+- `~\.dsh\aiyayi\memory.md` — 她的**核心记忆**（条目文件；可直接编辑，删掉文件她会自动重建）
+- `~\.dsh\aiyayi\rules.md` — 她的**行为规则**（成段说明文字，不是条目；随每轮注入，删掉自动重建空模板）
+- `~\.dsh\aiyayi\index.md` — 她的**记忆索引**（一行一个二级分类的"- 路径：这里放什么"；随每轮注入，删掉自动重建空模板）
 - `~\.dsh\aiyayi\memories\` — 她的**分类档案树**（最深三级，remember 的非核心条目归这里，recall 全库搜）
 - `~\.dsh\aiyayi\presence.json` — 他上次来 / 你上次活动（插件自动维护）
 - `~\.dsh\aiyayi\state.md` — 她给自己留的"上次活到哪"状态（update_state 覆写）

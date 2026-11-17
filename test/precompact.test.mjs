@@ -72,13 +72,35 @@ check('经验文档真实存在', existsSync(settled.docPath), settled.docPath)
 check('文档内容带标题', readFileSync(settled.docPath, 'utf8').includes('# 记忆迁移注意外置盘'), readFileSync(settled.docPath, 'utf8').split('\n')[0])
 check('记忆条目写进 memories/事情/经验.md', settled.memoryFile.endsWith(join('memories', '事情', '经验.md')), settled.memoryFile)
 check('记忆条目真实存在且带文档指针', existsSync(settled.memoryFile) && readFileSync(settled.memoryFile, 'utf8').includes('docs/'), readFileSync(settled.memoryFile, 'utf8'))
-check('索引已更新', settled.indexUpdated === true)
-// 三文件结构（1.10）：索引行写进 index.md（顶部说明注释 + 一对标记行包住），不再写 memory.md。
-const indexMd = readFileSync(join(root, 'index.md'), 'utf8')
-check('索引行写进 index.md', indexMd.includes('→ docs/') && indexMd.includes('记忆迁移注意外置盘'), indexMd)
-check('index.md 保留说明注释与一对标记行', indexMd.trim().startsWith('<!--') && indexMd.includes('<!-- 索引 -->') && indexMd.includes('<!-- /索引 -->'), indexMd)
+// 1.10.0 索引口径定稿：沉淀默认不再往索引追加任何行——"分类: 标题 → docs/…"
+// 这类指向属内容，只留在条目正文里；index.md 只收"- 分类路径"的分类行。
+check('索引默认不动：indexUpdated=false', settled.indexUpdated === false, JSON.stringify(settled))
+check('索引默认不动：index.md 没被创建', !existsSync(join(root, 'index.md')), join(root, 'index.md'))
 const core = readFileSync(join(root, 'memory.md'), 'utf8')
-check('memory.md 不再被沉淀改写（旧索引段原样保留）', core.includes('用户/口味：饮食偏好') && !core.includes('记忆迁移注意外置盘'), core)
+check('memory.md 不被沉淀改写（旧索引段原样保留）', core.includes('用户/口味：饮食偏好') && !core.includes('记忆迁移注意外置盘'), core)
+
+/* 显式 updateIndex: true：只登记"- 分类路径"裸行（带去重），绝不写文档指向。 */
+const optInCfg = { ...cfg, updateIndex: true }
+const optIn = pc.settle({ logger: { info: () => {} } }, optInCfg, {
+  trigger: 'B',
+  title: '显式登记索引',
+  content: '结论：内置盘优先。量化：3 个盘实测。',
+})
+check('显式 updateIndex:true → 首次登记 indexUpdated=true', optIn.indexUpdated === true, JSON.stringify(optIn))
+const indexMdOptIn = readFileSync(join(root, 'index.md'), 'utf8')
+check('登记的是分类裸行（"- 事情/经验"，无文档指向）',
+  /^- 事情\/经验\s*$/m.test(indexMdOptIn) && !indexMdOptIn.includes('→ docs/') && !indexMdOptIn.includes('显式登记索引'),
+  indexMdOptIn)
+const optIn2 = pc.settle({ logger: { info: () => {} } }, optInCfg, {
+  trigger: 'B',
+  title: '再次沉淀同分类',
+  content: '结论：重复登记要被去重掉。量化：2 次。',
+})
+check('同分类重复沉淀 → 去重不再追加（indexUpdated=false）', optIn2.indexUpdated === false, JSON.stringify(optIn2))
+const indexMdDedup = readFileSync(join(root, 'index.md'), 'utf8')
+check('index.md 里"- 事情/经验"只有一行',
+  indexMdDedup.split(/\r?\n/).filter((line) => line.trim() === '- 事情/经验').length === 1,
+  indexMdDedup)
 
 /* ------------------------------------------------------------------ *
  * 4. 工具注册 + schema

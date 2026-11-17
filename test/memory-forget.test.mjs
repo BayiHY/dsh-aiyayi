@@ -413,9 +413,41 @@ check('recall 对分类树条目照常命中', recallTree.total >= 1 && recallTr
 check('recall 之后 rules.md 内容原样', read(join(root, 'rules.md')).includes('犀牛是这条规矩里的暗号词'))
 
 /* ------------------------------------------------------------------ *
- * 8. 参数校验与收尾
+ * 8. 新分类档案自动登记索引（1.10.0）：remember / move 首建分类档案时，
+ *    index.md 自动出现一行"- <分类路径>"（去重、裸行、无文档指向）。
  * ------------------------------------------------------------------ */
-console.log('\n=== 8. 参数校验 ===')
+console.log('\n=== 8. 新分类档案自动登记索引 ===')
+seed()
+const { __testing: memoryTesting } = await import(libUrl('index.js'))
+const remember = tools.get('remember')
+// 注意：seed() 预写好的档案不走 appendEntry，不会登记；§7 留下的 index.md 已有
+// "- 用户/口味：饮食偏好"这样的带简述行，正好用来验去重口径。
+const reg1 = await remember.execute({ kind: '用户', content: '他习惯睡前看书', path: '用户/习惯' })
+check('remember 建新档成功', reg1.saved === true, JSON.stringify(reg1))
+check('新档案真实落盘', read(join(root, 'memories', '用户', '习惯.md')).includes('睡前看书'))
+const indexAfterReg = read(join(root, 'index.md'))
+check('索引自动出现"- 用户/习惯"行', indexAfterReg.includes('- 用户/习惯'), indexAfterReg)
+check('登记的是裸行（行尾没有简述/指向）', /^- 用户\/习惯\s*$/m.test(indexAfterReg), indexAfterReg)
+await remember.execute({ kind: '用户', content: '他习惯早起', path: '用户/习惯' })
+check(
+  '同分类再记一条 → 不重复登记',
+  read(join(root, 'index.md')).split(/\r?\n/).filter((line) => line.trim() === '- 用户/习惯').length === 1,
+  read(join(root, 'index.md')),
+)
+// 给"- 用户/习惯"补一个简述尾巴，验证"带简述的同路径行"同样被去重认领（不会另起一行）。
+writeFileSync(join(root, 'index.md'), read(join(root, 'index.md')).replace('- 用户/习惯', '- 用户/习惯：睡前看书、早起'), 'utf8')
+check('带简述的同路径行也算已登记（去重匹配"- 路径"前缀）', memoryTesting.registerCategoryInIndex('用户/习惯') === false)
+check('去重判定没有动 index.md（简述尾巴原样保留）', /^- 用户\/习惯：睡前看书、早起\s*$/m.test(read(join(root, 'index.md'))), read(join(root, 'index.md')))
+
+seed()
+const movedNew = await organize.execute({ action: 'move', match: '安静地聊', to: '事情/新档' })
+check('move 到全新分类成功', movedNew.done === true, movedNew.detail)
+check('move 首建分类档案 → 索引自动出现"- 事情/新档"', /^- 事情\/新档\s*$/m.test(read(join(root, 'index.md'))), read(join(root, 'index.md')))
+
+/* ------------------------------------------------------------------ *
+ * 9. 参数校验与收尾
+ * ------------------------------------------------------------------ */
+console.log('\n=== 9. 参数校验 ===')
 seed()
 let missing = null
 try {
