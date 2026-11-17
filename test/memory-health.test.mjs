@@ -21,7 +21,7 @@
  * 工具定义拿到（与 tools-surface / precompact 两处测试同一套假 ctx 做法）。
  */
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -566,5 +566,87 @@ test('K3. 结构行口径与 renderCore 一致：索引段/标题/引用/分隔�
     assert.ok(!bodyPart.includes('- [2026-01-01] 假'), '索引段里的假条目不能混进正文（旧口径只跳标记行，会漏）')
   } finally {
     rmSync(file, { force: true })
+  }
+})
+
+/* ------------------------------------------------------------------ *
+ * M. 三文件结构（1.10）：rules.md / index.md 是非条目档案，健康度豁免
+ *
+ * 它们不是条目文件——规则 100% 是"非条目"天经地义，索引天生带标记行。
+ * 不豁免就是 1.6.2 那次 71.6% 误报的重演（那次是索引段被当垃圾）。
+ * ------------------------------------------------------------------ */
+const RULES_PROSE = [
+  '# 阿依娅伊的行为规则',
+  '',
+  '先验证，再动手；证据不够就明说。',
+  '【干活的规矩】这类段标题是规则文件的正常形态，不是注入。',
+  '【思考纪律】同样可以是她自己的规矩标题。',
+].join('\n')
+
+const INDEX_FILE_TEXT = [
+  '<!-- 记忆索引：整个文件就是索引，一句话一条，只列二级分类。 -->',
+  '<!-- 索引 -->',
+  '用户/口味：饮食偏好',
+  '事情/经验：沉淀文档',
+  '<!-- /索引 -->',
+].join('\n')
+
+test('M. rules.md 全篇"非条目"不得预警（nonEntry 豁免，防 71.6% 重演）', () => {
+  const health = fileHealth(RULES_PROSE, { nonEntry: true })
+  assert.equal(health.entries, 0, '规则文件没有条目是常态')
+  assert.ok(health.ratio === 1, '统计照常（全是非条目），只是不预警')
+  assert.deepEqual(health.warnings, [], '非条目档案零预警')
+  // 对照：同样的文本当条目档案看会怎么报（证明豁免确实在起作用）。
+  const asEntry = fileHealth(RULES_PROSE)
+  assert.ok(asEntry.warnings.length > 0, '不豁免时同样的文本必报污染——豁免不能是摆设')
+})
+
+test('M2. index.md 带标记行与注释也不预警（豁免覆盖注入指纹判据）', () => {
+  const health = fileHealth(INDEX_FILE_TEXT, { nonEntry: true })
+  assert.deepEqual(health.warnings, [], '索引文件的标记行/注释不该触发任何预警')
+  // 对照：不豁免时 `<!-- 索引 -->` 会被当成注入指纹。
+  const asEntry = fileHealth(INDEX_FILE_TEXT)
+  assert.ok(asEntry.warnings.some((w) => w.includes('索引')), '不豁免时标记行就是污染指纹（对照用）')
+})
+
+test('M3. renderCore 三文件拼装：规则全文 + 核心条目 + index.md 索引；迁移期回退读旧段', () => {
+  const core = join(root, 'memory.md')
+  const rules = join(root, 'rules.md')
+  const index = join(root, 'index.md')
+  writeFileSync(core, '- [2026-11-17 10:00] 事情｜三文件结构的条目\n', 'utf8')
+  writeFileSync(rules, '# 我的规则\n先验证，再动手。\n', 'utf8')
+  writeFileSync(index, `${INDEX_FILE_TEXT}\n`, 'utf8')
+  try {
+    const injected = renderCore()
+    assert.ok(injected.startsWith('## 我的记忆'), '节头不变')
+    assert.ok(injected.includes('【我的规则】') && injected.includes('先验证，再动手。'), '规则全文随注入')
+    assert.ok(injected.includes('三文件结构的条目'), '核心条目随注入')
+    const indexPart = injected.slice(injected.indexOf('【记忆索引】'))
+    assert.ok(indexPart.includes('用户/口味：饮食偏好'), '索引内容来自 index.md')
+    assert.ok(!injected.includes('<!-- 索引 -->'), '标记行不进注入')
+    // index.md 只有模板（剥完注释为空）→ 回退读 memory.md 旧索引段。
+    writeFileSync(core, '# 核心记忆\n\n<!-- 索引 -->\n事情/经验：迁移期旧目录\n<!-- /索引 -->\n', 'utf8')
+    rmSync(index, { force: true })
+    const injected2 = renderCore() // ensureCore 会补回空模板 index.md——这正是生产自愈路径
+    assert.ok(injected2.includes('事情/经验：迁移期旧目录'), 'index.md 空模板时回退读 memory.md 旧索引段')
+    assert.ok(existsSync(index), 'ensureCore 把 index.md 自愈补建出来了')
+  } finally {
+    for (const file of [core, rules, index]) rmSync(file, { force: true })
+  }
+})
+
+test('M4. rules 全文超 MAX_RULES_CHARS 截断并带提示（条目上限逻辑不受影响）', () => {
+  // 直接走 renderCore：把一条 9000+ 字符的规则塞进 rules.md。
+  const rules = join(root, 'rules.md')
+  const core = join(root, 'memory.md')
+  writeFileSync(core, '- [2026-11-17 10:00] 事情｜截断测试条目\n', 'utf8')
+  writeFileSync(rules, `${'很长的规则。'.repeat(1800)}（规则结尾标记）`, 'utf8')
+  try {
+    const injected = renderCore()
+    assert.ok(injected.includes('超过 8000 上限'), '超限要给截断提示')
+    assert.ok(injected.includes('很长的规则。'), '前段内容在')
+    assert.ok(!injected.includes('（规则结尾标记）'), '尾部被截掉')
+  } finally {
+    for (const file of [core, rules]) rmSync(file, { force: true })
   }
 })

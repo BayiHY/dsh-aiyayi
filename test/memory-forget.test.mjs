@@ -362,9 +362,60 @@ const pathPicked = await forget({ match: 'dsh-aiyayi 1.6.1 已发布', path: 'co
 check('path:"core" 只删核心那份，档案里的副本不动', pathPicked.done === true && pathPicked.removedFrom === 'core' && countOf(fileOf.experience(), '1.6.1 已发布') === 3, JSON.stringify(pathPicked))
 
 /* ------------------------------------------------------------------ *
- * 6. 参数校验与收尾
+ * 7. 三文件边界（1.10）：forget 绝不碰 rules.md / index.md
+ *    它们不是条目档案——规则是成段说明文字、索引是目录，里面就算出现
+ *    "条目形状"的行也不是可删的记忆。范围（memory.md + memories/ 全树）
+ *    天然不包含它们；显式指名（path: "rules"/"index"）必须被拒绝。
  * ------------------------------------------------------------------ */
-console.log('\n=== 6. 参数校验 ===')
+console.log('\n=== 7. 三文件边界：forget 不碰 rules/index ===')
+seed()
+const RULES_TEXT = ['# 阿依娅伊的行为规则', '', '先验证，再动手。', '- [2026-11-13 12:50] 事情｜规则里的条目形状行', ''].join('\n')
+const INDEX_TEXT = '<!-- 记忆索引 -->\n用户/口味：饮食偏好\n<!-- /索引 -->\n'
+writeFileSync(join(root, 'rules.md'), RULES_TEXT, 'utf8')
+writeFileSync(join(root, 'index.md'), INDEX_TEXT, 'utf8')
+const boundary = await forget({ match: '1.6.1 已发布' })
+check('不给 path → 只扫核心 + 分类树（5 个文件，不含 rules/index）', boundary.done === false && boundary.searched.length === 5, JSON.stringify(boundary.searched))
+check('rules.md 一个字节没动', read(join(root, 'rules.md')) === RULES_TEXT, read(join(root, 'rules.md')))
+check('index.md 一个字节没动', read(join(root, 'index.md')) === INDEX_TEXT, read(join(root, 'index.md')))
+
+let forgetRulesErr = null
+try {
+  await forget({ match: '条目形状行', path: 'rules' })
+} catch (error) {
+  forgetRulesErr = error
+}
+check('path:"rules" → 直接拒绝（规则文件没有可删条目）', forgetRulesErr !== null && /rules\.md/.test(forgetRulesErr.message), forgetRulesErr?.message)
+let forgetIndexErr = null
+try {
+  await forget({ match: '饮食偏好', path: 'index' })
+} catch (error) {
+  forgetIndexErr = error
+}
+check('path:"index" → 直接拒绝', forgetIndexErr !== null && /index\.md/.test(forgetIndexErr.message), forgetIndexErr?.message)
+let forgetRulesZhErr = null
+try {
+  await forget({ match: '条目形状行', path: '规则' })
+} catch (error) {
+  forgetRulesZhErr = error
+}
+check('path:"规则"（中文别名）→ 同样拒绝', forgetRulesZhErr !== null, forgetRulesZhErr?.message)
+check('拒绝之后 rules/index 仍一字未动', read(join(root, 'rules.md')) === RULES_TEXT && read(join(root, 'index.md')) === INDEX_TEXT)
+check('正常删除路径照旧可用（规则文件在场也不干扰）', (await forget({ match: '安静地聊', path: 'core' })).done === true && !read(fileOf.core()).includes('安静地聊'))
+
+/* recall 同边界：只扫 memory.md + memories/，规则与索引里的词不算命中。 */
+const recallTool = tools.get('recall')
+writeFileSync(join(root, 'rules.md'), `${RULES_TEXT}犀牛是这条规矩里的暗号词\n`, 'utf8')
+writeFileSync(join(root, 'index.md'), '<!-- 记忆索引 -->\n用户/暗号：犀牛\n<!-- /索引 -->\n', 'utf8')
+const recallHit = await recallTool.execute({ query: '犀牛' })
+check('recall 不扫 rules/index（规则/索引里的词 0 命中）', recallHit.total === 0, JSON.stringify(recallHit))
+const recallTree = await recallTool.execute({ query: '口味偏淡' })
+check('recall 对分类树条目照常命中', recallTree.total >= 1 && recallTree.entries.every((e) => e.where !== 'rules' && e.where !== 'index'), JSON.stringify(recallTree))
+check('recall 之后 rules.md 内容原样', read(join(root, 'rules.md')).includes('犀牛是这条规矩里的暗号词'))
+
+/* ------------------------------------------------------------------ *
+ * 8. 参数校验与收尾
+ * ------------------------------------------------------------------ */
+console.log('\n=== 8. 参数校验 ===')
 seed()
 let missing = null
 try {

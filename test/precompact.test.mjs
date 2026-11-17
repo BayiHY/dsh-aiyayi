@@ -3,7 +3,7 @@
  *
  * 覆盖设计方案的验收要点：
  *   1) 判断"值得沉淀"的启发式（任务闭环/关键结论/可量化数据/新经验）——该留的留、该丢的丢；
- *   2) 沉淀动作三件套：写 docs 经验文档 + 写 memories 记忆条目 + 更新 memory.md 索引；
+ *   2) 沉淀动作三件套：写 docs 经验文档 + 写 memories 记忆条目 + 更新 index.md 索引（三文件结构）；
  *   3) 工具注册：apply 走假 ctx 能注册出 precompact_run，schema 合规，名字进 own-tools 白名单；
  *   4) runPrecompact 主入口：显式 content 落盘、弱内容跳过、失败不抛（沉淀失败不阻塞主流程）；
  *   5) 触发A的阈值公式（computeThresholdTokens）复刻 dsh-compaction-basic。
@@ -73,9 +73,12 @@ check('文档内容带标题', readFileSync(settled.docPath, 'utf8').includes('#
 check('记忆条目写进 memories/事情/经验.md', settled.memoryFile.endsWith(join('memories', '事情', '经验.md')), settled.memoryFile)
 check('记忆条目真实存在且带文档指针', existsSync(settled.memoryFile) && readFileSync(settled.memoryFile, 'utf8').includes('docs/'), readFileSync(settled.memoryFile, 'utf8'))
 check('索引已更新', settled.indexUpdated === true)
+// 三文件结构（1.10）：索引行写进 index.md（顶部说明注释 + 一对标记行包住），不再写 memory.md。
+const indexMd = readFileSync(join(root, 'index.md'), 'utf8')
+check('索引行写进 index.md', indexMd.includes('→ docs/') && indexMd.includes('记忆迁移注意外置盘'), indexMd)
+check('index.md 保留说明注释与一对标记行', indexMd.trim().startsWith('<!--') && indexMd.includes('<!-- 索引 -->') && indexMd.includes('<!-- /索引 -->'), indexMd)
 const core = readFileSync(join(root, 'memory.md'), 'utf8')
-check('索引段里加了沉淀指针行', core.includes('→ docs/') && core.includes('记忆迁移注意外置盘'), core)
-check('索引段原有行仍在（追加不覆盖）', core.includes('用户/口味：饮食偏好'), core)
+check('memory.md 不再被沉淀改写（旧索引段原样保留）', core.includes('用户/口味：饮食偏好') && !core.includes('记忆迁移注意外置盘'), core)
 
 /* ------------------------------------------------------------------ *
  * 4. 工具注册 + schema

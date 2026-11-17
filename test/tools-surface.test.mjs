@@ -11,7 +11,7 @@
  *  - `memory_location` / `memory_relocate` 真的注册上了，且名字进了 own-tools 白名单；
  *  - 指路根不可达时，pre-step 注入的是 `[记忆位置] ⚠` 警告行，而不是"建议迁移"那行。
  */
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -138,6 +138,21 @@ check(
 check('memory_location 只读：调用前后目录内容不变', beforeTree === afterTree, `${beforeTree} → ${afterTree}`)
 check('memory_location 的 render 文本带真实路径', locTool.output.render({}, locResult)[0].text.includes(root), locTool.output.render({}, locResult)[0].text)
 check('detail 里有位置/来源/体检信息', /来源：/.test(locResult.detail) && /体检：/.test(locResult.detail), locResult.detail)
+
+/* 三文件结构（1.10）：ensureCore 首次注入时补齐 rules.md / index.md（已有不覆盖），注入块三段拼装。
+   注意放在上面"只读"断言之后——renderCore 会触发 ensureCore 落盘。 */
+const sectionText = sections[0].text()
+check('注入节名仍是 aiyayi:memory（锚点兼容）', sections[0].name === 'aiyayi:memory', sections[0].name)
+check('注入块带规则段与索引段（三文件拼装）', sectionText.includes('【我的规则】') && sectionText.includes('【记忆索引】'), sectionText.slice(0, 400))
+check('注入块带原条目（memory.md 名字与内容不变）', sectionText.includes('测试条目'), sectionText.slice(0, 200))
+check('ensureCore 自愈：rules.md / index.md 被补建出来', existsSync(join(root, 'rules.md')) && existsSync(join(root, 'index.md')), listing(root).join('|'))
+check('已有 memory.md 不被模板覆盖', readFileSync(join(root, 'memory.md'), 'utf8').includes('测试条目'))
+writeFileSync(join(root, 'rules.md'), '我的手写规则标记', 'utf8')
+const sectionText2 = sections[0].text()
+check('已有 rules.md 不被模板覆盖（二次注入读的是用户内容）', readFileSync(join(root, 'rules.md'), 'utf8') === '我的手写规则标记' && sectionText2.includes('我的手写规则标记'))
+const { healthCheck: healthCheckHome } = await import(libUrl('home.js'))
+const health3 = healthCheckHome()
+check('healthCheck 三文件各报字节数', health3.coreBytes > 0 && health3.rulesBytes > 0 && health3.indexBytes > 0, JSON.stringify(health3))
 
 // 1.5.1 防误判三件套：status 独立字段、正向自检、状态说明不像报错。
 check('memory_location 返回独立 status 字段', typeof locResult.status === 'string' && locResult.status.length > 0, JSON.stringify(locResult))

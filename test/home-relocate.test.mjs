@@ -90,7 +90,7 @@ const realPointerSnapshot = existsSync(home.__testing.realPointerPath())
 const sandboxPointer = join(realRoot, 'location.json')
 home.__testing.setPointerPath(sandboxPointer)
 
-/** 造一份和真机同形状的记忆根（含全部 6 类文件 + 三层分类树）。 */
+/** 造一份和真机同形状的记忆根（核心三文件 + 全部伴生文件 + 三层分类树）。 */
 function seedRoot(root) {
   mkdirSync(join(root, 'memories', '事情', 'dsh-aiyayi插件'), { recursive: true })
   mkdirSync(join(root, 'memories', '用户'), { recursive: true })
@@ -109,6 +109,8 @@ function seedRoot(root) {
     ].join('\n'),
     'utf8',
   )
+  writeFileSync(join(root, 'rules.md'), '# 示例规则\n先验证，再动手。\n', 'utf8')
+  writeFileSync(join(root, 'index.md'), '<!-- 记忆索引 -->\n用户/沟通偏好：说话节奏\n<!-- /索引 -->\n', 'utf8')
   writeFileSync(join(root, 'presence.json'), JSON.stringify({ lastVisitAt: 1, lastActiveAt: 2 }), 'utf8')
   writeFileSync(join(root, 'state.md'), '[2026-11-03 11:00] 更新\n在收拾记忆\n', 'utf8')
   writeFileSync(join(root, 'wishes.json'), JSON.stringify([{ id: 1, at: '2026-11-03', content: '想说一句', done: false }]), 'utf8')
@@ -293,6 +295,8 @@ console.log('\n=== 5. 迁移端到端 ===')
 home.__testing.setOverride(undefined)
 const beforeFiles = listRel(realRoot)
 const beforeCore = readFileSync(join(realRoot, 'memory.md'), 'utf8')
+const beforeRules = readFileSync(join(realRoot, 'rules.md'), 'utf8')
+const beforeIndex = readFileSync(join(realRoot, 'index.md'), 'utf8')
 const result = await home.relocateTo(relocateTarget, {})
 home.__testing.pointerCacheReset()
 
@@ -312,6 +316,8 @@ check(
   JSON.stringify(home.healthCheck()),
 )
 check('新根 memory.md 内容逐字节一致', readFileSync(join(relocateTarget, 'memory.md'), 'utf8') === beforeCore)
+check('新根 rules.md 内容逐字节一致（三文件一起搬）', readFileSync(join(relocateTarget, 'rules.md'), 'utf8') === beforeRules)
+check('新根 index.md 内容逐字节一致（三文件一起搬）', readFileSync(join(relocateTarget, 'index.md'), 'utf8') === beforeIndex)
 check('treeFiles 与迁移前一致', home.healthCheck().treeFiles === 3, JSON.stringify(home.healthCheck()))
 
 const oldDirLeft = readdirSync(realRoot).sort()
@@ -337,6 +343,15 @@ check('老目录里留下的 location.json 就是沙盘指针', home.pointerFile
 const pointerData = JSON.parse(readFileSync(pointer, 'utf8'))
 check('location.json 带 version/root/relocatedAt/from', pointerData.version === 1 && pointerData.root === relocateTarget && typeof pointerData.relocatedAt === 'string' && pointerData.from === realRoot, pointerData)
 check('location.json 带 coreBytes + coreSha16 指纹', Number.isInteger(pointerData.coreBytes) && /^[0-9A-F]{16}$/.test(pointerData.coreSha16), pointerData)
+// 三文件结构（1.10）：rules/index 也各记一组指纹；原字段名保留兼容。
+check(
+  'location.json 带三文件指纹（rules/index 各一组字节+SHA16）',
+  Number.isInteger(pointerData.rulesBytes) && /^[0-9A-F]{16}$/.test(pointerData.rulesSha16) &&
+    Number.isInteger(pointerData.indexBytes) && /^[0-9A-F]{16}$/.test(pointerData.indexSha16) &&
+    pointerData.rulesBytes === Buffer.byteLength(beforeRules, 'utf8') &&
+    pointerData.indexBytes === Buffer.byteLength(beforeIndex, 'utf8'),
+  pointerData,
+)
 check('code 里 relocatedAt 带时区偏移', /T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(pointerData.relocatedAt), pointerData.relocatedAt)
 
 /* ------------------------------------------------------------------ *
