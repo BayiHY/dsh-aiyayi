@@ -190,19 +190,20 @@ assert.equal(composeAttachmentName({ kind: 'file', fileKey: 'v3_abcdefgh' }, 'ap
 assert.equal(composeAttachmentName({ kind: 'image', fileKey: 'img_12345678' }, 'image/jpeg'), 'image_12345678.jpg')
 
 // ── composeDeliveryText：保存/失败/空文本 ──
+// 渠道头行：composeDeliveryText 开头固定拼〔飞书〕\n（与微信侧〔微信〕头行对称）。
 assert.equal(
   composeDeliveryText('看文件', { saved: ['F:\\a.xlsx'], failed: [] }, 'om_1'),
-  '看文件\n（飞书附件已保存：F:\\a.xlsx）',
+  '〔飞书〕\n看文件\n（飞书附件已保存：F:\\a.xlsx）',
 )
 assert.equal(
   composeDeliveryText('看文件', { saved: ['F:\\a.xlsx'], failed: [{ name: 'b', reason: '超时' }] }, 'om_1'),
-  '看文件\n（飞书附件已保存：F:\\a.xlsx）\n（飞书附件下载失败：超时，msg_id=om_1）',
+  '〔飞书〕\n看文件\n（飞书附件已保存：F:\\a.xlsx）\n（飞书附件下载失败：超时，msg_id=om_1）',
 )
-// 空文本 + 有保存：只投括注，不投空块
-assert.equal(composeDeliveryText('', { saved: ['F:\\a.xlsx'], failed: [] }, 'om_2'), '（飞书附件已保存：F:\\a.xlsx）')
+// 空文本 + 有保存：只投括注，不投空块（头行仍在最前）
+assert.equal(composeDeliveryText('', { saved: ['F:\\a.xlsx'], failed: [] }, 'om_2'), '〔飞书〕\n（飞书附件已保存：F:\\a.xlsx）')
 // 全空：占位提示
-assert.equal(composeDeliveryText('  ', null, 'om_3'), '（收到一条无文本内容的飞书消息，msg_id=om_3）')
-assert.equal(composeDeliveryText('正文', null, 'om_4'), '正文')
+assert.equal(composeDeliveryText('  ', null, 'om_3'), '〔飞书〕\n（收到一条无文本内容的飞书消息，msg_id=om_3）')
+assert.equal(composeDeliveryText('正文', null, 'om_4'), '〔飞书〕\n正文')
 
 // ── 标记解析与剥离（全/半角冒号、多标记、无效标记忽略）──
 // 1.5.19：extractAttachmentMarkers 额外返回 items（带 index/tag），files/images 语义不变。
