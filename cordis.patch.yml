@@ -210,7 +210,7 @@
             name: 'dsh-aiyayi/precompact'
             config:
               ratio: 0.7
-              thresholdRatio: 0.4
+              thresholdRatio: 0.8
               headroomTokens: 32768
               memoryPath: 事情/经验
               # docsDir 不设 → 默认落记忆根下 docs/（可改成工作区 docs 目录）。
@@ -357,14 +357,14 @@
                 # bili 的压缩门控只注入 standard/ptc/minimal/cordis 四个 Web 预设，
                 # 管不到本 preset——原生引擎照常跑。auto:true 显式声明，溢出重试放宽
                 # 到 2 次，headroom 32K（她常用的模型窗口多在 128K 档）。
-                # thresholdRatio 0.4 的原因：tokenMeter 按 chars/4 估 token（英文启发式），
+                # thresholdRatio 0.8 的原因：tokenMeter 按 chars/4 估 token（英文启发式），
                 # 中文 ≈1 token/字，实测她的会话 估算/真实 ≈ 0.49（54K vs 111K，见
-                # README 坑 #16）。0.4×131072≈52K 估算阈值 ≈ 真实 78-82% 时触发；
-                # 0.65 在纯中文会话里永远够不到。英文/代码为主的会话会在 ~40% 就压，
+                # README 坑 #16）。0.8×131072≈104K 估算阈值 ≈ 真实 64-66% 时触发；
+                # 英文/代码为主的会话会在 ~80% 才压（旧值 0.4 时约四成），晚得多；
                 # 只是多一次摘要，可接受；真溢出还有 request-error 自救兜底。
                 config:
                   auto: true
-                  thresholdRatio: 0.4
+                  thresholdRatio: 0.8
                   headroomTokens: 32768
                   maxOverflowRetries: 2
               - id: command-compact
@@ -552,7 +552,7 @@
                 name: '@deepseek-ai/dsh-compaction-basic'
                 config:
                   auto: true
-                  thresholdRatio: 0.4
+                  thresholdRatio: 0.8
                   headroomTokens: 32768
                   maxOverflowRetries: 2
               - id: command-compact
@@ -704,7 +704,7 @@
                 name: '@deepseek-ai/dsh-compaction-basic'
                 config:
                   auto: true
-                  thresholdRatio: 0.4
+                  thresholdRatio: 0.8
                   headroomTokens: 32768
                   maxOverflowRetries: 2
               - id: command-compact
@@ -802,7 +802,7 @@
                 name: '@deepseek-ai/dsh-compaction-basic'
                 config:
                   auto: true
-                  thresholdRatio: 0.4
+                  thresholdRatio: 0.8
                   headroomTokens: 32768
                   maxOverflowRetries: 2
               - id: command-compact

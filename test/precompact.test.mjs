@@ -53,10 +53,10 @@ check('判断返回 reasons 数组', Array.isArray(pc.judgeSettle('完成了一�
 // 公式：floor(min(contextWindow×thresholdRatio, (contextWindow−reserved)−headroom))
 const info = { context: { contextWindow: 131072 }, defaultMaxTokens: 0 }
 const fakeSession = { requestHeader: () => ({ config: { maxTokens: 0 } }) }
-const th = pc.__testing.computeThresholdTokens({ thresholdRatio: 0.4, headroomTokens: 32768 }, info, fakeSession)
-// min(131072×0.4=52428, 131072−32768=98304) = 52428
-check('thresholdTokens = min(窗口×ratio, 窗口−headroom)', th === 52428, th)
-check('ratio 是提前量，不是阈值本身（0.7×threshold 才是触发线）', Math.floor(0.7 * 52428) === 36699, Math.floor(0.7 * 52428))
+const th = pc.__testing.computeThresholdTokens({ thresholdRatio: 0.8, headroomTokens: 32768 }, info, fakeSession)
+// min(131072×0.8=104857.6→104857, 131072−32768=98304) = 98304
+check('thresholdTokens = min(窗口×ratio, 窗口−headroom)', th === 98304, th)
+check('ratio 是提前量，不是阈值本身（0.7×threshold 才是触发线）', Math.floor(0.7 * 98304) === 68812, Math.floor(0.7 * 98304))
 
 /* ------------------------------------------------------------------ *
  * 3. 沉淀动作三件套
