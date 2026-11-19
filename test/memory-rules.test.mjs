@@ -231,7 +231,7 @@ checkOutputShape('move 进 core', toCore)
 seed()
 const toCategory = await move({ path: 'core', match: '他喜欢安静地聊', to: '用户/沟通' })
 check('核心 → 分类档案：done:true', toCategory.done === true, JSON.stringify(toCategory))
-check('落进分类档案的是条目行（保留 - [时间] 前缀）', /- \[2026-11-13 10:05\] 他喜欢安静地聊/.test(read(join(root, 'memories', '用户', '沟通.md'))), JSON.stringify(read(join(root, 'memories', '用户', '沟通.md'))))
+check('落进分类档案的是条目行（不带 - [时间] 前缀）', /用户｜他喜欢安静地聊/.test(read(join(root, 'memories', '用户', '沟通.md'))), JSON.stringify(read(join(root, 'memories', '用户', '沟通.md'))))
 check('新分类档案自动登记进 index.md（老行为没坏）', /^- 用户\/沟通\s*$/m.test(read(indexFile_())), read(indexFile_()))
 checkOutputShape('move 进分类档案', toCategory)
 
