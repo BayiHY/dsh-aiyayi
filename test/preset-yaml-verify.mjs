@@ -90,6 +90,20 @@ const added = addedLines.split('\n')
   .map((l) => l.slice(1));
 console.log(`[3] diff 新增行数: ${added.length}`);
 
+// HEAD 基线全文：红线词表里"会话语义词/工具面词/同步"等在本体 persona 里本来就有
+// （如"保留口子"行），拆行改动会被 git 行级 diff 整行算作新增。这些词不是本次新
+// 引入的私货，按同一条正则在整个 HEAD 文本上匹配到就豁免；只抓 HEAD 里没出现、
+// 却在本次新增行里出现的词。
+let headText = '';
+try {
+  headText = execFileSync('git', ['show', 'HEAD:cordis.patch.yml'], {
+    cwd: repoDir, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+  });
+} catch (e) {
+  console.error('[3] git show HEAD:cordis.patch.yml failed:', e.message);
+  process.exit(1);
+}
+
 // 红线词表（按需增删）：人名/称呼/路径/项目/私有工具/机制/会话语义工具
 const RED = [
   ['真名', /李浩/],
@@ -120,10 +134,10 @@ let hits = 0;
 for (const [label, re] of RED) {
   for (let i = 0; i < added.length; i++) {
     const m = added[i].match(re);
-    if (m) {
-      hits++;
-      console.log(`  [3] HIT 新增行#${i + 1} :: ${label} :: "${m[0]}" :: ${added[i].trim().slice(0, 110)}`);
-    }
+    if (!m) continue;
+    if (headText.match(re)) continue; // 该词 HEAD 里已存在 = 非本次新引入，豁免
+    hits++;
+    console.log(`  [3] HIT 新增行#${i + 1} :: ${label} :: "${m[0]}" :: ${added[i].trim().slice(0, 110)}`);
   }
 }
 console.log(hits === 0 ? '[3] 新增文本私货/红线扫描: 0 命中 ✅' : `[3] 新增文本私货/红线扫描: ${hits} 命中 ❌`);
