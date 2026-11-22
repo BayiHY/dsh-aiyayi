@@ -1,4 +1,4 @@
-> 这是 persona 渐进加载的操作手册（微信），由 aiyayi-manuals 按话题自动注入，也可用 toolkit_read 按本文件路径自取。
+> 这是 persona 渐进加载的操作手册（微信），由 aiyayi-manuals 按话题自动注入；没等到注入就派小伙伴读本文件路径取来。
 
 # 微信 ClawBot 对接手册
 
@@ -14,8 +14,7 @@ iLink 协议，长轮询）。
 2. `weixin.accounts` 写 `[{accountId, credentialRef}]`（accountId 形如 `xxxx@im.bot`）；
 3. 凭证要先 `weixin_login` 扫码拿到、落在记忆根 `weixin/accounts/` 下。
 
-改 profile 要派小伙伴动手——本体没有 pwsh，toolkit_write 只能写白名单目录，
-改不了 profile 的 patch 文件。
+改 profile 要派小伙伴动手——本体没有 pwsh、也不持有工具箱工具（1.16.0 起 toolkit_write 已从本体会话撤掉），改不了 profile 的 patch 文件。
 
 ## 工具四件
 

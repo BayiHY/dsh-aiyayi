@@ -5,6 +5,13 @@
 > （`dev-ledger/`，不进公开仓、不随 npm 包发布）。
 > 版本事实以 npm registry 为准。文中「坑 #N」指下方「已知坑」清单的编号。
 
+## 1.16.0（2026-11-22）
+- **本体会话工具箱下沉**：`preset-aiyayi` 的 `aiyayi-toolkit` 行加宿主原生开关 `disabled: true`，本体会话不再注册任何工具箱工具（`toolkit_cmd` / `toolkit_read` / `toolkit_write` + `toolbox_list` / `toolbox_reload` / `toolbox_remove` 六个整组撤掉）。原因：工具执行会挤占陪伴、整理记忆、协调派活这些关键职责，尤其异步工具跑完才推回、回执以〔系统提示·非用户发言〕〔工具结果〕冒充用户消息注入主会话。工具面下沉后本体专心当伙伴与协调人，动工具一律派出去。
+- **三通道职责边界写进 persona**：两分法总纲「造工具派小伙伴，调工具用百宝袋」。百宝袋（bag）只调度工具箱工具、跑完报结果、不做判断不发挥；小伙伴（worker）接自包含任务——判断/拆解/多步骤/改文件/诊断/写方案，以及工具箱工具的使用/验证/造/注册一条龙（造完验过再登记、工具出毛病由它诊断修复），它手上的 subagent 指向检索员、可再派一层孙代、该层归它管；检索员（retriever）只读查资料、带原文+路径/URL 回来。
+- **记忆管理例外说明**：`remember` / `memory_organize` / `recall` / `precompact` 走独立插件（aiyayi-memory / aiyayi-precompact），不是工具箱工具，本体会话亲手做、不受工具禁用影响——记忆是私事，不派外人改。
+- **签名机制约束**：本体 toolkit 禁用只作用于 `preset-aiyayi` 的 `aiyayi-toolkit` 行，不套用到 worker / bag 的委派行或它们的 toolkit 行；小伙伴与百宝袋照常全量持有工具箱工具。
+- 版本口径：工具面变化算 minor。这版没有破坏性变更，你不需要做任何操作；升级后重启 DSH 生效（patchReload 不拾取 bundle 内变化，见坑 #37）。
+
 ## 1.15.1（2026-11-22）
 - **订正委派称呼歧义**：subagent 是宿主委派工具/机制名，不是角色名；"小伙伴"标准名改为 worker（aiyayi-worker 预设）。persona/README 把工具名和角色名用箭头解绑（subagent 工具→worker、retriever→检索员、bag→百宝袋），不再写"subagent=小伙伴"。
 - 原因：三个委派工具底层都是同一个 dsh-tool-subagent 包、只靠 toolName/agentPreset 区分，且 worker 预设自身持有的 subagent 工具 agentPreset 指向检索员——把 subagent 当角色名会撞车。

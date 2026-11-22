@@ -1,4 +1,4 @@
-> 这是 persona 渐进加载的操作手册（飞书），由 aiyayi-manuals 按话题自动注入，也可用 toolkit_read 按本文件路径自取。
+> 这是 persona 渐进加载的操作手册（飞书），由 aiyayi-manuals 按话题自动注入；没等到注入就派小伙伴读本文件路径取来。
 
 # 飞书对接手册
 
