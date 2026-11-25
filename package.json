@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "license": "MIT",
   "author": "巴依浩爷 (bayihy)",
   "keywords": [
@@ -33,7 +33,8 @@
     "./toolkit": "./lib/toolkit.js",
     "./toolkit-async": "./lib/toolkit-async.js",
     "./toolkit-manifest": "./lib/toolkit-manifest.js",
-    "./icon": "./icon.svg"
+    "./icon": "./icon.svg",
+    "./client": "./lib/client.js"
   },
   "files": [
     "lib/index.js",
@@ -72,6 +73,12 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller"
+      ],
+      "platform": "web"
     }
   },
   "repository": {
