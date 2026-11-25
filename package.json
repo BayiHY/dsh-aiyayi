@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "license": "MIT",
   "author": "巴依浩爷 (bayihy)",
   "keywords": [
@@ -38,6 +38,7 @@
   },
   "files": [
     "lib/index.js",
+    "lib/auth-url.js",
     "lib/home.js",
     "lib/restrict.js",
     "lib/presence.js",
