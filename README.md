@@ -131,7 +131,7 @@ npm 包为平铺结构（仓库若保留 bundle/ 子目录，发布时把其内�
 
 配置脚本（create-bot.js）、卡片渲染与历史修复等细节见 **[飞书接入与排障](./docs/飞书接入与排障.md)**。
 
-- **自动朗读（TTS）需要带语音合成的浏览器**：dsh web 页面的 🔊 自动朗读开关依赖 `speechSynthesis`；内嵌 WebView（如 DSH-Go App 窗口）普遍没有它，自动朗读在里面天然无声——这不是 bug，请用 **Chrome / Edge / Firefox** 打开 dsh web 启动时打印的**带 token 的 URL**（1.18.0 起，在哑窗口里点 🔊 按钮可直接复制该 URL 到剪贴板）。不支持时开关按钮会置灰并弹提示。
+- **自动朗读（TTS）需要带语音合成的浏览器**：dsh web 页面的 🔊 自动朗读开关依赖 `speechSynthesis`；内嵌 WebView（如 DSH-Go App 窗口）普遍没有它，自动朗读在里面天然无声——这不是 bug，请用 **Chrome / Edge / Firefox** 打开 dsh web 启动时打印的**带 token 的 URL**（1.18.0 起，在哑窗口里点 🔊 按钮可直接复制该 URL 到剪贴板）。不支持时开关按钮会置灰并弹提示。**1.19.0 起有第二条路**：右键朗读开关切「✦ 晓晓」引擎，文本发本机 edge-tts 服务（`127.0.0.1:52123`）合成 mp3 播放，不走 `speechSynthesis`，内嵌 WebView 也能出声；服务没跑时按钮红闪 ⚠ 提示。
 
 ## 更新日志
 
