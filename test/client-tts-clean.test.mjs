@@ -31,6 +31,11 @@ test("加粗/斜体记号剥掉只留文字", () => {
 	assert.equal(stripMarkdown("__粗体__与~~删除线~~"), "粗体与删除线");
 });
 
+test("单星斜体紧贴中文也剥掉（前导不再只认行首/空白/左括号）", () => {
+	assert.equal(cleanForSpeech("这是*斜体*文本"), "这是斜体文本");
+	assert.equal(cleanForSpeech("这是*斜体*，后面还有"), "这是斜体，后面还有");
+});
+
 test("标题记号剥掉（含无空格 #标题）", () => {
 	assert.equal(cleanForSpeech("# 一级标题\n正文"), "一级标题\n正文");
 	assert.equal(cleanForSpeech("##二级标题"), "二级标题");

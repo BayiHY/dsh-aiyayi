@@ -192,6 +192,7 @@ const schemaProblems = schemaTypeProblems(organize.output.schema)
 check('output.schema 没有 type 数组 / required 不在 properties 的坑', schemaProblems.length === 0, schemaProblems.join('\n        '))
 const params = organize.parameters.properties
 check('action 的 enum 里有 clean（否则 schema 层就拦住了）', Array.isArray(params.action.enum) && params.action.enum.includes('clean'), JSON.stringify(params.action.enum))
+check('action 的 enum 里有 schema（新增，否则 schema 层就拦住了）', Array.isArray(params.action.enum) && params.action.enum.includes('schema'), JSON.stringify(params.action.enum))
 check('action 的 enum 保留了 tree/read/move/index/forget', ['tree', 'read', 'move', 'index', 'forget'].every((name) => params.action.enum.includes(name)), JSON.stringify(params.action.enum))
 check('action 描述里写了 clean 的用法', /clean=清理分类档案/.test(params.action.description), params.action.description)
 check('path 描述里提到 clean 只能用分类档案', /clean 的 path 必填/.test(params.path.description), params.path.description)
