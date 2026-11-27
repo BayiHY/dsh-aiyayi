@@ -176,6 +176,123 @@ await ta.waitForTask(finished.taskId)
 check('异步 helper：onFinish 拿到完整记录', finishRecord?.taskId === finished.taskId && finishRecord.status === 'success', JSON.stringify(finishRecord))
 
 /* ------------------------------------------------------------------ *
+ * 2. 1.23.0 A 案：忙闲分流（running→steer / idle→followup / 老宿主降级 / env 急停）
+ * ------------------------------------------------------------------ */
+{
+  const savedDeliver = process.env.AIYAYI_ASYNC_DELIVER
+  const savedRedeliver = process.env.AIYAYI_ASYNC_REDELIVER
+  delete process.env.AIYAYI_ASYNC_REDELIVER
+  try {
+    // idle agent：走 followup，不碰 steer
+    const idleCalls = { followup: 0, steer: 0 }
+    const idleExec = { agent: { id: 'a-idle', status: 'idle', followup: () => { idleCalls.followup += 1 }, steer: () => { idleCalls.steer += 1 } } }
+    const h1 = ta.startDetachedTask({ exec: idleExec, kind: 'unit_dispatch_idle', run: async () => ({ status: 'success', text: 'x' }) })
+    const r1 = await ta.waitForTask(h1.taskId)
+    check('A案：idle → followup 被调、steer 没被调', idleCalls.followup === 1 && idleCalls.steer === 0 && r1.delivery === 'sent', JSON.stringify({ idleCalls, delivery: r1.delivery }))
+
+    // running agent：走 steer（next-step 插话）
+    const runCalls = { followup: 0, steer: 0 }
+    const runExec = { agent: { id: 'a-run', status: 'running', followup: () => { runCalls.followup += 1 }, steer: () => { runCalls.steer += 1 } } }
+    const h2 = ta.startDetachedTask({ exec: runExec, kind: 'unit_dispatch_run', run: async () => ({ status: 'success', text: 'x' }) })
+    const r2 = await ta.waitForTask(h2.taskId)
+    check('A案：running → steer 被调、followup 没被调', runCalls.steer === 1 && runCalls.followup === 0 && r2.delivery === 'sent', JSON.stringify({ runCalls, delivery: r2.delivery }))
+
+    // 老宿主（无 steer/status）：降级 followup，不炸
+    const oldCalls = { followup: 0 }
+    const oldExec = { agent: { id: 'a-old', followup: () => { oldCalls.followup += 1 } } }
+    const h3 = ta.startDetachedTask({ exec: oldExec, kind: 'unit_dispatch_old', run: async () => ({ status: 'success', text: 'x' }) })
+    const r3 = await ta.waitForTask(h3.taskId)
+    check('A案：老宿主（无 steer/status）降级 followup', oldCalls.followup === 1 && r3.delivery === 'sent', JSON.stringify({ oldCalls, delivery: r3.delivery }))
+
+    // 急停开关：AIYAYI_ASYNC_DELIVER=followup 时 running 也走 followup
+    process.env.AIYAYI_ASYNC_DELIVER = 'followup'
+    const killCalls = { followup: 0, steer: 0 }
+    const killExec = { agent: { id: 'a-kill', status: 'running', followup: () => { killCalls.followup += 1 }, steer: () => { killCalls.steer += 1 } } }
+    const h4 = ta.startDetachedTask({ exec: killExec, kind: 'unit_dispatch_kill', run: async () => ({ status: 'success', text: 'x' }) })
+    const r4 = await ta.waitForTask(h4.taskId)
+    check('A案：AIYAYI_ASYNC_DELIVER=followup 急停生效（running 也走 followup）', killCalls.followup === 1 && killCalls.steer === 0 && r4.delivery === 'sent', JSON.stringify({ killCalls, delivery: r4.delivery }))
+  } finally {
+    if (savedDeliver === undefined) delete process.env.AIYAYI_ASYNC_DELIVER
+    else process.env.AIYAYI_ASYNC_DELIVER = savedDeliver
+    if (savedRedeliver === undefined) delete process.env.AIYAYI_ASYNC_REDELIVER
+    else process.env.AIYAYI_ASYNC_REDELIVER = savedRedeliver
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 3. 1.23.0 B 案：失败痕迹落盘（<记忆根>/async-pending/）+ 补投钩子
+ * ------------------------------------------------------------------ */
+{
+  const savedRedeliver = process.env.AIYAYI_ASYNC_REDELIVER
+  delete process.env.AIYAYI_ASYNC_REDELIVER
+  try {
+    const { readdirSync } = await import('node:fs')
+    const pendingDir = join(root, 'async-pending')
+    const countFiles = () => {
+      try {
+        return readdirSync(pendingDir).filter((f) => f.endsWith('.json')).length
+      } catch {
+        return 0
+      }
+    }
+    // 前置清理：第 1 段 no-agent/boom 用例按 B 案新逻辑也落了痕迹，先清空目录再计数，
+    // 消除段间污染（时间在前的新文件名下，旧痕迹稳定排在最前，不清则本段断言必挂）。
+    try {
+      readdirSync(pendingDir).filter((f) => f.endsWith('.json')).forEach((f) => rmSync(join(pendingDir, f)))
+    } catch {
+      /* 目录还没建就当空 */
+    }
+    const before = countFiles()
+
+    // no-agent → 痕迹落盘 + persisted=true（不再只留内存 warn）
+    const h5 = ta.startDetachedTask({ exec: {}, kind: 'unit_pending_noagent', run: async () => ({ status: 'success', text: 'B案结果正文' }) })
+    const r5 = await ta.waitForTask(h5.taskId)
+    check('B案：no-agent 时 persisted=true 且痕迹落盘', r5.delivery === 'no-agent' && r5.deliveryPersisted === true && countFiles() === before + 1, JSON.stringify({ delivery: r5.delivery, persisted: r5.deliveryPersisted, count: countFiles(), before }))
+
+    // takePendingReceipt 读到最旧一条，正文带自报家门头行
+    const pending = ta.takePendingReceipt()
+    check('B案：takePendingReceipt 读到痕迹（正文带自报家门头行）',
+      pending !== null && typeof pending.file === 'string' && pending.record.text.startsWith(`〔工具结果〕unit_pending_noagent`),
+      JSON.stringify(pending?.record ?? null).slice(0, 200))
+
+    // env 急停：AIYAYI_ASYNC_REDELIVER=0 → takePendingReceipt 恒 null（痕迹留盘不自动投）
+    process.env.AIYAYI_ASYNC_REDELIVER = '0'
+    check('B案：AIYAYI_ASYNC_REDELIVER=0 时 takePendingReceipt 返回 null', ta.takePendingReceipt() === null)
+    delete process.env.AIYAYI_ASYNC_REDELIVER
+
+    // 补投钩子（toolkit.js apply 挂的第 2 个 pre-step）：注入补投消息并删痕迹
+    const redeliverHandlers = []
+    const ctx2 = {
+      effect(fn) { fn(); return () => {} },
+      on(event, handler) {
+        if (event === 'agent/pre-step') redeliverHandlers.push(handler)
+        return () => {}
+      },
+      tools: { register() { return () => {} } },
+      logger: { info: () => {}, warn: () => {} },
+    }
+    tk.apply(ctx2, { usageEnabled: false })
+    check('B案：apply 挂了 2 个 pre-step 钩子（清单问题 + 回执补投）', redeliverHandlers.length === 2, String(redeliverHandlers.length))
+    const decision3 = await redeliverHandlers[1]({ agent: { id: 'sess-redeliver' } }, async () => ({ kind: 'ok', messages: [] }))
+    const redeliverText = (decision3.messages ?? []).map((m) => m.content?.[0]?.text ?? '').join('\n')
+    check('B案：补投钩子注入 [异步回执补投] 消息且含原正文', redeliverText.includes('[异步回执补投]') && redeliverText.includes('B案结果正文'), redeliverText.slice(0, 200))
+    check('B案：补投后痕迹文件已删（count 回到 before）', countFiles() === before, `${countFiles()} vs ${before}`)
+
+    // steer 抛错 → delivery=failed 且也留痕（失败不静默不丢失）
+    const boomSteer = { agent: { id: 'a-boom', status: 'running', followup: () => {}, steer: () => { throw new Error('steer 炸了') } } }
+    const h6 = ta.startDetachedTask({ exec: boomSteer, kind: 'unit_pending_boom', run: async () => ({ status: 'success', text: 'y' }) })
+    const r6 = await ta.waitForTask(h6.taskId)
+    check('B案：steer 抛错 → delivery=failed 且 persisted=true', r6.delivery === 'failed' && r6.deliveryPersisted === true, JSON.stringify({ delivery: r6.delivery, persisted: r6.deliveryPersisted }))
+    // 清掉这条测试痕迹，别污染后续用例
+    const p2 = ta.takePendingReceipt()
+    if (p2) ta.discardPendingReceipt(p2.file)
+  } finally {
+    if (savedRedeliver === undefined) delete process.env.AIYAYI_ASYNC_REDELIVER
+    else process.env.AIYAYI_ASYNC_REDELIVER = savedRedeliver
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * 4. 注册 / schema / own-tools
  * ------------------------------------------------------------------ */
 const registered = []

@@ -224,7 +224,7 @@ const badCtx = (collected) => ({
 writeFileSync(manifestPath, '{ "version": 1, "tools": [', 'utf8')
 const badHandlers = []
 tk.apply(badCtx(badHandlers), { usageEnabled: false })
-check('坏清单：注册了 pre-step 上报钩子', badHandlers.length === 1)
+check('坏清单：注册了 pre-step 上报钩子（1.23.0 起含回执补投钩子，共 2 个）', badHandlers.length === 2, String(badHandlers.length))
 const injected = []
 const decision = await badHandlers[0]({ agent: { id: 'sess-1' } }, async () => ({ kind: 'ok', messages: [] }))
 const texts = (decision.messages ?? []).map((m) => m.content?.[0]?.text ?? '').join('\n')
@@ -430,7 +430,7 @@ const listTool = registered.find((d) => d.name === 'toolbox_list')
 check('toolbox_list：注册面里有它', Boolean(listTool))
 // 用当前 apply 出来的那份（清单此时是上面写的那份）
 const listValue = await registered.find((d) => d.name === 'toolbox_list').execute({})
-check('toolbox_list：返回结构过 schema（字段齐全）', Object.keys(listValue).join(',') === 'ok,exists,path,root,error,tools,problems', Object.keys(listValue).join(','))
+check('toolbox_list：返回结构过 schema（字段齐全）', Object.keys(listValue).join(',') === 'ok,exists,path,root,error,tools,problems,pendingReceipts', Object.keys(listValue).join(','))
 check('toolbox_list：列出清单里的每一条（含 enabled:false）', listValue.tools.length === 3 && listValue.tools.map((t) => t.name).join(',') === 'list_on,list_off,list_gone', JSON.stringify(listValue.tools.map((t) => t.name)))
 check('toolbox_list：每条都有 name/enabled/mode/script/scriptExists/registered/timeoutMs/capabilities/reason',
   listValue.tools.every((t) => ['name', 'enabled', 'mode', 'script', 'scriptExists', 'registered', 'timeoutMs', 'capabilities', 'reason'].every((k) => k in t)))
