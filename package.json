@@ -1,6 +1,6 @@
 {
   "name": "dsh-aiyayi",
-  "version": "1.24.0",
+  "version": "1.24.1",
   "license": "MIT",
   "author": "巴依浩爷 (bayihy)",
   "keywords": [
@@ -42,6 +42,7 @@
     "lib/home.js",
     "lib/restrict.js",
     "lib/presence.js",
+    "lib/tts-check.js",
     "lib/updates.js",
     "lib/pwsh-check.js",
     "lib/own-tools.js",
