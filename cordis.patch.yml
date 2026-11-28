@@ -808,6 +808,7 @@
                 不额外建议。派单里的任务清单就是你的全部任务；单上没写的别主动做，未经派单方
                 授权不擅自替代执行。
                 你的回报通道是 send_message：每个任务完成都直接报给派单方，不走任何注入形式。
+                手头若没有 send_message（环境未注册该工具），把完整结果写进最终回复回报给派单方——回报禁止改走任何注入类通道，包括但不限于 yayi_muse / nanomuse / 任何往主线程或他人会话 HTTP 投递消息的工具。
 
                 【执行纪律】
                 1. 依赖自然成链：每次调用工具前，判断本次是否依赖之前还没返回的调用结果——依赖就
@@ -824,14 +825,14 @@
                 node/python；pwsh 必要时用，但注意 PS 5.1 对无 BOM UTF-8 按 ANSI 解码的中文编码
                 坑——中文输出的命令先 chcp 65001 或改走 node/python。清单工具（工具箱里注册的那些）
                 你手头有，照单合理调度：按依赖先后执行、只读可并行、写状态类串行。
-                6. 手头实际工具以环境为准；缺工具如实报"缺 X"，不绕路。
+                6. 手头实际工具以环境为准；缺工具如实报"缺 X"，不绕路。缺的若是回报通道本身，"如实报"走最终回复完成，不因报缺工具而静默。
                 7. 流式回报：每个任务完成立刻 send_message 一行回执（任务id｜状态｜一句话摘要｜
                 结果路径，需要时附时间区间）；批次全部完成后只发一句「批次 X 完成，N/M 成功」
                 收尾，并把总结行并进最后一条回执——别在发完消息后另起一段收尾文本（运行时会吞掉
                 "发消息后紧接着结束"的输出）。单任务批次做完汇报即完事，没有收尾确认属正常。
                 8. 派单参数与实际不符时（如读文件没拿全、路径有变），以任务意图为准补救，并在汇报
                 中说明实际口径——照单执行不等于放弃常识。
-                9. send_message 发完汇报后，最终回复只写一句「汇报已发」加批次号，不再重复汇报内容。
+                9. 有 send_message 时：send_message 发完汇报后，最终回复只写一句「汇报已发」加批次号，不再重复汇报内容。
 
                 【上下文】非链式批次汇报完即翻篇，别留尾巴；链式批次没走完前保留依赖上下文，
                 链太长及时压缩。
@@ -863,6 +864,19 @@
             name: 'dsh-aiyayi/net'
           - id: aiyayi-toolkit
             name: 'dsh-aiyayi/toolkit'
+          - id: delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              # 2026-11-28 补回报通道：预设文本把回报锚定在 send_message，但工具面一直
+              # 没挂注册方——实测实例无 send_message，回报行为分叉（有的改走最终回复、
+              # 有的摸注入类通道）。control 一行顶三工具（send_message/list_agents/
+              # interrupt_agent，同本体坑 #18 的单行写法），只挂 control 不挂
+              # tool-subagent：bag 只许向派单方回报，不给派子智能体的能力。
+              - id: tool-subagent-control
+                name: '@deepseek-ai/dsh-tool-subagent-control'
           - id: compaction
             name: cordis:group
             group: true
